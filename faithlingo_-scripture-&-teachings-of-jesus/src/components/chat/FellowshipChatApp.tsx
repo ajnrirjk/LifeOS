@@ -1,0 +1,752 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ChatMessage, ChatChannel, ChatUser } from '../../types/chat';
+import { chatService } from '../../services/chatService';
+import { googleDriveService } from '../../services/googleDriveService';
+import { useApp } from '../../context/AppContext';
+import { sounds } from '../../services/soundEffects';
+import {
+  Send,
+  Plus,
+  Smile,
+  Hash,
+  Sparkles,
+  Users,
+  Search,
+  BookOpen,
+  Share2,
+  CheckCircle,
+  LogIn,
+  LogOut,
+  X,
+  Volume2,
+  Flame,
+  MessageSquare
+} from 'lucide-react';
+
+export const FellowshipChatApp: React.FC = () => {
+  const { todayHighlight } = useApp();
+
+  // Active channel
+  const [channels, setChannels] = useState<ChatChannel[]>([]);
+  const [activeChannelId, setActiveChannelId] = useState<string>('general');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Current User (Google or Guest)
+  const [currentUser, setCurrentUser] = useState<ChatUser>(() => {
+    try {
+      const saved = localStorage.getItem('lifeos_chat_user');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    const guestId = `guest_${Math.random().toString(36).substring(2, 8)}`;
+    return {
+      id: guestId,
+      name: 'Believer in Christ',
+      isGoogleUser: false,
+      photoURL: '',
+    };
+  });
+
+  const [activeUsersCount, setActiveUsersCount] = useState<number>(1);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [isNewChannelModalOpen, setIsNewChannelModalOpen] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelTopic, setNewChannelTopic] = useState('');
+  const [newChannelEmoji, setNewChannelEmoji] = useState('🕊️');
+  const [isEditingGuestName, setIsEditingGuestName] = useState(false);
+  const [guestNameInput, setGuestNameInput] = useState(currentUser.name);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<any>(null);
+
+  // Initialize Google Auth listener
+  useEffect(() => {
+    const unsub = googleDriveService.initAuth(
+      (user) => {
+        const updated: ChatUser = {
+          id: user.uid,
+          name: user.displayName || user.email?.split('@')[0] || 'Google User',
+          email: user.email || '',
+          photoURL: user.photoURL || '',
+          isGoogleUser: true,
+        };
+        setCurrentUser(updated);
+        try {
+          localStorage.setItem('lifeos_chat_user', JSON.stringify(updated));
+        } catch {}
+      },
+      () => {
+        // Not signed in with Google, keep guest
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // Fetch channels on mount
+  useEffect(() => {
+    chatService.getChannels().then(setChannels).catch(console.error);
+  }, []);
+
+  // Fetch messages when active channel changes
+  useEffect(() => {
+    chatService.getMessages(activeChannelId).then(setMessages).catch(console.error);
+  }, [activeChannelId]);
+
+  // Subscribe to real-time events
+  useEffect(() => {
+    const unsubscribe = chatService.subscribe((event) => {
+      if (event.type === 'message') {
+        const newMsg: ChatMessage = event.data;
+        if (newMsg.channelId === activeChannelId) {
+          setMessages(prev => {
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+          // Play sound if message is from someone else
+          if (newMsg.senderId !== currentUser.id) {
+            sounds.playTap();
+          }
+        }
+        // Update channels last message
+        setChannels(prev =>
+          prev.map(c =>
+            c.id === newMsg.channelId
+              ? { ...c, lastMessage: newMsg.text, lastMessageTime: newMsg.createdAt }
+              : c
+          )
+        );
+      } else if (event.type === 'reaction') {
+        const { messageId, reactions } = event.data;
+        setMessages(prev =>
+          prev.map(m => (m.id === messageId ? { ...m, reactions } : m))
+        );
+      } else if (event.type === 'new_channel') {
+        const channel: ChatChannel = event.data;
+        setChannels(prev => {
+          if (prev.some(c => c.id === channel.id)) return prev;
+          return [...prev, channel];
+        });
+      } else if (event.type === 'presence') {
+        setActiveUsersCount(Math.max(1, event.data.activeUsers || 1));
+      } else if (event.type === 'typing') {
+        const { channelId, userName, isTyping } = event.data;
+        if (channelId === activeChannelId && userName !== currentUser.name) {
+          setTypingUsers(prev => {
+            if (isTyping) {
+              return prev.includes(userName) ? prev : [...prev, userName];
+            } else {
+              return prev.filter(u => u !== userName);
+            }
+          });
+        }
+      } else if (event.type === 'poll_tick') {
+        // Background sync check
+        chatService.getMessages(activeChannelId).then(msgs => {
+          setMessages(prev => (msgs.length !== prev.length ? msgs : prev));
+        }).catch(() => {});
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeChannelId, currentUser.id, currentUser.name]);
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Handle Google Sign-In
+  const handleGoogleSignIn = async () => {
+    sounds.playTap();
+    try {
+      const { user } = await googleDriveService.signIn();
+      const updated: ChatUser = {
+        id: user.uid,
+        name: user.displayName || user.email?.split('@')[0] || 'Google User',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        isGoogleUser: true,
+      };
+      setCurrentUser(updated);
+      try {
+        localStorage.setItem('lifeos_chat_user', JSON.stringify(updated));
+      } catch {}
+      sounds.playVictory();
+    } catch (err) {
+      console.warn('Google Sign-In cancelled or failed:', err);
+    }
+  };
+
+  // Handle Sign-Out
+  const handleSignOut = async () => {
+    sounds.playTap();
+    await googleDriveService.signOutUser();
+    const guestUser: ChatUser = {
+      id: `guest_${Math.random().toString(36).substring(2, 8)}`,
+      name: 'Believer in Christ',
+      isGoogleUser: false,
+    };
+    setCurrentUser(guestUser);
+    try {
+      localStorage.setItem('lifeos_chat_user', JSON.stringify(guestUser));
+    } catch {}
+  };
+
+  // Handle Guest Name Save
+  const handleSaveGuestName = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestNameInput.trim()) return;
+    sounds.playTap();
+    const updated = { ...currentUser, name: guestNameInput.trim() };
+    setCurrentUser(updated);
+    setIsEditingGuestName(false);
+    try {
+      localStorage.setItem('lifeos_chat_user', JSON.stringify(updated));
+    } catch {}
+  };
+
+  // Handle Send Message
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputText.trim()) return;
+
+    sounds.playTap();
+    const textToSend = inputText.trim();
+    setInputText('');
+
+    chatService.sendTyping(activeChannelId, currentUser.name, false);
+
+    try {
+      await chatService.sendMessage({
+        channelId: activeChannelId,
+        text: textToSend,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderPhoto: currentUser.photoURL,
+        senderEmail: currentUser.email,
+        isGoogleUser: currentUser.isGoogleUser,
+      });
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    }
+  };
+
+  // Share Verse of the Day into Chat
+  const handleShareVerse = async () => {
+    sounds.playVictory();
+    try {
+      await chatService.sendMessage({
+        channelId: activeChannelId,
+        text: `“${todayHighlight.text}” — ${todayHighlight.reference}`,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderPhoto: currentUser.photoURL,
+        senderEmail: currentUser.email,
+        isGoogleUser: currentUser.isGoogleUser,
+        attachment: {
+          type: 'verse',
+          title: `Verse of the Day • ${todayHighlight.reference}`,
+          content: todayHighlight.reflection,
+          reference: todayHighlight.reference,
+        },
+      });
+    } catch (err) {
+      console.error('Error sharing verse:', err);
+    }
+  };
+
+  // Share Latest Sermon Note into Chat
+  const handleShareSermonNote = async () => {
+    sounds.playVictory();
+    try {
+      const saved = localStorage.getItem('lifeos_church_sermon_notes_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const note = parsed[0];
+          await chatService.sendMessage({
+            channelId: activeChannelId,
+            text: `Sharing notes from today's sermon: "${note.title || 'Sunday Sermon'}" (${note.passage || 'Scripture'})`,
+            senderId: currentUser.id,
+            senderName: currentUser.name,
+            senderPhoto: currentUser.photoURL,
+            senderEmail: currentUser.email,
+            isGoogleUser: currentUser.isGoogleUser,
+            attachment: {
+              type: 'sermon_note',
+              title: note.title || 'Sunday Sermon Notes',
+              content: note.content ? note.content.slice(0, 300) + '...' : 'Sermon notes excerpt',
+              reference: note.passage || '',
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error sharing note:', err);
+    }
+  };
+
+  // Toggle emoji reaction
+  const handleReaction = (messageId: string, emoji: string) => {
+    sounds.playTap();
+    chatService.toggleReaction(messageId, emoji, currentUser.name);
+  };
+
+  // Handle typing change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+    chatService.sendTyping(activeChannelId, currentUser.name, true);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      chatService.sendTyping(activeChannelId, currentUser.name, false);
+    }, 2000);
+  };
+
+  // Create Channel
+  const handleCreateChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+    sounds.playVictory();
+    try {
+      const chan = await chatService.createChannel(
+        newChannelName.trim(),
+        newChannelTopic.trim() || 'Community Group Chat',
+        newChannelEmoji,
+        currentUser.id
+      );
+      setNewChannelName('');
+      setNewChannelTopic('');
+      setIsNewChannelModalOpen(false);
+      setActiveChannelId(chan.id);
+    } catch (err) {
+      console.error('Failed to create channel:', err);
+    }
+  };
+
+  const activeChannel = channels.find(c => c.id === activeChannelId) || {
+    id: 'general',
+    name: 'general-fellowship',
+    topic: 'Welcome & community fellowship',
+    emoji: '🕊️',
+  };
+
+  const filteredChannels = channels.filter(c =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.topic.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="flex h-full w-full bg-stone-900 text-stone-100 select-none overflow-hidden font-sans">
+      {/* Sidebar: Group Channels & Rooms */}
+      <div className="w-64 sm:w-72 bg-black/40 border-r border-white/10 flex flex-col shrink-0">
+        {/* Top: App Header & Current User */}
+        <div className="p-3.5 border-b border-white/10 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🕊️</span>
+              <span className="font-black text-sm text-white tracking-tight">Fellowship Chat</span>
+            </div>
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setIsNewChannelModalOpen(true);
+              }}
+              className="p-1.5 rounded-xl bg-white/10 hover:bg-emerald-600 text-white transition-colors"
+              title="Create new group chat"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* User Sign-In Profile Box */}
+          <div className="p-2 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 overflow-hidden">
+              {currentUser.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt={currentUser.name}
+                  className="w-7 h-7 rounded-full object-cover ring-2 ring-emerald-500/50 shrink-0"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-xs font-black text-white truncate flex items-center gap-1">
+                  {currentUser.name}
+                  {currentUser.isGoogleUser && (
+                    <span className="text-[10px] text-emerald-400" title="Google Verified Account">✓</span>
+                  )}
+                </span>
+                <span className="text-[10px] text-stone-400 truncate">
+                  {currentUser.isGoogleUser ? 'Google Account' : 'Guest Member'}
+                </span>
+              </div>
+            </div>
+
+            {currentUser.isGoogleUser ? (
+              <button
+                onClick={handleSignOut}
+                className="p-1.5 rounded-lg hover:bg-rose-500/20 text-stone-400 hover:text-rose-300 transition-colors"
+                title="Sign out of Google"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={handleGoogleSignIn}
+                className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-extrabold flex items-center gap-1 transition-all shadow-sm active:scale-95"
+                title="Sign in with Google"
+              >
+                <LogIn className="w-3 h-3" />
+                <span>Sign in</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Search Channels */}
+        <div className="px-3 pt-2.5 pb-1.5">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search groups..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-black/30 border border-white/10 text-xs text-white placeholder-stone-400 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+        </div>
+
+        {/* Channels List */}
+        <div className="flex-1 overflow-y-auto px-2 py-1.5 space-y-1">
+          <div className="px-2 py-1 text-[10px] font-black uppercase text-stone-400 tracking-wider">
+            Group Channels
+          </div>
+
+          {filteredChannels.map((channel) => {
+            const isActive = channel.id === activeChannelId;
+            return (
+              <button
+                key={channel.id}
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveChannelId(channel.id);
+                }}
+                className={`w-full p-2 rounded-2xl flex items-center gap-2.5 text-left transition-all ${
+                  isActive
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'hover:bg-white/5 text-stone-300'
+                }`}
+              >
+                <span className="text-lg">{channel.emoji}</span>
+                <div className="flex-1 overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black truncate">#{channel.name}</span>
+                  </div>
+                  <p className={`text-[10px] truncate ${isActive ? 'text-emerald-100' : 'text-stone-400'}`}>
+                    {channel.lastMessage || channel.topic}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Sidebar Footer Presence */}
+        <div className="p-3 border-t border-white/10 text-[11px] font-bold text-stone-400 flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            {activeUsersCount} {activeUsersCount === 1 ? 'user online' : 'users online'}
+          </span>
+          <button
+            onClick={() => setIsNewChannelModalOpen(true)}
+            className="text-stone-300 hover:text-white"
+          >
+            + New Group
+          </button>
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col bg-stone-900/90 overflow-hidden">
+        {/* Chat Room Top Bar */}
+        <div className="h-14 px-4 border-b border-white/10 flex items-center justify-between bg-black/20 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">{activeChannel.emoji}</span>
+            <div>
+              <h2 className="text-sm font-black text-white flex items-center gap-1.5">
+                #{activeChannel.name}
+              </h2>
+              <p className="text-[11px] text-stone-400 truncate max-w-md">{activeChannel.topic}</p>
+            </div>
+          </div>
+
+          {/* Quick Share Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleShareVerse}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all"
+              title="Share Today's Verse into group chat"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Share Verse</span>
+            </button>
+            <button
+              onClick={handleShareSermonNote}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 text-xs font-bold transition-all"
+              title="Share Sermon Note into group chat"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share Note</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Message Stream */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-stone-400">
+              <span className="text-4xl mb-2">{activeChannel.emoji}</span>
+              <h3 className="text-sm font-black text-white">#{activeChannel.name}</h3>
+              <p className="text-xs max-w-sm mt-1">
+                No messages yet. Send a message to start the conversation!
+              </p>
+            </div>
+          ) : (
+            messages.map((msg) => {
+              const isMine = msg.senderId === currentUser.id;
+              const formattedTime = new Date(msg.createdAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex items-start gap-3 group animate-in fade-in duration-200 ${
+                    isMine ? 'flex-row-reverse' : ''
+                  }`}
+                >
+                  {/* Sender Avatar */}
+                  {msg.senderPhoto ? (
+                    <img
+                      src={msg.senderPhoto}
+                      alt={msg.senderName}
+                      className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white/10"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 to-indigo-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                      {msg.senderName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+
+                  {/* Message Bubble Container */}
+                  <div className={`flex flex-col max-w-[80%] sm:max-w-[70%] ${isMine ? 'items-end' : 'items-start'}`}>
+                    {/* Sender Name & Time Header */}
+                    <div className="flex items-center gap-1.5 mb-1 px-1">
+                      <span className="text-xs font-black text-white flex items-center gap-1">
+                        {msg.senderName}
+                        {msg.isGoogleUser && (
+                          <span className="text-[10px] text-emerald-400 font-bold" title="Google Verified">
+                            ✓
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-stone-400 font-medium">{formattedTime}</span>
+                    </div>
+
+                    {/* Bubble Content */}
+                    <div
+                      className={`p-3.5 rounded-3xl text-xs leading-relaxed select-text ${
+                        isMine
+                          ? 'bg-emerald-600 text-white rounded-tr-none shadow-md'
+                          : 'bg-stone-800 text-stone-100 rounded-tl-none border border-white/10'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap font-normal">{msg.text}</p>
+
+                      {/* Attached Verse or Sermon Note Card */}
+                      {msg.attachment && (
+                        <div className="mt-2.5 p-2.5 rounded-2xl bg-black/30 border border-white/15 text-stone-200">
+                          <div className="flex items-center gap-1.5 font-bold text-[11px] text-amber-300 mb-1">
+                            <span>{msg.attachment.type === 'verse' ? '📜 Scripture' : '📖 Church Note'}</span>
+                            <span>•</span>
+                            <span>{msg.attachment.title}</span>
+                          </div>
+                          <p className="text-[11px] italic font-serif leading-relaxed text-stone-300">
+                            {msg.attachment.content}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reactions Bar */}
+                    <div className="flex items-center gap-1 mt-1.5 px-1 flex-wrap">
+                      {msg.reactions &&
+                        Object.entries(msg.reactions).map(([emoji, users]) => {
+                          const hasReacted = users.includes(currentUser.name);
+                          return (
+                            <button
+                              key={emoji}
+                              onClick={() => handleReaction(msg.id, emoji)}
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 border transition-all ${
+                                hasReacted
+                                  ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                                  : 'bg-white/5 border-white/10 text-stone-300 hover:bg-white/10'
+                              }`}
+                            >
+                              <span>{emoji}</span>
+                              <span>{users.length}</span>
+                            </button>
+                          );
+                        })}
+
+                      {/* Quick Emoji Trigger on hover */}
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 ml-1">
+                        {['❤️', '🙏', '✝️', '🔥', '👏'].map((e) => (
+                          <button
+                            key={e}
+                            onClick={() => handleReaction(msg.id, e)}
+                            className="w-5 h-5 rounded-full hover:bg-white/15 flex items-center justify-center text-xs transition-transform hover:scale-125"
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Typing indicator */}
+        {typingUsers.length > 0 && (
+          <div className="px-5 py-1 text-[11px] text-emerald-400 font-bold italic animate-pulse flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <span>{typingUsers.join(', ')} {typingUsers.length > 1 ? 'are' : 'is'} typing...</span>
+          </div>
+        )}
+
+        {/* Chat Input Bar */}
+        <div className="p-3.5 bg-black/40 border-t border-white/10 shrink-0">
+          <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+            {/* Quick Attachment Menu */}
+            <button
+              type="button"
+              onClick={handleShareVerse}
+              className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-stone-300 transition-colors sm:hidden"
+              title="Share verse"
+            >
+              <BookOpen className="w-4 h-4" />
+            </button>
+
+            <input
+              type="text"
+              value={inputText}
+              onChange={handleInputChange}
+              placeholder={`Message #${activeChannel.name} as ${currentUser.name}...`}
+              className="flex-1 px-4 py-2.5 rounded-2xl bg-stone-800/90 border border-white/15 text-xs text-white placeholder-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            />
+
+            <button
+              type="submit"
+              disabled={!inputText.trim()}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Send</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal: Create New Group Chat */}
+      {isNewChannelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-stone-900 border border-white/20 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{newChannelEmoji}</span>
+                <h3 className="text-base font-black text-white">Create Group Chat</h3>
+              </div>
+              <button
+                onClick={() => setIsNewChannelModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-stone-300 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateChannel} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-stone-300 mb-1">Pick Group Icon</label>
+                <div className="flex items-center gap-2">
+                  {['🕊️', '📖', '🙏', '✝️', '🔥', '🌿', '✨', '🛡️'].map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setNewChannelEmoji(emoji)}
+                      className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center transition-all ${
+                        newChannelEmoji === emoji
+                          ? 'bg-emerald-600 scale-110 shadow-md ring-2 ring-emerald-400'
+                          : 'bg-white/10 hover:bg-white/20'
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-300 mb-1">Group Name</label>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  placeholder="e.g. youth-fellowship, romans-study"
+                  className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-300 mb-1">Topic / Purpose</label>
+                <input
+                  type="text"
+                  value={newChannelTopic}
+                  onChange={(e) => setNewChannelTopic(e.target.value)}
+                  placeholder="What is this group gathering for?"
+                  className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsNewChannelModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-stone-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md"
+                >
+                  Create Group
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
