@@ -36,6 +36,42 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     description: 'Live real-time group chats with believers, sermon discussions & Google Sign-In.',
     isPinned: true,
     isSystem: true
+  },
+  {
+    id: 'mini_cats',
+    title: 'Pocket Paws',
+    emoji: '🐱',
+    iconName: 'Cat',
+    category: 'Productivity',
+    type: 'mini_cats',
+    color: 'from-amber-500 via-orange-500 to-rose-600',
+    description: 'Miniature cat breeds playground. Drag & drop, silly costumes, feed, drink, dance & sleep!',
+    isPinned: true,
+    isSystem: true
+  },
+  {
+    id: 'youtube',
+    title: 'YouTube',
+    emoji: '▶️',
+    iconName: 'PlaySquare',
+    category: 'Learning',
+    type: 'youtube',
+    color: 'from-red-600 via-rose-600 to-red-800',
+    description: 'Watch worship streams, BibleProject videos, lofi study beats, and any YouTube video.',
+    isPinned: true,
+    isSystem: true
+  },
+  {
+    id: 'tiktok',
+    title: 'TikTok',
+    emoji: '🎵',
+    iconName: 'Film',
+    category: 'Learning',
+    type: 'tiktok',
+    color: 'from-cyan-500 via-stone-900 to-rose-500',
+    description: 'Vertical clips & shorts feed. Faith inspiration, aesthetic study vlogs & wholesome clips.',
+    isPinned: true,
+    isSystem: true
   }
 ];
 

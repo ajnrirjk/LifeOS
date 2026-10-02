@@ -3,7 +3,11 @@ import { useLifeOS } from '../../context/LifeOSContext';
 import { ChevronDown } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 
-export const LifeOSTopBar: React.FC = () => {
+interface LifeOSTopBarProps {
+  onOpenPrivacy?: () => void;
+}
+
+export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => {
   const { activeAppId, apps, wallpaper, setWallpaper, isDesktopView, showDesktop, launchApp } = useLifeOS();
 
   const [timeStr, setTimeStr] = useState('');
@@ -69,6 +73,32 @@ export const LifeOSTopBar: React.FC = () => {
                   {wallpaper === wp.id && <span>✓</span>}
                 </button>
               ))}
+
+              <div className="h-px bg-white/10 my-1" />
+
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setIsMenuOpen(false);
+                  if (onOpenPrivacy) onOpenPrivacy();
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-left text-xs hover:bg-white/10 text-stone-300 hover:text-white transition-colors flex items-center gap-2"
+              >
+                <span>🛡️</span>
+                <span>Privacy Policy</span>
+              </button>
+
+              <a
+                href="/terms"
+                onClick={() => {
+                  sounds.playTap();
+                  setIsMenuOpen(false);
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-left text-xs hover:bg-white/10 text-stone-300 hover:text-white transition-colors flex items-center gap-2"
+              >
+                <span>📜</span>
+                <span>Terms of Service</span>
+              </a>
             </div>
           )}
         </div>
@@ -102,9 +132,24 @@ export const LifeOSTopBar: React.FC = () => {
         )}
       </div>
 
-      {/* Center: Live System Date/Time */}
-      <div className="font-bold text-stone-200 tracking-tight text-[11px]">
-        {timeStr}
+      {/* Center/Right: Privacy link & Live System Date/Time */}
+      <div className="flex items-center gap-2.5">
+        {onOpenPrivacy && (
+          <button
+            onClick={() => {
+              sounds.playTap();
+              onOpenPrivacy();
+            }}
+            className="text-[11px] font-semibold text-stone-300 hover:text-white px-2 py-0.5 rounded-md hover:bg-white/10 transition-colors flex items-center gap-1"
+            title="View Life OS Privacy Policy"
+          >
+            <span>🛡️</span>
+            <span className="hidden sm:inline">Privacy Policy</span>
+          </button>
+        )}
+        <div className="font-bold text-stone-200 tracking-tight text-[11px]">
+          {timeStr}
+        </div>
       </div>
     </header>
   );

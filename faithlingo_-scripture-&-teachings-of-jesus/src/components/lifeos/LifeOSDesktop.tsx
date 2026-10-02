@@ -18,9 +18,13 @@ import { DailyWidget } from '../DailyWidget';
 import { LifeOSDesktopWidgets } from './LifeOSDesktopWidgets';
 import { AddWidgetModal } from './AddWidgetModal';
 import { FellowshipChatApp } from '../chat/FellowshipChatApp';
+import { MiniCatsApp } from '../mini-cats/MiniCatsApp';
+import { YouTubeApp } from '../youtube/YouTubeApp';
+import { TikTokApp } from '../tiktok/TikTokApp';
 import { useApp } from '../../context/AppContext';
 import { Minus, Square, X, Maximize2 } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
+import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 
 // Renders the full flagship FaithLingo app inside its LifeOS window
 const FaithLingoWindowContent: React.FC = () => {
@@ -66,6 +70,22 @@ export const LifeOSDesktop: React.FC = () => {
   } = useLifeOS();
 
   const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(true);
+
+  // Check URL hash or path for direct privacy link (e.g. /#privacy or /privacy)
+  React.useEffect(() => {
+    const checkPrivacyRoute = () => {
+      if (
+        window.location.hash.toLowerCase().includes('privacy') ||
+        window.location.pathname.toLowerCase().includes('privacy')
+      ) {
+        setIsPrivacyModalOpen(true);
+      }
+    };
+    checkPrivacyRoute();
+    window.addEventListener('hashchange', checkPrivacyRoute);
+    return () => window.removeEventListener('hashchange', checkPrivacyRoute);
+  }, []);
 
   const wallpaperClasses = {
     mountain: 'bg-gradient-to-b from-sky-900 via-indigo-950 to-slate-950',
@@ -81,7 +101,7 @@ export const LifeOSDesktop: React.FC = () => {
   return (
     <div className={`h-screen w-screen flex flex-col overflow-hidden relative ${wallpaperClasses}`}>
       {/* Top System Menu Bar */}
-      <LifeOSTopBar />
+      <LifeOSTopBar onOpenPrivacy={() => setIsPrivacyModalOpen(true)} />
 
       {/* Desktop Workspace / Active App Window / Desktop Widgets */}
       <div className="flex-1 relative p-2 sm:p-3 pb-24 overflow-hidden flex flex-col">
@@ -136,8 +156,11 @@ export const LifeOSDesktop: React.FC = () => {
               {activeApp.id === 'faithlingo' && <FaithLingoWindowContent />}
               {activeApp.id === 'bible_journal' && <BibleJournalApp />}
               {activeApp.id === 'fellowship_chat' && <FellowshipChatApp />}
+              {activeApp.id === 'mini_cats' && <MiniCatsApp />}
+              {activeApp.id === 'youtube' && <YouTubeApp />}
+              {activeApp.id === 'tiktok' && <TikTokApp />}
               {activeApp.id === 'app_studio' && <AppStudio />}
-              {activeApp.id !== 'faithlingo' && activeApp.id !== 'bible_journal' && activeApp.id !== 'fellowship_chat' && activeApp.id !== 'app_studio' && (
+              {activeApp.id !== 'faithlingo' && activeApp.id !== 'bible_journal' && activeApp.id !== 'fellowship_chat' && activeApp.id !== 'mini_cats' && activeApp.id !== 'youtube' && activeApp.id !== 'tiktok' && activeApp.id !== 'app_studio' && (
                 <CustomAppRunner app={activeApp} />
               )}
             </div>
@@ -168,6 +191,13 @@ export const LifeOSDesktop: React.FC = () => {
         onAddWidget={addDesktopWidget}
         onRemoveWidget={removeDesktopWidget}
         onResetDefaults={resetDesktopWidgets}
+      />
+
+      {/* Official Life OS Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        isOpen={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+        onAgree={() => setIsPrivacyModalOpen(false)}
       />
     </div>
   );

@@ -115,7 +115,19 @@ export const LifeOSDock: React.FC = () => {
                   )}
                 </span>
                 <span className="text-[9px] text-stone-300/80 font-bold hidden sm:inline whitespace-nowrap">
-                  {app.id === 'faithlingo' ? 'Scripture Study' : 'Sermon Notes'}
+                  {app.id === 'faithlingo'
+                    ? 'Scripture Study'
+                    : app.id === 'bible_journal'
+                    ? 'Sermon Notes'
+                    : app.id === 'fellowship_chat'
+                    ? 'Group Chat'
+                    : app.id === 'mini_cats'
+                    ? 'Mini Kitties'
+                    : app.id === 'youtube'
+                    ? 'Videos & Worship'
+                    : app.id === 'tiktok'
+                    ? 'Shorts & Clips'
+                    : 'App'}
                 </span>
               </div>
             </button>

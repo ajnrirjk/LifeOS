@@ -326,6 +326,111 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
+                  {/* YouTube Player Widget */}
+                  {widgetId === 'youtube' && (
+                    <div className="flex flex-col gap-3">
+                      <div className="p-3 rounded-2xl bg-red-600/15 border border-red-500/20 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-8 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-md">
+                            <span className="text-sm font-black">▶️</span>
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-white">YouTube Stream</h4>
+                            <p className="text-[11px] text-stone-300">
+                              Worship music, BibleProject & lofi beats
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => launchApp('youtube')}
+                          className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black shadow-md transition-transform active:scale-95 flex items-center gap-1"
+                        >
+                          <span>Open</span>
+                          <span>▶</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-bold text-stone-300 px-1">
+                        <span className="text-stone-400">Jireh · Elevation · BibleProject</span>
+                        <span className="text-red-400 font-black">HD Player</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TikTok & Faith Clips Widget */}
+                  {widgetId === 'tiktok' && (
+                    <div className="flex flex-col gap-3">
+                      <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-400 via-rose-500 to-black p-0.5 shadow-md">
+                            <div className="w-full h-full rounded-[10px] bg-black flex items-center justify-center text-xs">
+                              🎵
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-cyan-300">TikTok & Shorts Feed</h4>
+                            <p className="text-[11px] text-stone-300">
+                              Vertical scripture, inspiration & wholesome clips
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => launchApp('tiktok')}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-rose-500 text-stone-950 font-black text-xs shadow-md transition-transform active:scale-95"
+                        >
+                          Watch
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-bold text-stone-300 px-1">
+                        <span className="text-stone-400">Swipeable 9:16 vertical clips</span>
+                        <span className="text-cyan-400">Trending 🔥</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pocket Paws Miniature Cats Sanctuary Widget */}
+                  {widgetId === 'mini_cats' && (
+                    <div className="flex flex-col gap-3">
+                      <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl animate-bounce">🐱</span>
+                          <div>
+                            <h4 className="text-xs font-black text-amber-300">Pocket Paws Sanctuary</h4>
+                            <p className="text-[11px] text-stone-300">
+                              Miniature breeds · Silly costumes · Live animations
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            sounds.playMeow();
+                            sounds.playPurr();
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-bold transition-all active:scale-95"
+                          title="Pet Kitty"
+                        >
+                          Pet 💖
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="p-1 rounded-lg bg-white/5 border border-white/10">🧙‍♂️ Wizard</span>
+                          <span className="p-1 rounded-lg bg-white/5 border border-white/10">🌮 Taco</span>
+                          <span className="p-1 rounded-lg bg-white/5 border border-white/10">👑 Royal</span>
+                        </div>
+                        <button
+                          onClick={() => launchApp('mini_cats')}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white text-xs font-black shadow-md transition-transform active:scale-95 flex items-center gap-1"
+                        >
+                          <span>Open Sanctuary</span>
+                          <span>🐾</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 2. Fellowship Group Chat Widget */}
                   {widgetId === 'fellowship_chat' && (
                     <div className="flex flex-col gap-2.5">

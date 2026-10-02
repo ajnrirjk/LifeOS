@@ -74,7 +74,7 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   const [isLaunchpadOpen, setIsLaunchpadOpen] = useState(false);
-  const [isDesktopView, setIsDesktopView] = useState(false);
+  const [isDesktopView, setIsDesktopView] = useState(true);
 
   // Desktop Widgets state with localStorage persistence
   const [desktopWidgets, setDesktopWidgets] = useState<WidgetId[]>(() => {

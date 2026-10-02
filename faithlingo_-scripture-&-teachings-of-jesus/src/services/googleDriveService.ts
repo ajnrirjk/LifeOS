@@ -13,8 +13,18 @@ import { JournalEntry } from '../types/journal';
 // Scopes required for Google Drive file management
 export const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 
+// Active Firebase Configuration (supports Vercel env vars or firebase-applet-config.json)
+const activeFirebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
+};
+
 // Initialize Firebase App
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const app = getApps().length === 0 ? initializeApp(activeFirebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
