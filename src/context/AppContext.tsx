@@ -22,6 +22,10 @@ interface AppContextType {
   refillHearts: () => boolean;
   buyStreakFreeze: () => boolean;
   addXp: (amount: number) => void;
+  addGems: (amount: number) => void;
+  setGems: (amount: number) => void;
+  setStreak: (days: number) => void;
+  setInfiniteHearts: () => void;
 
   // Reading Plans
   readingPlans: ReadingPlan[];
@@ -299,6 +303,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const addGems = (amount: number) => {
+    setUserStats(prev => ({
+      ...prev,
+      gems: Math.max(0, (prev.gems || 0) + amount)
+    }));
+  };
+
+  const setGems = (amount: number) => {
+    setUserStats(prev => ({
+      ...prev,
+      gems: Math.max(0, amount)
+    }));
+  };
+
+  const setStreak = (days: number) => {
+    setUserStats(prev => ({
+      ...prev,
+      streak: Math.max(1, days)
+    }));
+  };
+
+  const setInfiniteHearts = () => {
+    setUserStats(prev => ({
+      ...prev,
+      hearts: 99,
+      maxHearts: 99
+    }));
+  };
+
   const togglePlanDay = (planId: string, dayNumber: number) => {
     setReadingPlans(prev =>
       prev.map(plan => {
@@ -369,6 +402,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refillHearts,
         buyStreakFreeze,
         addXp,
+        addGems,
+        setGems,
+        setStreak,
+        setInfiniteHearts,
         readingPlans,
         togglePlanDay,
         togglePlanEnrollment,

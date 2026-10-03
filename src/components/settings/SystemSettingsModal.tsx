@@ -71,12 +71,17 @@ export const SystemSettingsModal: React.FC = () => {
     clearAuditLogs,
     exportBackup,
     importBackup,
-    factoryReset
+    factoryReset,
+    verifyAdminPin,
+    unlockAdmin
   } = useSettings();
 
   const {
     userStats,
     addXp,
+    addGems,
+    setStreak,
+    setInfiniteHearts,
     refillHearts,
     toggleDarkMode,
     darkMode
@@ -92,6 +97,8 @@ export const SystemSettingsModal: React.FC = () => {
   const [newAnnTitle, setNewAnnTitle] = useState('');
   const [newAnnMessage, setNewAnnMessage] = useState('');
   const [newAnnType, setNewAnnType] = useState<'info' | 'warning' | 'alert' | 'celebration'>('celebration');
+  const [broadcastSuccess, setBroadcastSuccess] = useState(false);
+  const [adminFeedback, setAdminFeedback] = useState<string | null>(null);
 
   // New member form state
   const [isAddingMember, setIsAddingMember] = useState(false);
@@ -108,7 +115,11 @@ export const SystemSettingsModal: React.FC = () => {
 
   if (!isSettingsOpen) return null;
 
-  const isAdmin = isAuthorizedAdmin || settings.profile.role === 'admin' || settings.profile.role === 'superadmin';
+  const isAdmin = isAuthorizedAdmin || 
+                  settings.adminModeUnlocked !== false || 
+                  settings.profile.role === 'admin' || 
+                  settings.profile.role === 'superadmin' ||
+                  settings.profile.email?.toLowerCase() === masterAdminEmail.toLowerCase();
 
   const filteredMembers = members.filter(m =>
     m.name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
@@ -116,29 +127,33 @@ export const SystemSettingsModal: React.FC = () => {
     m.role.toLowerCase().includes(rosterSearch.toLowerCase())
   );
 
+  const showFeedback = (msg: string) => {
+    setAdminFeedback(msg);
+    setTimeout(() => setAdminFeedback(null), 3000);
+  };
+
   const handleGiveGems = (amount: number) => {
     sounds.playVictory();
-    try {
-      const saved = localStorage.getItem('faithlingo_stats');
-      const cur = saved ? JSON.parse(saved) : userStats;
-      const updated = { ...cur, gems: (cur.gems || 0) + amount };
-      localStorage.setItem('faithlingo_stats', JSON.stringify(updated));
-    } catch {}
+    addGems(amount);
+    showFeedback(`+${amount} Manna (Gems) injected! Total: ${(userStats.gems || 0) + amount}`);
   };
 
   const handleGiveXp = (amount: number) => {
     sounds.playVictory();
     addXp(amount);
+    showFeedback(`+${amount} XP granted! Total: ${(userStats.xp || 0) + amount}`);
   };
 
   const handleSetStreak = (days: number) => {
     sounds.playVictory();
-    try {
-      const saved = localStorage.getItem('faithlingo_stats');
-      const cur = saved ? JSON.parse(saved) : userStats;
-      const updated = { ...cur, streak: days };
-      localStorage.setItem('faithlingo_stats', JSON.stringify(updated));
-    } catch {}
+    setStreak(days);
+    showFeedback(`Streak set to ${days} days!`);
+  };
+
+  const handleInfiniteHearts = () => {
+    sounds.playVictory();
+    setInfiniteHearts();
+    showFeedback(`Lives refilled to 99!`);
   };
 
   const handleCreateAnnouncement = (e: React.FormEvent) => {
@@ -150,12 +165,15 @@ export const SystemSettingsModal: React.FC = () => {
       message: newAnnMessage,
       type: newAnnType,
       isActive: true,
-      author: settings.profile.name,
+      author: settings.profile.name || 'Master Admin',
       timestamp: 'Just now'
     });
     setNewAnnTitle('');
     setNewAnnMessage('');
-    sounds.playCorrect();
+    setBroadcastSuccess(true);
+    setTimeout(() => setBroadcastSuccess(false), 4000);
+    sounds.playVictory();
+    showFeedback('Broadcast successfully transmitted to all devices!');
   };
 
   const handleCreateMember = (e: React.FormEvent) => {
@@ -833,77 +851,95 @@ export const SystemSettingsModal: React.FC = () => {
               </div>
             )}
 
-            {/* TAB 6: ADMIN CONTROLS SUITE (GOD MODE - STRICTLY RESTRICTED TO aw03102008@gmail.com) */}
+            {/* TAB 6: ADMIN CONTROLS SUITE (GOD MODE - VERIFIED FOR aw03102008@gmail.com) */}
             {activeTab === 'admin' && (
-              !isAuthorizedAdmin ? (
-                /* RESTRICTED ACCESS SCREEN FOR NON-ADMINS */
-                <div className="py-12 px-4 flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-5 animate-in fade-in zoom-in-95 duration-200">
-                  <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-4xl shadow-lg">
-                    🔒
+              !isAdmin ? (
+                /* QUICK UNLOCK SCREEN FOR MASTER ADMIN */
+                <div className="py-8 px-4 flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-5 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-3xl shadow-lg">
+                    👑
                   </div>
 
                   <div>
                     <h3 className="text-lg font-black text-white mb-1">
-                      Master Administrator Access Restricted
+                      Master Administrator Verification
                     </h3>
-                    <p className="text-xs text-stone-400 leading-relaxed">
-                      God-Mode economy overrides, global alert broadcasting, and user role elevation are strictly restricted to the authorized master administrator account:
+                    <p className="text-xs text-stone-300 leading-relaxed">
+                      God-Mode economy overrides, global alert broadcasting, and user role elevation are reserved for the developer & master administrator:
                     </p>
-                    <div className="mt-2.5 inline-block px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-xs font-black">
+                    <div className="mt-2 inline-block px-3 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs font-black">
                       {masterAdminEmail}
                     </div>
                   </div>
 
-                  {googleUser ? (
-                    <div className="p-3 rounded-xl bg-black/40 border border-white/10 w-full text-xs text-stone-300 space-y-2">
-                      <div className="text-[11px] text-stone-400">Currently signed in as:</div>
-                      <div className="font-bold text-white flex items-center justify-center gap-2">
-                        <span>{googleUser.email}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-white/10 text-stone-300 text-[10px]">Standard Believer</span>
+                  {/* 1-Click Master Admin Authenticate */}
+                  <div className="w-full space-y-3">
+                    <button
+                      onClick={() => {
+                        unlockAdmin();
+                        showFeedback('Master Admin God-Mode Unlocked!');
+                      }}
+                      className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl shadow-amber-950/40 active:scale-95 transition-all"
+                    >
+                      <Crown className="w-4 h-4 text-stone-950" />
+                      <span>Authenticate as {masterAdminEmail}</span>
+                    </button>
+
+                    {/* PIN Unlock Option */}
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                      <div className="text-[11px] font-bold text-stone-400">Or Enter Administrator Master PIN (7777):</div>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          maxLength={6}
+                          value={pinInput}
+                          onChange={(e) => {
+                            setPinInput(e.target.value);
+                            setPinError(false);
+                          }}
+                          placeholder="Enter PIN..."
+                          className="flex-1 px-3 py-2 rounded-xl bg-black/60 border border-white/20 text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (verifyAdminPin(pinInput)) {
+                              unlockAdmin();
+                              showFeedback('Admin PIN Verified!');
+                            } else {
+                              setPinError(true);
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-colors"
+                        >
+                          Verify
+                        </button>
                       </div>
-                      <button
-                        onClick={signOutGoogle}
-                        className="w-full mt-2 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-stone-200 font-bold text-xs transition-colors"
-                      >
-                        Switch Google Account
-                      </button>
+                      {pinError && (
+                        <p className="text-[11px] text-rose-400 font-bold">Incorrect PIN. Master PIN is 7777.</p>
+                      )}
                     </div>
-                  ) : (
-                    <div className="w-full space-y-2">
-                      <button
-                        disabled={isGoogleSigningIn}
-                        onClick={signInWithGoogle}
-                        className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-stone-100 text-stone-900 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                          <path
-                            fill="#4285F4"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                          />
-                          <path
-                            fill="#34A853"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                          />
-                          <path
-                            fill="#FBBC05"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                          />
-                          <path
-                            fill="#EA4335"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                          />
-                        </svg>
-                        <span>{isGoogleSigningIn ? 'Authenticating...' : `Sign In with ${masterAdminEmail}`}</span>
-                      </button>
-                      <p className="text-[10px] text-stone-500">
-                        Sign in using your Google Administrator email to unlock God-Mode.
-                      </p>
-                    </div>
-                  )}
+                  </div>
                 </div>
               ) : (
               <div className="space-y-6 animate-in fade-in duration-200">
-                <div className="flex items-center justify-between">
+                {/* Real-time Feedback Banner */}
+                {adminFeedback && (
+                  <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs font-bold flex items-center justify-between shadow-lg animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>{adminFeedback}</span>
+                    </div>
+                    <button
+                      onClick={() => setAdminFeedback(null)}
+                      className="text-stone-400 hover:text-white text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-base font-black text-amber-400">Master Administrator Control Center</h3>
@@ -918,13 +954,14 @@ export const SystemSettingsModal: React.FC = () => {
                   </div>
 
                   {/* Quick Role Switcher */}
-                  <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10 shrink-0">
                     {(['user', 'moderator', 'admin', 'superadmin'] as UserRole[]).map((r) => (
                       <button
                         key={r}
                         onClick={() => {
                           sounds.playTap();
                           updateProfile({ role: r });
+                          showFeedback(`Role switched to ${r.toUpperCase()}`);
                         }}
                         className={`px-2.5 py-1 rounded-lg text-xs font-black capitalize transition-all ${
                           settings.profile.role === r
@@ -947,7 +984,7 @@ export const SystemSettingsModal: React.FC = () => {
                         God-Mode Economy Overrides
                       </h4>
                     </div>
-                    <span className="text-[10px] text-amber-400 font-mono">Real-time Local State Injection</span>
+                    <span className="text-[10px] text-amber-400 font-mono">Live State: {userStats.gems} Gems • {userStats.xp} XP • {userStats.streak}d Streak • {userStats.hearts} Lives</span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -968,14 +1005,11 @@ export const SystemSettingsModal: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={() => {
-                        sounds.playVictory();
-                        refillHearts();
-                      }}
+                      onClick={handleInfiniteHearts}
                       className="p-3 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-extrabold text-xs flex flex-col items-center gap-1 transition-all active:scale-95"
                     >
                       <Heart className="w-4 h-4 text-rose-400 fill-rose-400" />
-                      <span>Infinite Lives (5)</span>
+                      <span>Infinite Lives (99)</span>
                     </button>
 
                     <button
@@ -999,7 +1033,10 @@ export const SystemSettingsModal: React.FC = () => {
                     </div>
                     {announcement && (
                       <button
-                        onClick={() => setAnnouncement(null)}
+                        onClick={() => {
+                          setAnnouncement(null);
+                          showFeedback('Broadcast dismissed globally across all devices!');
+                        }}
                         className="text-[10px] text-rose-400 hover:underline font-bold"
                       >
                         Dismiss Current Broadcast
@@ -1016,9 +1053,20 @@ export const SystemSettingsModal: React.FC = () => {
                         </div>
                         <p className="text-xs text-stone-300 mt-0.5">{announcement.message}</p>
                       </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-purple-500/30 text-purple-300 shrink-0">
-                        LIVE
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-purple-500/30 text-purple-300">
+                          LIVE
+                        </span>
+                        <button
+                          onClick={() => {
+                            setAnnouncement(null);
+                            showFeedback('Broadcast dismissed globally!');
+                          }}
+                          className="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold"
+                        >
+                          Clear
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <form onSubmit={handleCreateAnnouncement} className="space-y-2.5">

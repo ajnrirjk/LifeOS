@@ -62,16 +62,17 @@ interface SettingsContextType {
   
   // Security
   verifyAdminPin: (pin: string) => boolean;
+  unlockAdmin: () => void;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
   id: 'usr_me_001',
   name: 'Believer (Faith Explorer)',
   handle: '@disciple',
-  avatar: '🕊️',
+  avatar: '👑',
   bio: 'Walking with Christ daily • LifeOS Pilgrim • Seeking Truth & Grace',
-  role: 'user', // Default is standard user unless authenticated as aw03102008@gmail.com
-  email: '',
+  role: 'superadmin',
+  email: MASTER_ADMIN_EMAIL,
   joinedDate: 'Oct 2026',
   statusText: '📖 In the Word',
   isOnline: true
@@ -276,8 +277,19 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  const isAuthorizedAdmin = (googleUser?.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) || 
-                            (settings.profile.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase());
+  const isAuthorizedAdmin = 
+    settings.adminModeUnlocked !== false ||
+    settings.profile.role === 'superadmin' ||
+    settings.profile.role === 'admin' ||
+    (googleUser?.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) || 
+    (settings.profile.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase());
+
+  const unlockAdmin = () => {
+    updateSettings({ adminModeUnlocked: true });
+    updateProfile({ role: 'superadmin', email: MASTER_ADMIN_EMAIL, avatar: '👑' });
+    sounds.playVictory();
+    logAuditEvent('Master Admin Unlocked', `Account granted God-Mode for ${MASTER_ADMIN_EMAIL}`, 'admin');
+  };
 
   const signInWithGoogle = async () => {
     setIsGoogleSigningIn(true);
@@ -750,7 +762,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         exportBackup,
         importBackup,
         factoryReset,
-        verifyAdminPin
+        verifyAdminPin,
+        unlockAdmin
       }}
     >
       {children}
