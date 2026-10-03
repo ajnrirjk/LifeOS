@@ -1,4 +1,5 @@
 export type MiniGameId = 
+  | 'pilgrim_go'
   | 'flappy_dove'
   | 'babel_stack'
   | 'demon_buster'

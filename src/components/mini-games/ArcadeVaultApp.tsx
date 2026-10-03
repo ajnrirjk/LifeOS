@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { sounds } from '../../services/soundEffects';
 import { MiniGameId, MiniGameMeta, ArcadeStats } from './types';
+import { PilgrimGoGame } from './PilgrimGoGame';
 import { FlappyDoveGame } from './FlappyDoveGame';
 import { BabelStackerGame } from './BabelStackerGame';
 import { DemonBusterGame } from './DemonBusterGame';
@@ -24,6 +25,17 @@ import {
 } from 'lucide-react';
 
 const GAMES_LIST: MiniGameMeta[] = [
+  {
+    id: 'pilgrim_go',
+    title: "Pilgrim's Journey (Bible Roguelike)",
+    tagline: 'Capybara-Go style auto-walking RPG: biblical events, 3-skill choices, gear & companions',
+    emoji: '🚶‍♂️',
+    genre: 'Auto-Battler RPG',
+    difficulty: 'Medium',
+    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    accentGradient: 'from-amber-500 via-orange-500 to-yellow-500',
+    instructions: ['Auto-walk day by day through Judea & Galilee', 'Battle monsters & defeat bosses for 3 Holy Blessings', 'Equip weapons, armor & faithful animal companions']
+  },
   {
     id: 'flappy_dove',
     title: 'Faith Flappy Dove',
@@ -95,6 +107,7 @@ const GAMES_LIST: MiniGameMeta[] = [
 const INITIAL_STATS: ArcadeStats = {
   totalTokens: 50,
   highScores: {
+    pilgrim_go: 0,
     flappy_dove: 0,
     babel_stack: 0,
     demon_buster: 0,
@@ -103,6 +116,7 @@ const INITIAL_STATS: ArcadeStats = {
     slingshot_target: 0
   },
   gamesPlayed: {
+    pilgrim_go: 0,
     flappy_dove: 0,
     babel_stack: 0,
     demon_buster: 0,
@@ -160,6 +174,13 @@ export const ArcadeVaultApp: React.FC = () => {
   if (activeGame) {
     return (
       <div className="min-h-full bg-stone-950 text-white flex flex-col justify-center items-center py-2 px-2 sm:px-4 overflow-x-hidden">
+        {activeGame === 'pilgrim_go' && (
+          <PilgrimGoGame
+            highScore={stats.highScores.pilgrim_go || 0}
+            onBack={() => setActiveGame(null)}
+            onGameOver={(sc, tk) => handleGameOver('pilgrim_go', sc, tk)}
+          />
+        )}
         {activeGame === 'flappy_dove' && (
           <FlappyDoveGame
             highScore={stats.highScores.flappy_dove}
