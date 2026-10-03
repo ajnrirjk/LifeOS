@@ -27,11 +27,11 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
   const [currentHighScore, setCurrentHighScore] = useState(highScore);
   const [soundMuted, setSoundMuted] = useState(false);
 
-  const slingshotAnchor = { x: 100, y: 290 };
+  const slingshotAnchor = { x: 75, y: 500 };
 
   const stateRef = useRef({
     dragging: false,
-    dragPos: { x: 100, y: 290 },
+    dragPos: { x: 75, y: 500 },
     stone: null as { x: number; y: number; vx: number; vy: number; active: boolean; radius: number } | null,
     targets: [] as TargetObj[],
     particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; color: string }>,
@@ -46,8 +46,8 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
 
     // Target 1: Clay Pot
     s.targets.push({
-      x: 360,
-      y: 280,
+      x: 240,
+      y: 470,
       radius: 20,
       type: 'pot',
       hp: 1,
@@ -58,8 +58,8 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
 
     // Target 2: Goliath Helmet
     s.targets.push({
-      x: 520,
-      y: 210,
+      x: 290,
+      y: 350,
       radius: 24,
       type: 'helmet',
       hp: 2,
@@ -70,26 +70,26 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
 
     // Target 3: Floating Moving Bronze Shield
     s.targets.push({
-      x: 440,
-      y: 130,
+      x: 220,
+      y: 220,
       radius: 18,
       type: 'shield',
       hp: 1,
       maxHp: 1,
       pts: 35,
-      vx: 1.5
+      vx: 1.2
     });
 
     // Target 4: High Golden Urn
     s.targets.push({
-      x: 620,
-      y: 90,
+      x: 280,
+      y: 130,
       radius: 16,
       type: 'gold_jar',
       hp: 1,
       maxHp: 1,
       pts: 100,
-      vx: -1.2
+      vx: -1.0
     });
   }, []);
 
@@ -359,8 +359,8 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 720;
-    const y = ((e.clientY - rect.top) / rect.height) * 380;
+    const x = ((e.clientX - rect.left) / rect.width) * 380;
+    const y = ((e.clientY - rect.top) / rect.height) * 580;
 
     const dist = Math.hypot(x - slingshotAnchor.x, y - slingshotAnchor.y);
     if (dist < 70) {
@@ -375,8 +375,8 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    let x = ((e.clientX - rect.left) / rect.width) * 720;
-    let y = ((e.clientY - rect.top) / rect.height) * 380;
+    let x = ((e.clientX - rect.left) / rect.width) * 380;
+    let y = ((e.clientY - rect.top) / rect.height) * 580;
 
     const maxPull = 85;
     const dx = x - slingshotAnchor.x;
@@ -454,9 +454,9 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
       >
         <canvas
           ref={canvasRef}
-          width={720}
-          height={380}
-          className="w-full h-full object-cover"
+          width={380}
+          height={580}
+          className="w-full h-full block"
         />
 
         {gameState === 'playing' && (

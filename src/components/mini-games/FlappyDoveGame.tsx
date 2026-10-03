@@ -18,13 +18,13 @@ export const FlappyDoveGame: React.FC<FlappyDoveGameProps> = ({ onGameOver, onBa
 
   // Game variables stored in refs for 60fps RAF loop
   const stateRef = useRef({
-    dove: { x: 120, y: 180, vy: 0, radius: 15, wingAngle: 0 },
-    gravity: 0.36,
-    jumpPower: -7.0,
+    dove: { x: 80, y: 260, vy: 0, radius: 14, wingAngle: 0 },
+    gravity: 0.32,
+    jumpPower: -6.5,
     pipes: [] as Array<{ x: number; top: number; bottom: number; passed: boolean; width: number }>,
     halos: [] as Array<{ x: number; y: number; collected: boolean; angle: number }>,
     particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; color: string }>,
-    gameSpeed: 2.8,
+    gameSpeed: 2.6,
     frame: 0,
     score: 0,
     coins: 0,
@@ -53,22 +53,22 @@ export const FlappyDoveGame: React.FC<FlappyDoveGameProps> = ({ onGameOver, onBa
   const startGame = () => {
     sounds.playTap();
     const s = stateRef.current;
-    s.dove = { x: 120, y: 180, vy: -4, radius: 15, wingAngle: 0 };
+    s.dove = { x: 80, y: 260, vy: -4, radius: 14, wingAngle: 0 };
     s.pipes = [];
     s.halos = [];
     s.particles = [];
-    s.gameSpeed = 2.8;
+    s.gameSpeed = 2.6;
     s.frame = 0;
     s.score = 0;
     s.coins = 0;
     s.running = true;
 
-    // Initialize landscape clouds
-    s.clouds = Array.from({ length: 7 }).map((_, i) => ({
-      x: i * 110 + Math.random() * 50,
-      y: 30 + Math.random() * 100,
+    // Initialize clouds
+    s.clouds = Array.from({ length: 6 }).map((_, i) => ({
+      x: i * 80 + Math.random() * 40,
+      y: 30 + Math.random() * 120,
       speed: 0.3 + Math.random() * 0.4,
-      size: 30 + Math.random() * 25
+      size: 26 + Math.random() * 20
     }));
 
     setScore(0);
@@ -157,11 +157,11 @@ export const FlappyDoveGame: React.FC<FlappyDoveGameProps> = ({ onGameOver, onBa
           s.gameSpeed += 0.2;
         }
 
-        // Spawn Pillars in Landscape
-        if (s.frame % 115 === 0) {
-          const gap = 135;
-          const minPipe = 45;
-          const maxPipe = height - gap - minPipe;
+        // Spawn Pillars
+        if (s.frame % 100 === 0) {
+          const gap = 145;
+          const minPipe = 60;
+          const maxPipe = height - gap - minPipe - 30;
           const top = minPipe + Math.random() * (maxPipe - minPipe);
           const bottom = top + gap;
 
@@ -170,13 +170,13 @@ export const FlappyDoveGame: React.FC<FlappyDoveGameProps> = ({ onGameOver, onBa
             top,
             bottom,
             passed: false,
-            width: 56
+            width: 58
           });
 
           // 65% chance to spawn glowing halo collectible
           if (Math.random() > 0.35) {
             s.halos.push({
-              x: width + 28,
+              x: width + 29,
               y: top + gap / 2,
               collected: false,
               angle: 0
@@ -461,9 +461,9 @@ export const FlappyDoveGame: React.FC<FlappyDoveGameProps> = ({ onGameOver, onBa
       >
         <canvas
           ref={canvasRef}
-          width={720}
-          height={380}
-          className="w-full h-full object-cover"
+          width={380}
+          height={580}
+          className="w-full h-full block"
         />
 
         {/* Live In-Game HUD */}

@@ -21,18 +21,18 @@ export const EdenSnakeGame: React.FC<EdenSnakeGameProps> = ({ onGameOver, onBack
   const [applesEaten, setApplesEaten] = useState(0);
   const [soundMuted, setSoundMuted] = useState(false);
 
-  const tileCountX = 36;
-  const tileCountY = 19;
+  const tileCountX = 20;
+  const tileCountY = 20;
 
   const stateRef = useRef({
     snake: [
-      { x: 18, y: 9 },
-      { x: 18, y: 10 },
-      { x: 18, y: 11 }
+      { x: 10, y: 10 },
+      { x: 10, y: 11 },
+      { x: 10, y: 12 }
     ] as Point[],
     dir: { x: 0, y: -1 } as Point,
     nextDir: { x: 0, y: -1 } as Point,
-    food: { x: 10, y: 5, type: 'apple' as 'apple' | 'scroll' | 'gem' },
+    food: { x: 5, y: 5, type: 'apple' as 'apple' | 'scroll' | 'gem' },
     particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; color: string }>,
     score: 0,
     apples: 0,
@@ -325,9 +325,9 @@ export const EdenSnakeGame: React.FC<EdenSnakeGameProps> = ({ onGameOver, onBack
       >
         <canvas
           ref={canvasRef}
-          width={720}
-          height={380}
-          className="w-full h-full object-cover"
+          width={360}
+          height={360}
+          className="w-full h-full block"
         />
 
         {gameState === 'playing' && (

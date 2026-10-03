@@ -64,23 +64,23 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
   const startGame = () => {
     sounds.playTap();
     const s = stateRef.current;
-    const initialWidth = 220;
+    const initialWidth = 180;
     const baseBlock: Block = {
-      x: (720 - initialWidth) / 2,
-      y: 330,
+      x: (380 - initialWidth) / 2,
+      y: 480,
       width: initialWidth,
-      height: 24,
+      height: 26,
       color: '#6366f1'
     };
 
     s.stack = [baseBlock];
     s.currentBlock = {
       x: 0,
-      y: 330 - 24,
+      y: 480 - 26,
       width: initialWidth,
-      height: 24,
+      height: 26,
       color: BLOCK_COLORS[1],
-      vx: 4.0,
+      vx: 3.6,
       direction: 1
     };
     s.fallingPieces = [];
@@ -208,12 +208,12 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
     const nextSpeed = Math.min(8.5, 4.0 + s.score * 0.12);
     const nextColor = BLOCK_COLORS[(s.stack.length) % BLOCK_COLORS.length];
 
-    if (placedBlock.y - s.cameraY < 180) {
-      s.targetCameraY = 180 - placedBlock.y;
+    if (placedBlock.y - s.cameraY < 280) {
+      s.targetCameraY = 280 - placedBlock.y;
     }
 
     s.currentBlock = {
-      x: Math.random() > 0.5 ? 0 : 720 - newWidth,
+      x: Math.random() > 0.5 ? 0 : 380 - newWidth,
       y: placedBlock.y - s.blockHeight,
       width: newWidth,
       height: s.blockHeight,
@@ -398,9 +398,9 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
       >
         <canvas
           ref={canvasRef}
-          width={720}
-          height={380}
-          className="w-full h-full object-cover"
+          width={380}
+          height={580}
+          className="w-full h-full block"
         />
 
         {gameState === 'playing' && (

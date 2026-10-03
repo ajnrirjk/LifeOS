@@ -407,34 +407,34 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       }
 
       // 4. Foreground Walking Path
-      const groundY = height - 75;
+      const groundY = height * 0.72;
       ctx.fillStyle = currentWorld.groundColor;
-      ctx.fillRect(0, groundY, width, 75);
+      ctx.fillRect(0, groundY, width, height - groundY);
 
       // Road dirt track
       ctx.fillStyle = '#fef08a33';
-      ctx.fillRect(0, groundY + 12, width, 36);
+      ctx.fillRect(0, groundY + 8, width, 26);
 
       // Dynamic Character Positions (Unobstructed in Arena)
       let baseCharX = runStage === 'battling' ? width * 0.28 : width * 0.45;
       if (heroLungeRef.current > 0) {
-        baseCharX += Math.sin(heroLungeRef.current * Math.PI) * 90;
+        baseCharX += Math.sin(heroLungeRef.current * Math.PI) * 70;
       }
-      const charY = groundY + 10 + (runStage === 'walking' ? Math.abs(walk) * -6 : (heroLungeRef.current > 0 ? -15 : 0));
+      const charY = groundY - 14 + (runStage === 'walking' ? Math.abs(walk) * -5 : (heroLungeRef.current > 0 ? -12 : 0));
 
-      let baseEnemyX = width * 0.74;
+      let baseEnemyX = width * 0.75;
       if (enemyLungeRef.current > 0) {
-        baseEnemyX -= Math.sin(enemyLungeRef.current * Math.PI) * 80;
+        baseEnemyX -= Math.sin(enemyLungeRef.current * Math.PI) * 60;
       } else if (enemyHitFlashRef.current > 0) {
-        baseEnemyX += Math.sin(localFrame * 0.8) * 10 + 18;
+        baseEnemyX += Math.sin(localFrame * 0.8) * 8 + 14;
       }
-      const enemyY = groundY + 10;
+      const enemyY = groundY - 14;
 
       // 5. Draw Jesus & Mount Character (Scaled Up for High Visibility)
       if (equipped.mount) {
         ctx.save();
-        ctx.translate(baseCharX, charY + 14);
-        ctx.font = '40px sans-serif';
+        ctx.translate(baseCharX, charY + 12);
+        ctx.font = '34px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.mount.emoji, 0, 0);
@@ -443,8 +443,8 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
 
       // Draw Jesus (Capybara-Go Chibi Art Style)
       ctx.save();
-      ctx.translate(baseCharX, equipped.mount ? charY - 18 : charY);
-      ctx.scale(1.25, 1.25); // Scale up Jesus for high visibility!
+      ctx.translate(baseCharX, equipped.mount ? charY - 16 : charY);
+      ctx.scale(1.15, 1.15); // Scale up Jesus for high visibility!
 
       if (heroHitFlashRef.current > 0) {
         ctx.filter = 'brightness(1.8) drop-shadow(0 0 12px #ef4444)';
@@ -456,54 +456,54 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       ctx.shadowColor = '#facc15';
       ctx.shadowBlur = 16 + Math.sin(localFrame * 0.1) * 6;
       ctx.beginPath();
-      ctx.arc(0, -26, 12, 0, Math.PI * 2);
+      ctx.arc(0, -24, 11, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
 
       // Head & Face
       ctx.fillStyle = '#fed7aa'; // skin
       ctx.beginPath();
-      ctx.arc(0, -8, 14, 0, Math.PI * 2);
+      ctx.arc(0, -7, 13, 0, Math.PI * 2);
       ctx.fill();
 
       // Hair & Beard
       ctx.fillStyle = '#78350f';
       ctx.beginPath();
-      ctx.arc(-8, -12, 6, 0, Math.PI * 2);
-      ctx.arc(8, -12, 6, 0, Math.PI * 2);
-      ctx.arc(0, 0, 10, 0, Math.PI); // beard
+      ctx.arc(-7, -11, 5, 0, Math.PI * 2);
+      ctx.arc(7, -11, 5, 0, Math.PI * 2);
+      ctx.arc(0, 0, 9, 0, Math.PI); // beard
       ctx.fill();
 
       // Eyes
       ctx.fillStyle = '#1c1917';
       ctx.beginPath();
-      ctx.arc(-4, -8, 2, 0, Math.PI * 2);
-      ctx.arc(4, -8, 2, 0, Math.PI * 2);
+      ctx.arc(-4, -7, 2, 0, Math.PI * 2);
+      ctx.arc(4, -7, 2, 0, Math.PI * 2);
       ctx.fill();
 
       // Flowing White Robe & Red Sash
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.roundRect(-12, 2, 24, 20, 6);
+      ctx.roundRect(-11, 3, 22, 18, 5);
       ctx.fill();
 
       // Red Sash
       ctx.fillStyle = '#dc2626';
       ctx.beginPath();
-      ctx.moveTo(-10, 2);
-      ctx.lineTo(8, 22);
-      ctx.lineTo(12, 22);
-      ctx.lineTo(-6, 2);
+      ctx.moveTo(-9, 3);
+      ctx.lineTo(7, 21);
+      ctx.lineTo(11, 21);
+      ctx.lineTo(-5, 3);
       ctx.closePath();
       ctx.fill();
 
       // Equipped Weapon with Swing Rotation
       if (equipped.weapon) {
         ctx.save();
-        ctx.translate(14, 0);
+        ctx.translate(12, 0);
         const weaponAngle = heroLungeRef.current > 0 ? (heroLungeRef.current * 1.8 - 0.5) : -0.4;
         ctx.rotate(weaponAngle);
-        ctx.font = '28px sans-serif';
+        ctx.font = '26px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.weapon.emoji, 0, 0);
@@ -515,8 +515,8 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       // Draw Pet trailing behind
       if (equipped.pet) {
         ctx.save();
-        ctx.translate(baseCharX - 42, charY + 10 + Math.sin(localFrame * 0.1) * 3);
-        ctx.font = '26px sans-serif';
+        ctx.translate(baseCharX - 36, charY + 8 + Math.sin(localFrame * 0.1) * 3);
+        ctx.font = '24px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.pet.emoji, 0, 0);
@@ -530,10 +530,10 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
 
         if (enemyHitFlashRef.current > 0) {
           ctx.filter = 'brightness(2.2) drop-shadow(0 0 16px #ef4444)';
-          ctx.scale(1.25, 0.82); // squash on hit
+          ctx.scale(1.2, 0.85); // squash on hit
         }
 
-        ctx.font = '52px sans-serif';
+        ctx.font = '46px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(activeEnemy.emoji, 0, 0);
@@ -541,13 +541,13 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         // Enemy HP Bar in 2D space
         ctx.filter = 'none';
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
-        ctx.fillRect(-34, -42, 68, 9);
+        ctx.fillRect(-30, -38, 60, 8);
         ctx.fillStyle = '#ef4444';
         const hpPercent = Math.max(0, activeEnemy.hp / activeEnemy.maxHp);
-        ctx.fillRect(-34, -42, 68 * hpPercent, 9);
+        ctx.fillRect(-30, -38, 60 * hpPercent, 8);
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(-34, -42, 68, 9);
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(-30, -38, 60, 8);
         ctx.restore();
       }
 
@@ -1007,12 +1007,12 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
             </div>
 
             {/* 2. Middle Dedicated Battle Stage Arena (100% Unobstructed Viewport) */}
-            <div className="relative w-full flex-1 min-h-[200px] sm:min-h-[250px] rounded-2xl overflow-hidden border border-white/10 shadow-inner bg-sky-950">
+            <div className="relative w-full h-[210px] sm:h-[260px] rounded-2xl overflow-hidden border border-white/10 shadow-inner bg-sky-950 shrink-0">
               <canvas
                 ref={canvasRef}
-                width={800}
-                height={320}
-                className="w-full h-full object-cover"
+                width={600}
+                height={300}
+                className="w-full h-full block"
               />
 
               {/* In-Battle Overhead Badges (Round & Hits Counter like Capybara Go) */}

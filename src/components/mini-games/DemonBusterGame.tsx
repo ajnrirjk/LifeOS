@@ -48,7 +48,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
   const [soundMuted, setSoundMuted] = useState(false);
 
   const stateRef = useRef({
-    player: { x: 360, y: 320, width: 36, height: 36, vx: 0 },
+    player: { x: 190, y: 510, width: 36, height: 36, vx: 0 },
     bullets: [] as Bullet[],
     enemies: [] as Enemy[],
     powerups: [] as PowerUp[],
@@ -67,7 +67,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
   const startGame = () => {
     sounds.playTap();
     const s = stateRef.current;
-    s.player = { x: 360, y: 320, width: 36, height: 36, vx: 0 };
+    s.player = { x: 190, y: 510, width: 36, height: 36, vx: 0 };
     s.bullets = [];
     s.enemies = [];
     s.powerups = [];
@@ -79,9 +79,9 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
     s.frame = 0;
     s.running = true;
 
-    s.stars = Array.from({ length: 60 }).map(() => ({
-      x: Math.random() * 720,
-      y: Math.random() * 380,
+    s.stars = Array.from({ length: 50 }).map(() => ({
+      x: Math.random() * 380,
+      y: Math.random() * 580,
       speed: 0.5 + Math.random() * 2,
       size: 1 + Math.random() * 2
     }));
@@ -474,7 +474,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0];
-    const relX = ((touch.clientX - rect.left) / rect.width) * 720;
+    const relX = ((touch.clientX - rect.left) / rect.width) * 380;
     stateRef.current.touchX = relX;
   };
 
@@ -483,7 +483,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const relX = ((e.clientX - rect.left) / rect.width) * 720;
+    const relX = ((e.clientX - rect.left) / rect.width) * 380;
     stateRef.current.touchX = relX;
   };
 
@@ -542,9 +542,9 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
       >
         <canvas
           ref={canvasRef}
-          width={720}
-          height={380}
-          className="w-full h-full object-cover"
+          width={380}
+          height={580}
+          className="w-full h-full block"
         />
 
         {gameState === 'playing' && (
