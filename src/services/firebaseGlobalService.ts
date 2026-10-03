@@ -1,7 +1,7 @@
 import { SystemAnnouncement, FellowshipMember, UserRole, MASTER_ADMIN_EMAIL } from '../types/settings';
 import mqtt, { MqttClient } from 'mqtt';
 
-// Fallback endpoints for cross-network resilience
+// Cloud REST & MQTT Endpoints
 const CLOUD_SETTINGS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a10342596a6e98';
 const CLOUD_MEMBERS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1034264616e99';
 
@@ -28,7 +28,7 @@ const DEFAULT_CONFIG: GlobalConfigPayload = {
   updatedAt: Date.now()
 };
 
-const MASTER_ADMIN_MEMBER: FellowshipMember = {
+export const MASTER_ADMIN_MEMBER: FellowshipMember = {
   id: 'usr_master_admin_aw',
   name: 'Anthony Williams',
   handle: '@disciple',
@@ -43,31 +43,153 @@ const MASTER_ADMIN_MEMBER: FellowshipMember = {
   notes: 'Master Administrator'
 };
 
+export const DEFAULT_FELLOWSHIP_MEMBERS: FellowshipMember[] = [
+  {
+    id: 'usr_handle_laptop',
+    name: 'laptop',
+    handle: '@laptop',
+    avatar: '🕊️',
+    role: 'admin',
+    status: 'active',
+    lastActive: 'Just now',
+    xp: 100,
+    streak: 1,
+    warningsCount: 0,
+    notes: 'Fellowship Believer'
+  },
+  {
+    id: 'usr_handle_phone',
+    name: 'Phone',
+    handle: '@phone',
+    avatar: '🕊️',
+    role: 'user',
+    status: 'active',
+    lastActive: 'Just now',
+    xp: 100,
+    streak: 1,
+    warningsCount: 0,
+    notes: 'Fellowship Believer'
+  },
+  MASTER_ADMIN_MEMBER
+];
+
 class FirebaseGlobalService {
   private configListeners: Array<(config: GlobalConfigPayload) => void> = [];
   private membersListeners: Array<(members: FellowshipMember[]) => void> = [];
   private cachedConfig: GlobalConfigPayload = DEFAULT_CONFIG;
-  private cachedMembers: FellowshipMember[] = [MASTER_ADMIN_MEMBER];
+  private cachedMembers: FellowshipMember[] = [];
   private localEventSource: EventSource | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private mqttClient: MqttClient | null = null;
-  private isPollingActive = false;
 
   constructor() {
+    this.cachedMembers = this.loadInitialMembers();
     this.initBroadcastChannel();
     this.initServerSSE();
     this.initMqtt();
-    this.startPolling();
+    this.startSync();
   }
 
-  // 1. Cross-Tab Synchronization using BroadcastChannel (Same as Fellowship Chat)
+  // 1. Load from localStorage or defaults on instantiation
+  private loadInitialMembers(): FellowshipMember[] {
+    if (typeof window === 'undefined') return DEFAULT_FELLOWSHIP_MEMBERS;
+    try {
+      const saved = localStorage.getItem('lifeos_fellowship_roster_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return this.mergeMembers(parsed);
+        }
+      }
+    } catch {}
+    return DEFAULT_FELLOWSHIP_MEMBERS;
+  }
+
+  private persistLocalMembers() {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('lifeos_fellowship_roster_v1', JSON.stringify(this.cachedMembers));
+    } catch {}
+  }
+
+  // 2. UNION MERGE: Combines members by handle so NO MEMBER IS EVER DROPPED OR OVERWRITTEN
+  private mergeMembers(incoming: FellowshipMember[]): FellowshipMember[] {
+    const map = new Map<string, FellowshipMember>();
+
+    // A. Start with default foundational members (laptop, Phone, Master Admin)
+    for (const m of DEFAULT_FELLOWSHIP_MEMBERS) {
+      if (m && m.handle) {
+        map.set(m.handle.toLowerCase().trim(), m);
+      }
+    }
+
+    // B. Keep all current cached members
+    for (const m of this.cachedMembers) {
+      if (m && m.handle) {
+        const key = m.handle.toLowerCase().trim();
+        map.set(key, m);
+      }
+    }
+
+    // C. Merge all incoming members from network/SSE/REST
+    if (Array.isArray(incoming)) {
+      for (const m of incoming) {
+        if (!m || !m.name) continue;
+        const key = (m.handle || `@${m.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`).toLowerCase().trim();
+        const existing = map.get(key);
+
+        const isMaster = (m.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
+                         key.includes('aw03102008') ||
+                         key === '@disciple';
+
+        if (isMaster) {
+          map.set('@disciple', {
+            ...MASTER_ADMIN_MEMBER,
+            ...m,
+            name: 'Anthony Williams',
+            handle: '@disciple',
+            avatar: '👑',
+            role: 'superadmin',
+            email: MASTER_ADMIN_EMAIL,
+            xp: Math.max(m.xp || 0, 5000),
+            streak: Math.max(m.streak || 0, 100),
+            status: 'active'
+          });
+        } else {
+          map.set(key, {
+            ...existing,
+            ...m,
+            // Preserve role modifications (e.g. if promoted to admin, keep admin)
+            role: (existing?.role === 'admin' || existing?.role === 'superadmin') ? existing.role : m.role
+          });
+        }
+      }
+    }
+
+    // D. Guarantee Master Admin is always in the roster
+    map.set('@disciple', {
+      ...MASTER_ADMIN_MEMBER,
+      ...map.get('@disciple'),
+      name: 'Anthony Williams',
+      handle: '@disciple',
+      avatar: '👑',
+      role: 'superadmin',
+      email: MASTER_ADMIN_EMAIL
+    });
+
+    return Array.from(map.values());
+  }
+
+  // 3. Cross-Tab Synchronization using BroadcastChannel
   private initBroadcastChannel() {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         this.broadcastChannel = new BroadcastChannel('lifeos_fellowship_sync');
         this.broadcastChannel.onmessage = (e) => {
           if (e.data && e.data.type === 'fellowship_members_updated' && Array.isArray(e.data.data)) {
-            this.cachedMembers = this.cleanAndDeduplicateMembers(e.data.data);
+            const merged = this.mergeMembers(e.data.data);
+            this.cachedMembers = merged;
+            this.persistLocalMembers();
             this.notifyMembersListeners();
           } else if (e.data && e.data.type === 'global_config_updated' && e.data.data) {
             this.cachedConfig = { ...this.cachedConfig, ...e.data.data };
@@ -78,7 +200,7 @@ class FirebaseGlobalService {
     }
   }
 
-  // 2. Real-Time Server SSE Stream (Same as Fellowship Chat)
+  // 4. Server-Sent Events (SSE) Stream
   private initServerSSE() {
     if (typeof window === 'undefined') return;
 
@@ -90,7 +212,9 @@ class FirebaseGlobalService {
         try {
           const list = JSON.parse(e.data);
           if (Array.isArray(list) && list.length > 0) {
-            this.cachedMembers = this.cleanAndDeduplicateMembers(list);
+            const merged = this.mergeMembers(list);
+            this.cachedMembers = merged;
+            this.persistLocalMembers();
             this.notifyMembersListeners();
           }
         } catch {}
@@ -105,15 +229,10 @@ class FirebaseGlobalService {
           }
         } catch {}
       });
-
-      sse.onerror = () => {
-        // SSE reconnects automatically; fall back to fetching in background
-        this.fetchServerMembers();
-      };
     } catch {}
   }
 
-  // 3. MQTT WebSockets fallback
+  // 5. MQTT WebSockets fallback
   private initMqtt() {
     if (typeof window === 'undefined') return;
     try {
@@ -132,13 +251,12 @@ class FirebaseGlobalService {
         try {
           const parsed = JSON.parse(payload.toString());
           if (topic === 'lifeos/global/settings_v3' && parsed) {
-            this.cachedConfig = {
-              ...this.cachedConfig,
-              ...parsed
-            };
+            this.cachedConfig = { ...this.cachedConfig, ...parsed };
             this.notifyConfigListeners();
           } else if (topic === 'lifeos/global/members_v3' && Array.isArray(parsed)) {
-            this.cachedMembers = this.cleanAndDeduplicateMembers(parsed);
+            const merged = this.mergeMembers(parsed);
+            this.cachedMembers = merged;
+            this.persistLocalMembers();
             this.notifyMembersListeners();
           }
         } catch {}
@@ -146,37 +264,20 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // 4. Polling Fallback
-  private startPolling() {
-    if (this.isPollingActive || typeof window === 'undefined') return;
-    this.isPollingActive = true;
+  // 6. Fast Startup & Background Sync
+  private startSync() {
+    if (typeof window === 'undefined') return;
 
-    // Initial fetch from server
-    this.fetchServerMembers();
+    // Immediately fetch from both endpoints
     this.fetchCloudMembers();
+    this.fetchServerMembers();
     this.fetchCloudSettings();
 
-    // Poll every 3 seconds to guarantee freshness
+    // Redundant poll every 3 seconds
     setInterval(() => {
-      this.fetchServerMembers();
       this.fetchCloudMembers();
+      this.fetchServerMembers();
     }, 3000);
-  }
-
-  private async fetchServerMembers() {
-    try {
-      const res = await fetch('/api/fellowship/members');
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.members && Array.isArray(json.members) && json.members.length > 0) {
-          const cleaned = this.cleanAndDeduplicateMembers(json.members);
-          if (cleaned.length !== this.cachedMembers.length || JSON.stringify(cleaned) !== JSON.stringify(this.cachedMembers)) {
-            this.cachedMembers = cleaned;
-            this.notifyMembersListeners();
-          }
-        }
-      }
-    } catch {}
   }
 
   private async fetchCloudMembers() {
@@ -185,10 +286,27 @@ class FirebaseGlobalService {
       if (res.ok) {
         const json = await res.json();
         if (json?.data?.members && Array.isArray(json.data.members)) {
-          // Merge remote members with local without dropping any
-          const merged = this.cleanAndDeduplicateMembers([...json.data.members, ...this.cachedMembers]);
+          const merged = this.mergeMembers(json.data.members as FellowshipMember[]);
           if (merged.length !== this.cachedMembers.length || JSON.stringify(merged) !== JSON.stringify(this.cachedMembers)) {
             this.cachedMembers = merged;
+            this.persistLocalMembers();
+            this.notifyMembersListeners();
+          }
+        }
+      }
+    } catch {}
+  }
+
+  private async fetchServerMembers() {
+    try {
+      const res = await fetch('/api/fellowship/members');
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.members && Array.isArray(json.members)) {
+          const merged = this.mergeMembers(json.members as FellowshipMember[]);
+          if (merged.length !== this.cachedMembers.length || JSON.stringify(merged) !== JSON.stringify(this.cachedMembers)) {
+            this.cachedMembers = merged;
+            this.persistLocalMembers();
             this.notifyMembersListeners();
           }
         }
@@ -210,50 +328,6 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // Deduplicate members cleanly by handle and master admin email
-  private cleanAndDeduplicateMembers(list: FellowshipMember[]): FellowshipMember[] {
-    const seenHandles = new Set<string>();
-    const seenEmails = new Set<string>();
-    const cleaned: FellowshipMember[] = [];
-
-    for (const m of list) {
-      if (!m || !m.name) continue;
-      
-      const isMaster = (m.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
-                       (m.handle?.toLowerCase().includes('aw03102008'));
-
-      if (isMaster) {
-        if (seenEmails.has(MASTER_ADMIN_EMAIL.toLowerCase())) continue;
-        seenEmails.add(MASTER_ADMIN_EMAIL.toLowerCase());
-        cleaned.push({
-          ...m,
-          name: 'Anthony Williams',
-          handle: '@disciple',
-          avatar: '👑',
-          role: 'superadmin',
-          email: MASTER_ADMIN_EMAIL,
-          xp: Math.max(m.xp || 0, 5000),
-          streak: Math.max(m.streak || 0, 100),
-          status: 'active'
-        });
-        continue;
-      }
-
-      const hKey = (m.handle || '').toLowerCase().trim();
-      if (hKey && seenHandles.has(hKey)) continue;
-      if (hKey) seenHandles.add(hKey);
-
-      cleaned.push(m);
-    }
-
-    // Ensure Master Admin is always in the roster
-    if (!seenEmails.has(MASTER_ADMIN_EMAIL.toLowerCase())) {
-      cleaned.push(MASTER_ADMIN_MEMBER);
-    }
-
-    return cleaned;
-  }
-
   private notifyConfigListeners() {
     this.configListeners.forEach(cb => cb(this.cachedConfig));
   }
@@ -262,7 +336,11 @@ class FirebaseGlobalService {
     this.membersListeners.forEach(cb => cb(this.cachedMembers));
   }
 
-  // 5. Subscribe to Global Announcements & App Visibility
+  getMembers(): FellowshipMember[] {
+    return this.cachedMembers;
+  }
+
+  // 7. Subscribe to Global Announcements & App Visibility
   subscribeToGlobalConfig(callback: (config: GlobalConfigPayload) => void): () => void {
     this.configListeners.push(callback);
     callback(this.cachedConfig);
@@ -272,7 +350,7 @@ class FirebaseGlobalService {
     };
   }
 
-  // 6. Publish Global Announcement to all devices
+  // 8. Publish Global Announcement to all devices
   async publishAnnouncement(announcement: SystemAnnouncement | null) {
     const nextConfig: GlobalConfigPayload = {
       ...this.cachedConfig,
@@ -282,7 +360,12 @@ class FirebaseGlobalService {
     this.cachedConfig = nextConfig;
     this.notifyConfigListeners();
 
-    // Server API
+    // A. BroadcastChannel
+    try {
+      this.broadcastChannel?.postMessage({ type: 'global_config_updated', data: nextConfig });
+    } catch {}
+
+    // B. Server API
     try {
       if (announcement) {
         await fetch('/api/global/broadcast', {
@@ -295,12 +378,14 @@ class FirebaseGlobalService {
       }
     } catch {}
 
-    // BroadcastChannel
+    // C. MQTT
     try {
-      this.broadcastChannel?.postMessage({ type: 'global_config_updated', data: nextConfig });
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/settings_v3', JSON.stringify(nextConfig));
+      }
     } catch {}
 
-    // Cloud REST Fallback
+    // D. Cloud REST Store
     try {
       await fetch(CLOUD_SETTINGS_URL, {
         method: 'PUT',
@@ -313,7 +398,7 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // 7. Update Global App Visibility Feature Flags across all devices
+  // 9. Update Global App Visibility Feature Flags across all devices
   async updateAppVisibility(appVisibility: Record<string, boolean>) {
     const nextConfig: GlobalConfigPayload = {
       ...this.cachedConfig,
@@ -323,7 +408,10 @@ class FirebaseGlobalService {
     this.cachedConfig = nextConfig;
     this.notifyConfigListeners();
 
-    // Server API
+    try {
+      this.broadcastChannel?.postMessage({ type: 'global_config_updated', data: nextConfig });
+    } catch {}
+
     try {
       await fetch('/api/global/app-visibility', {
         method: 'POST',
@@ -332,12 +420,12 @@ class FirebaseGlobalService {
       });
     } catch {}
 
-    // BroadcastChannel
     try {
-      this.broadcastChannel?.postMessage({ type: 'global_config_updated', data: nextConfig });
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/settings_v3', JSON.stringify(nextConfig));
+      }
     } catch {}
 
-    // Cloud REST Fallback
     try {
       await fetch(CLOUD_SETTINGS_URL, {
         method: 'PUT',
@@ -350,18 +438,17 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // 8. Subscribe to Real Fellowship Members Roster across all devices
+  // 10. Subscribe to Real Fellowship Members Roster across all devices
   subscribeToFellowshipMembers(callback: (members: FellowshipMember[]) => void): () => void {
     this.membersListeners.push(callback);
     callback(this.cachedMembers);
-    this.fetchServerMembers();
 
     return () => {
       this.membersListeners = this.membersListeners.filter(cb => cb !== callback);
     };
   }
 
-  // 9. Register or update a real user - SENDS TO SERVER AND BROADCASTS TO ALL DEVICES
+  // 11. Register or update a real user - NEVER DROPS OR REPLACES EXISTING MEMBERS
   async registerMember(member: FellowshipMember) {
     const cleanHandle = (member.handle || '').toLowerCase().trim();
     const cleanEmail = (member.email || '').toLowerCase().trim();
@@ -381,43 +468,37 @@ class FirebaseGlobalService {
       lastActive: 'Just now'
     };
 
-    // 1. Optimistic local update
-    const targetHandle = safeMember.handle.toLowerCase().trim();
-    const filteredList = this.cachedMembers.filter(m => {
-      if (isMaster && m.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) return false;
-      if (!isMaster && m.handle?.toLowerCase().trim() === targetHandle) return false;
-      return true;
-    });
-
-    const nextMembers = this.cleanAndDeduplicateMembers([safeMember, ...filteredList]);
-    this.cachedMembers = nextMembers;
+    // Merge into local cache non-destructively
+    const merged = this.mergeMembers([safeMember]);
+    this.cachedMembers = merged;
+    this.persistLocalMembers();
     this.notifyMembersListeners();
 
-    // 2. BroadcastChannel (Same Device / Cross-Tab)
+    // BroadcastChannel
     try {
       this.broadcastChannel?.postMessage({
         type: 'fellowship_members_updated',
-        data: nextMembers
+        data: merged
       });
     } catch {}
 
-    // 3. POST to First-Party Server Endpoint (Saves to server disk & broadcasts to all devices via SSE)
+    // POST to Server
     try {
-      const res = await fetch('/api/fellowship/register', {
+      fetch('/api/fellowship/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(safeMember)
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.members && Array.isArray(json.members)) {
-          this.cachedMembers = this.cleanAndDeduplicateMembers(json.members);
-          this.notifyMembersListeners();
-        }
+      }).catch(() => {});
+    } catch {}
+
+    // MQTT
+    try {
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(merged));
       }
     } catch {}
 
-    // 4. Redundant Cloud REST Store
+    // Cloud REST Store
     try {
       await fetch(CLOUD_MEMBERS_URL, {
         method: 'PUT',
@@ -425,7 +506,7 @@ class FirebaseGlobalService {
         body: JSON.stringify({
           name: 'LifeOS Global Fellowship Roster',
           data: {
-            members: nextMembers,
+            members: merged,
             updatedAt: Date.now()
           }
         })
@@ -433,25 +514,8 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // 10. Moderate Fellowship Member (role, status, delete) across all devices
+  // 12. Moderate Fellowship Member (role, status, delete)
   async moderateMember(memberId: string, updates: { role?: UserRole; status?: 'active' | 'muted' | 'banned'; action?: string }) {
-    // 1. POST to Server
-    try {
-      const res = await fetch('/api/fellowship/moderate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, ...updates })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.members && Array.isArray(json.members)) {
-          this.cachedMembers = this.cleanAndDeduplicateMembers(json.members);
-          this.notifyMembersListeners();
-        }
-      }
-    } catch {}
-
-    // 2. Update local state
     let nextMembers: FellowshipMember[];
     if (updates.action === 'delete') {
       nextMembers = this.cachedMembers.filter(m => m.id !== memberId && m.handle.toLowerCase() !== memberId.toLowerCase());
@@ -468,19 +532,36 @@ class FirebaseGlobalService {
       });
     }
 
-    nextMembers = this.cleanAndDeduplicateMembers(nextMembers);
-    this.cachedMembers = nextMembers;
+    const merged = this.mergeMembers(nextMembers);
+    this.cachedMembers = merged;
+    this.persistLocalMembers();
     this.notifyMembersListeners();
 
-    // 3. BroadcastChannel
+    // BroadcastChannel
     try {
       this.broadcastChannel?.postMessage({
         type: 'fellowship_members_updated',
-        data: nextMembers
+        data: merged
       });
     } catch {}
 
-    // 4. Cloud REST Store
+    // Server API
+    try {
+      fetch('/api/fellowship/moderate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, ...updates })
+      }).catch(() => {});
+    } catch {}
+
+    // MQTT
+    try {
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(merged));
+      }
+    } catch {}
+
+    // Cloud REST Store
     try {
       await fetch(CLOUD_MEMBERS_URL, {
         method: 'PUT',
@@ -488,7 +569,7 @@ class FirebaseGlobalService {
         body: JSON.stringify({
           name: 'LifeOS Global Fellowship Roster',
           data: {
-            members: nextMembers,
+            members: merged,
             updatedAt: Date.now()
           }
         })

@@ -10,7 +10,7 @@ import {
 } from '../types/settings';
 import { sounds } from '../services/soundEffects';
 import { googleDriveService } from '../services/googleDriveService';
-import { firebaseGlobalService } from '../services/firebaseGlobalService';
+import { firebaseGlobalService, DEFAULT_FELLOWSHIP_MEMBERS } from '../services/firebaseGlobalService';
 
 interface GoogleUserInfo {
   uid: string;
@@ -120,72 +120,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   debugTelemetryEnabled: false
 };
 
-const INITIAL_MEMBERS: FellowshipMember[] = [
-  {
-    id: 'mem_001',
-    name: 'Brother Andrew',
-    handle: '@andrew_shepherd',
-    avatar: '🧔🏻‍♂️',
-    role: 'admin',
-    status: 'active',
-    lastActive: 'Just now',
-    xp: 2840,
-    streak: 42,
-    warningsCount: 0,
-    notes: 'Fellowship study leader & worship team'
-  },
-  {
-    id: 'mem_002',
-    name: 'Sister Sarah',
-    handle: '@sarah_grace',
-    avatar: '👩🏼',
-    role: 'moderator',
-    status: 'active',
-    lastActive: '5m ago',
-    xp: 1950,
-    streak: 28,
-    warningsCount: 0,
-    notes: 'Prayer chain coordinator'
-  },
-  {
-    id: 'mem_003',
-    name: 'Marcus Chen',
-    handle: '@marcus_c',
-    avatar: '🧑🏻',
-    role: 'user',
-    status: 'active',
-    lastActive: '1h ago',
-    xp: 680,
-    streak: 7,
-    warningsCount: 0,
-    notes: 'New believer, exploring Romans study'
-  },
-  {
-    id: 'mem_004',
-    name: 'Pastor Thomas',
-    handle: '@pastor_thomas',
-    avatar: '👴🏼',
-    role: 'superadmin',
-    status: 'active',
-    lastActive: '30m ago',
-    xp: 5400,
-    streak: 110,
-    warningsCount: 0,
-    notes: 'Senior Teaching Pastor'
-  },
-  {
-    id: 'mem_005',
-    name: 'Chloe Williams',
-    handle: '@chloew',
-    avatar: '👧🏽',
-    role: 'user',
-    status: 'active',
-    lastActive: 'Yesterday',
-    xp: 420,
-    streak: 4,
-    warningsCount: 0
-  }
-];
+const INITIAL_MEMBERS: FellowshipMember[] = DEFAULT_FELLOWSHIP_MEMBERS;
 
 const INITIAL_LOGS: SystemAuditLog[] = [
   {
@@ -226,12 +161,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   const [members, setMembers] = useState<FellowshipMember[]>(() => {
-    try {
-      const saved = localStorage.getItem('lifeos_fellowship_roster_v1');
-      return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
-    } catch {
-      return INITIAL_MEMBERS;
-    }
+    return firebaseGlobalService.getMembers();
   });
 
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(() => {
