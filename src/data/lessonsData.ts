@@ -98,7 +98,7 @@ export const STUDY_UNITS: StudyUnit[] = [
             prompt: 'Unscramble Jesus’s famous declaration to His followers:',
             scriptureReference: 'Matthew 5:14',
             scriptureText: 'You are the light of the world',
-            scrambledWords: ['the', 'world', 'You', 'light', 'are', 'of'],
+            scrambledWords: ['the', 'world', 'You', 'light', 'are', 'of', 'the'],
             correctSentence: ['You', 'are', 'the', 'light', 'of', 'the', 'world'],
             insightNote: 'Light by nature expels darkness. Believers are called not to hide in fear, but shine brightly with good works.',
             mascotTip: 'A city built on a hill cannot be hidden!'
@@ -273,7 +273,7 @@ export const STUDY_UNITS: StudyUnit[] = [
             prompt: 'Arrange the Great Commandment quoted by the lawyer:',
             scriptureReference: 'Luke 10:27',
             scriptureText: 'You shall love the Lord your God with all your heart',
-            scrambledWords: ['your', 'Lord', 'God', 'all', 'shall', 'love', 'You', 'with', 'the', 'heart'],
+            scrambledWords: ['your', 'Lord', 'God', 'all', 'shall', 'love', 'You', 'with', 'the', 'your', 'heart'],
             correctSentence: ['You', 'shall', 'love', 'the', 'Lord', 'your', 'God', 'with', 'all', 'your', 'heart'],
             insightNote: 'Jesus combined Deuteronomy 6:5 (Shema) with Leviticus 19:18 (love your neighbor as yourself).',
             mascotTip: 'Love for God overflows into active love for fellow humans.'
@@ -450,7 +450,7 @@ export const STUDY_UNITS: StudyUnit[] = [
             prompt: 'Arrange Jesus’s bold answer to Thomas:',
             scriptureReference: 'John 14:6',
             scriptureText: 'I am the way, the truth, and the life',
-            scrambledWords: ['life', 'truth,', 'the', 'I', 'way,', 'and', 'am', 'the'],
+            scrambledWords: ['life', 'truth,', 'the', 'I', 'way,', 'and', 'am', 'the', 'the'],
             correctSentence: ['I', 'am', 'the', 'way,', 'the', 'truth,', 'and', 'the', 'life'],
             insightNote: 'Jesus didn’t claim to merely point out a map; He declared Himself to be the very road to God.',
             mascotTip: 'He is the destination and the journey!'

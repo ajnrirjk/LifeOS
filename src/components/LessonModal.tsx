@@ -42,8 +42,26 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     setSelectedLeftId(null);
     setMatchedPairs([]);
 
-    if (currentQuestion.type === 'word-scramble' && currentQuestion.scrambledWords) {
-      setAvailableWords([...currentQuestion.scrambledWords]);
+    if (currentQuestion.type === 'word-scramble') {
+      const words = currentQuestion.scrambledWords ? [...currentQuestion.scrambledWords] : [];
+      if (currentQuestion.correctSentence) {
+        // Ensure every required word in correctSentence (including repeated words like "the") has sufficient buttons
+        const sentenceCount: Record<string, number> = {};
+        for (const w of currentQuestion.correctSentence) {
+          sentenceCount[w] = (sentenceCount[w] || 0) + 1;
+        }
+        const wordCount: Record<string, number> = {};
+        for (const w of words) {
+          wordCount[w] = (wordCount[w] || 0) + 1;
+        }
+        for (const [w, count] of Object.entries(sentenceCount)) {
+          const diff = count - (wordCount[w] || 0);
+          for (let i = 0; i < diff; i++) {
+            words.push(w);
+          }
+        }
+      }
+      setAvailableWords(words);
       setSelectedWords([]);
     }
   }, [currentIndex, currentQuestion]);
@@ -286,13 +304,20 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                     </span>
                   ) : (
                     selectedWords.map((word, idx) => (
-                      <button
-                        key={`${word}-${idx}`}
+                      <motion.button
+                        key={`sel-${word}-${idx}`}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.8, opacity: 0 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: 'spring', damping: 20, stiffness: 400 }}
                         onClick={() => removeWord(word, idx)}
-                        className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-sm shadow-sm active:scale-95 transition-all"
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-sm transition-colors cursor-pointer"
+                        title="Tap to return word to bank"
                       >
                         {word}
-                      </button>
+                      </motion.button>
                     ))
                   )}
                 </div>
@@ -300,13 +325,19 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                 {/* Available Word Bank */}
                 <div className="flex flex-wrap gap-2 justify-center pt-2">
                   {availableWords.map((word, idx) => (
-                    <button
-                      key={`${word}-${idx}`}
+                    <motion.button
+                      key={`avail-${word}-${idx}`}
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      whileHover={{ scale: 1.06, y: -2 }}
+                      whileTap={{ scale: 0.94 }}
+                      transition={{ type: 'spring', damping: 20, stiffness: 400 }}
                       onClick={() => addWord(word, idx)}
-                      className="px-3.5 py-2 rounded-xl border-2 border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-stone-800 dark:text-stone-200 font-extrabold text-sm shadow-sm hover:border-emerald-500 active:translate-y-0.5 transition-all"
+                      className="px-3.5 py-2 rounded-xl border-2 border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-stone-800 dark:text-stone-200 font-extrabold text-sm shadow-sm hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                      title="Tap to add to sentence"
                     >
                       {word}
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
               </div>
