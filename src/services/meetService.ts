@@ -300,8 +300,8 @@ class MeetService {
         const payload = JSON.parse(e.data);
         const { peer } = payload;
         if (peer && peer.id !== this.currentUser?.id) {
-          // A new peer joined, prepare connection
-          this.createPeerConnection(peer.id, false);
+          // Existing peer creates offer to new peer
+          this.createPeerConnection(peer.id, true);
           this.emit('peer_joined', payload);
         }
       } catch {}
@@ -454,13 +454,27 @@ class MeetService {
     if (isInitiator) {
       pc.onnegotiationneeded = async () => {
         try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          this.sendSignal(remotePeerId, offer, 'offer');
+          if (pc.signalingState === 'stable') {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this.sendSignal(remotePeerId, offer, 'offer');
+          }
         } catch (err) {
           console.warn('Error creating WebRTC offer:', err);
         }
       };
+
+      setTimeout(async () => {
+        try {
+          if (pc.signalingState === 'stable' && !pc.localDescription) {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this.sendSignal(remotePeerId, offer, 'offer');
+          }
+        } catch (err) {
+          console.warn('Error creating WebRTC offer timeout fallback:', err);
+        }
+      }, 600);
     }
 
     return pc;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mic,
@@ -247,13 +247,26 @@ export const LifeMeetApp: React.FC = () => {
   // Call Duration Timer
   const [callDuration, setCallDuration] = useState(0);
 
-  // Create User Identity
-  const currentUser = {
-    id: googleUser?.uid || googleUser?.email || `user_${settings.profile.handle?.replace('@', '') || 'guest'}`,
-    name: googleUser?.displayName || settings.profile.name || 'Believer in Christ',
-    photoURL: googleUser?.photoURL || undefined,
-    isGoogleUser: !!googleUser
-  };
+  // Create User Identity with guaranteed unique persistent client ID for multi-device support
+  const currentUser = useMemo(() => {
+    let persistentId = '';
+    try {
+      persistentId = localStorage.getItem('lifemeet_client_id') || '';
+      if (!persistentId) {
+        persistentId = `user_${Math.random().toString(36).substring(2, 8)}_${Date.now().toString(36)}`;
+        localStorage.setItem('lifemeet_client_id', persistentId);
+      }
+    } catch {
+      persistentId = `user_${Math.random().toString(36).substring(2, 8)}`;
+    }
+
+    return {
+      id: googleUser?.uid || googleUser?.email || persistentId,
+      name: googleUser?.displayName || settings.profile.name || `Believer (${persistentId.slice(-4)})`,
+      photoURL: googleUser?.photoURL || undefined,
+      isGoogleUser: !!googleUser
+    };
+  }, [googleUser, settings.profile.name]);
 
   // 1. Fetch Public Lounges on Mount & start preview
   useEffect(() => {
