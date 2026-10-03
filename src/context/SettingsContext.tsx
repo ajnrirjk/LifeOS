@@ -437,9 +437,14 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // Update real user in backend registry whenever profile changes
+  // Sync registered user to global cloud roster on startup & profile changes
   useEffect(() => {
-    if (settings.profile.name && settings.profile.name !== 'Believer (Faith Explorer)') {
+    const isRegistered = typeof window !== 'undefined' ? localStorage.getItem('lifeos_user_registered_v2') === 'true' : false;
+    const isCustomName = settings.profile.name && 
+                         settings.profile.name !== 'Believer in Christ' && 
+                         settings.profile.name !== 'Believer (Faith Explorer)';
+
+    if (isRegistered && isCustomName) {
       const memberData: FellowshipMember = {
         id: googleUser?.uid || settings.profile.id,
         name: settings.profile.name,

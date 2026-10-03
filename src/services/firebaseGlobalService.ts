@@ -81,7 +81,8 @@ class FirebaseGlobalService {
             };
             this.notifyConfigListeners();
           } else if (topic === 'lifeos/global/members_v3' && Array.isArray(parsed)) {
-            this.cachedMembers = parsed;
+            // Deduplicate incoming members
+            this.cachedMembers = this.cleanAndDeduplicateMembers(parsed);
             this.notifyMembersListeners();
           }
         } catch {}
@@ -132,7 +133,7 @@ class FirebaseGlobalService {
       if (res.ok) {
         const json = await res.json();
         if (json?.data?.members && Array.isArray(json.data.members)) {
-          const incoming = json.data.members as FellowshipMember[];
+          const incoming = this.cleanAndDeduplicateMembers(json.data.members as FellowshipMember[]);
           if (incoming.length !== this.cachedMembers.length || JSON.stringify(incoming) !== JSON.stringify(this.cachedMembers)) {
             this.cachedMembers = incoming;
             this.notifyMembersListeners();
@@ -140,6 +141,48 @@ class FirebaseGlobalService {
         }
       }
     } catch {}
+  }
+
+  // Deduplicate Anthony Williams and any other duplicate IDs
+  private cleanAndDeduplicateMembers(list: FellowshipMember[]): FellowshipMember[] {
+    const seenIds = new Set<string>();
+    const seenEmails = new Set<string>();
+    const cleaned: FellowshipMember[] = [];
+
+    for (const m of list) {
+      if (!m || !m.name) continue;
+      
+      const isMaster = (m.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
+                       (m.handle?.toLowerCase().includes('aw03102008'));
+
+      if (isMaster) {
+        if (seenEmails.has(MASTER_ADMIN_EMAIL.toLowerCase())) continue;
+        seenEmails.add(MASTER_ADMIN_EMAIL.toLowerCase());
+        cleaned.push({
+          ...m,
+          name: 'Anthony Williams',
+          handle: '@disciple',
+          avatar: '👑',
+          role: 'superadmin',
+          email: MASTER_ADMIN_EMAIL,
+          xp: Math.max(m.xp || 0, 5000),
+          streak: Math.max(m.streak || 0, 100),
+          status: 'active'
+        });
+        continue;
+      }
+
+      if (seenIds.has(m.id)) continue;
+      seenIds.add(m.id);
+      cleaned.push(m);
+    }
+
+    // Ensure Master Admin is always in the roster
+    if (!seenEmails.has(MASTER_ADMIN_EMAIL.toLowerCase())) {
+      cleaned.push(MASTER_ADMIN_MEMBER);
+    }
+
+    return cleaned;
   }
 
   private notifyConfigListeners() {
@@ -232,11 +275,11 @@ class FirebaseGlobalService {
     };
   }
 
-  // 7. Register or update a real user when they open LifeOS and put their name in
+  // 7. Register or update a real user - PERMANENTLY MERGES INTO CLOUD
   async registerMember(member: FellowshipMember) {
     const memberId = member.id || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const isMaster = (member.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
-                     (member.handle.toLowerCase().includes('aw03102008'));
+                     (member.handle?.toLowerCase().includes('aw03102008'));
 
     const safeMember: FellowshipMember = {
       ...member,
@@ -247,26 +290,38 @@ class FirebaseGlobalService {
       lastActive: 'Just now'
     };
 
-    // Update locally and in memory
-    const existingIndex = this.cachedMembers.findIndex(m => m.id === memberId);
-    let nextMembers: FellowshipMember[];
-    if (existingIndex >= 0) {
-      nextMembers = [...this.cachedMembers];
-      nextMembers[existingIndex] = safeMember;
-    } else {
-      nextMembers = [safeMember, ...this.cachedMembers];
-    }
+    // 1. Fetch latest cloud members first so we NEVER overwrite or drop other users
+    let cloudList: FellowshipMember[] = [...this.cachedMembers];
+    try {
+      const res = await fetch(CLOUD_MEMBERS_URL, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.members && Array.isArray(json.data.members)) {
+          cloudList = json.data.members;
+        }
+      }
+    } catch {}
+
+    // 2. Merge into cloud list
+    const updatedList = cloudList.filter(m => {
+      if (m.id === memberId) return false;
+      if (isMaster && m.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) return false;
+      return true;
+    });
+    updatedList.unshift(safeMember);
+
+    const nextMembers = this.cleanAndDeduplicateMembers(updatedList);
     this.cachedMembers = nextMembers;
     this.notifyMembersListeners();
 
-    // A. Push over instant WebSocket
+    // 3. Push over instant WebSocket
     try {
       if (this.mqttClient && this.mqttClient.connected) {
         this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(nextMembers));
       }
     } catch {}
 
-    // B. Save to Global Cloud REST Store
+    // 4. Persist to Global Cloud REST Store permanently
     try {
       await fetch(CLOUD_MEMBERS_URL, {
         method: 'PUT',
@@ -284,11 +339,23 @@ class FirebaseGlobalService {
 
   // 8. Moderate Fellowship Member (role, status, delete) across all devices
   async moderateMember(memberId: string, updates: { role?: UserRole; status?: 'active' | 'muted' | 'banned'; action?: string }) {
+    // 1. Fetch current cloud members first
+    let cloudList: FellowshipMember[] = [...this.cachedMembers];
+    try {
+      const res = await fetch(CLOUD_MEMBERS_URL, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.members && Array.isArray(json.data.members)) {
+          cloudList = json.data.members;
+        }
+      }
+    } catch {}
+
     let nextMembers: FellowshipMember[];
     if (updates.action === 'delete') {
-      nextMembers = this.cachedMembers.filter(m => m.id !== memberId);
+      nextMembers = cloudList.filter(m => m.id !== memberId);
     } else {
-      nextMembers = this.cachedMembers.map(m => {
+      nextMembers = cloudList.map(m => {
         if (m.id === memberId) {
           return {
             ...m,
@@ -300,17 +367,18 @@ class FirebaseGlobalService {
       });
     }
 
+    nextMembers = this.cleanAndDeduplicateMembers(nextMembers);
     this.cachedMembers = nextMembers;
     this.notifyMembersListeners();
 
-    // A. Push over instant WebSocket
+    // 2. Push over instant WebSocket
     try {
       if (this.mqttClient && this.mqttClient.connected) {
         this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(nextMembers));
       }
     } catch {}
 
-    // B. Save to Global Cloud REST Store
+    // 3. Persist to Global Cloud REST Store permanently
     try {
       await fetch(CLOUD_MEMBERS_URL, {
         method: 'PUT',
