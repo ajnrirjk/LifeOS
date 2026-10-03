@@ -4,7 +4,6 @@ export type AppType =
   | 'fellowship_chat'
   | 'mini_cats'
   | 'youtube'
-  | 'tiktok'
   | 'app_studio' 
   | 'tracker' 
   | 'notes' 

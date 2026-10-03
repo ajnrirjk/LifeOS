@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, ChatChannel, ChatUser } from '../../types/chat';
 import { chatService } from '../../services/chatService';
-import { googleDriveService } from '../../services/googleDriveService';
+import { googleDriveService, getFriendlyAuthErrorMessage } from '../../services/googleDriveService';
 import { useApp } from '../../context/AppContext';
 import { sounds } from '../../services/soundEffects';
 import {
@@ -20,7 +20,8 @@ import {
   X,
   Volume2,
   Flame,
-  MessageSquare
+  MessageSquare,
+  AlertTriangle
 } from 'lucide-react';
 
 export const FellowshipChatApp: React.FC = () => {
@@ -56,6 +57,8 @@ export const FellowshipChatApp: React.FC = () => {
   const [newChannelEmoji, setNewChannelEmoji] = useState('🕊️');
   const [isEditingGuestName, setIsEditingGuestName] = useState(false);
   const [guestNameInput, setGuestNameInput] = useState(currentUser.name);
+  const [isMobileChannelsOpen, setIsMobileChannelsOpen] = useState(false);
+  const [authErrorModal, setAuthErrorModal] = useState<{ title: string; message: string; actionTip?: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<any>(null);
@@ -173,8 +176,10 @@ export const FellowshipChatApp: React.FC = () => {
         localStorage.setItem('lifeos_chat_user', JSON.stringify(updated));
       } catch {}
       sounds.playVictory();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Google Sign-In cancelled or failed:', err);
+      const friendly = getFriendlyAuthErrorMessage(err);
+      setAuthErrorModal(friendly);
     }
   };
 
@@ -337,9 +342,19 @@ export const FellowshipChatApp: React.FC = () => {
   );
 
   return (
-    <div className="flex h-full w-full bg-stone-900 text-stone-100 select-none overflow-hidden font-sans">
+    <div className="flex h-full w-full bg-stone-900 text-stone-100 select-none overflow-hidden font-sans relative">
+      {/* Mobile Backdrop for Channels Drawer */}
+      {isMobileChannelsOpen && (
+        <div
+          onClick={() => setIsMobileChannelsOpen(false)}
+          className="md:hidden fixed inset-0 bg-black/60 z-20 backdrop-blur-xs animate-in fade-in duration-200"
+        />
+      )}
+
       {/* Sidebar: Group Channels & Rooms */}
-      <div className="w-64 sm:w-72 bg-black/40 border-r border-white/10 flex flex-col shrink-0">
+      <div className={`w-72 sm:w-80 bg-stone-950/98 md:bg-black/40 border-r border-white/10 flex flex-col shrink-0 z-30 transition-transform duration-200 absolute inset-y-0 left-0 md:relative md:translate-x-0 ${
+        isMobileChannelsOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'
+      }`}>
         {/* Top: App Header & Current User */}
         <div className="p-3.5 border-b border-white/10 flex flex-col gap-2">
           <div className="flex items-center justify-between">
@@ -347,16 +362,25 @@ export const FellowshipChatApp: React.FC = () => {
               <span className="text-xl">🕊️</span>
               <span className="font-black text-sm text-white tracking-tight">Fellowship Chat</span>
             </div>
-            <button
-              onClick={() => {
-                sounds.playTap();
-                setIsNewChannelModalOpen(true);
-              }}
-              className="p-1.5 rounded-xl bg-white/10 hover:bg-emerald-600 text-white transition-colors"
-              title="Create new group chat"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setIsNewChannelModalOpen(true);
+                }}
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-emerald-600 text-white transition-colors"
+                title="Create new group chat"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsMobileChannelsOpen(false)}
+                className="md:hidden p-1.5 rounded-xl bg-white/10 text-stone-400 hover:text-white"
+                title="Close channels"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* User Sign-In Profile Box */}
@@ -435,6 +459,7 @@ export const FellowshipChatApp: React.FC = () => {
                 onClick={() => {
                   sounds.playTap();
                   setActiveChannelId(channel.id);
+                  setIsMobileChannelsOpen(false);
                 }}
                 className={`w-full p-2 rounded-2xl flex items-center gap-2.5 text-left transition-all ${
                   isActive
@@ -474,14 +499,24 @@ export const FellowshipChatApp: React.FC = () => {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-stone-900/90 overflow-hidden">
         {/* Chat Room Top Bar */}
-        <div className="h-14 px-4 border-b border-white/10 flex items-center justify-between bg-black/20 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{activeChannel.emoji}</span>
+        <div className="h-14 px-3 sm:px-4 border-b border-white/10 flex items-center justify-between bg-black/20 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setIsMobileChannelsOpen(true);
+              }}
+              className="md:hidden p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white"
+              title="Open channels list"
+            >
+              <Hash className="w-4 h-4" />
+            </button>
+            <span className="text-xl sm:text-2xl">{activeChannel.emoji}</span>
             <div>
-              <h2 className="text-sm font-black text-white flex items-center gap-1.5">
+              <h2 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                 #{activeChannel.name}
               </h2>
-              <p className="text-[11px] text-stone-400 truncate max-w-md">{activeChannel.topic}</p>
+              <p className="text-[10px] sm:text-[11px] text-stone-400 truncate max-w-[130px] sm:max-w-md">{activeChannel.topic}</p>
             </div>
           </div>
 
@@ -744,6 +779,44 @@ export const FellowshipChatApp: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Google Auth Error Modal */}
+      {authErrorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-stone-900 border border-stone-700/80 rounded-2xl shadow-2xl p-6 max-w-md w-full text-stone-100 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white tracking-tight">{authErrorModal.title}</h3>
+                <p className="text-xs text-stone-400">Google Authentication Notice</p>
+              </div>
+            </div>
+
+            <div className="bg-stone-950/60 p-3.5 rounded-xl border border-stone-800 text-xs sm:text-sm text-stone-300 space-y-2">
+              <p>{authErrorModal.message}</p>
+              {authErrorModal.actionTip && (
+                <div className="pt-2 border-t border-stone-800/80 text-amber-300/90 text-xs font-medium">
+                  👉 <strong>Fix:</strong> {authErrorModal.actionTip}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setAuthErrorModal(null);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors"
+              >
+                Got It
+              </button>
+            </div>
           </div>
         </div>
       )}

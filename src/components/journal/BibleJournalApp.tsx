@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { JournalEntry, PhotoAttachment, JournalTheme } from '../../types/journal';
 import { EncryptedBackupModal } from './EncryptedBackupModal';
-import { googleDriveService } from '../../services/googleDriveService';
+import { googleDriveService, getFriendlyAuthErrorMessage } from '../../services/googleDriveService';
 import { User } from 'firebase/auth';
 import { 
   Plus, 
@@ -96,6 +96,7 @@ export const BibleJournalApp: React.FC = () => {
   const [activePhotoLightbox, setActivePhotoLightbox] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<JournalEntry | null>(null);
+  const [authErrorModal, setAuthErrorModal] = useState<{ title: string; message: string; actionTip?: string } | null>(null);
 
   // High-Sensitivity Audio & Dictation State
   const [isDictating, setIsDictating] = useState(false);
@@ -285,6 +286,8 @@ export const BibleJournalApp: React.FC = () => {
     } catch (err: any) {
       sounds.playIncorrect();
       console.error('Google Drive sign in failed:', err);
+      const friendly = getFriendlyAuthErrorMessage(err);
+      setAuthErrorModal(friendly);
     } finally {
       setIsSigningInDrive(false);
     }
@@ -802,23 +805,23 @@ export const BibleJournalApp: React.FC = () => {
   return (
     <div className={`flex flex-col h-full ${themeClasses.bg} select-none transition-colors duration-200`}>
       {/* Top Bar */}
-      <header className="h-14 px-4 sm:px-6 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-3 shrink-0 backdrop-blur-md">
+      <header className="h-13 sm:h-14 px-2.5 sm:px-6 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-1.5 sm:gap-3 shrink-0 backdrop-blur-md">
         {/* Left: App Identity */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
           {/* Mobile Sidebar Toggle */}
           <button
             onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-            className="md:hidden p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-300"
+            className="md:hidden p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-300 shrink-0"
             title="Toggle Sermon Notes List"
           >
             <List className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">📖</span>
-            <div>
-              <h1 className="font-black text-sm sm:text-base tracking-tight leading-tight flex items-center gap-2">
-                <span>Church & Sermon Notes</span>
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+            <span className="text-xl sm:text-2xl shrink-0">📖</span>
+            <div className="min-w-0">
+              <h1 className="font-black text-xs sm:text-base tracking-tight leading-tight flex items-center gap-1.5 truncate">
+                <span className="truncate">Sermon Notes</span>
                 {googleUser && (
                   <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                     <Cloud className="w-3 h-3 text-emerald-500" />
@@ -834,13 +837,13 @@ export const BibleJournalApp: React.FC = () => {
         </div>
 
         {/* Right Tools: Google Drive Status / Connect, Themes, Cloud Backup, New Note */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Google Drive Connection / Status Button */}
           {googleUser ? (
             <div className="relative">
               <button
                 onClick={() => setIsDriveMenuOpen(!isDriveMenuOpen)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold transition-all shadow-sm"
+                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold transition-all shadow-sm"
                 title="Google Drive Settings & Sync"
               >
                 {/* Official Google G Icon */}
@@ -909,7 +912,7 @@ export const BibleJournalApp: React.FC = () => {
             <button
               onClick={handleConnectDrive}
               disabled={isSigningInDrive}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-stone-50 text-stone-800 border border-stone-300 shadow-sm text-xs font-bold transition-all active:scale-95 disabled:opacity-60"
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-white hover:bg-stone-50 text-stone-800 border border-stone-300 shadow-sm text-xs font-bold transition-all active:scale-95 disabled:opacity-60"
               title="Connect Google Drive to auto-save all notes"
             >
               <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
@@ -918,12 +921,13 @@ export const BibleJournalApp: React.FC = () => {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
               </svg>
-              <span>{isSigningInDrive ? 'Connecting...' : 'Connect Drive'}</span>
+              <span className="hidden sm:inline">{isSigningInDrive ? 'Connecting...' : 'Connect Drive'}</span>
+              <span className="sm:hidden">{isSigningInDrive ? '...' : 'Drive'}</span>
             </button>
           )}
 
           {/* Theme switcher */}
-          <div className="flex items-center gap-0.5 p-1 rounded-xl bg-black/5 dark:bg-white/10">
+          <div className="flex items-center gap-0.5 p-0.5 sm:p-1 rounded-xl bg-black/5 dark:bg-white/10">
             <button
               onClick={() => {
                 sounds.playTap();
@@ -949,7 +953,7 @@ export const BibleJournalApp: React.FC = () => {
                 sounds.playTap();
                 setTheme('sepia');
               }}
-              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${theme === 'sepia' ? 'bg-[#f0e2cc] shadow text-[#4e352b]' : 'text-stone-400'}`}
+              className={`hidden sm:inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold ${theme === 'sepia' ? 'bg-[#f0e2cc] shadow text-[#4e352b]' : 'text-stone-400'}`}
               title="Sepia"
             >
               Sepia
@@ -962,7 +966,7 @@ export const BibleJournalApp: React.FC = () => {
               sounds.playTap();
               setIsBackupModalOpen(true);
             }}
-            className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-300"
+            className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-300"
             title="Encrypted Cloud Vault & Sync"
           >
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
@@ -971,7 +975,7 @@ export const BibleJournalApp: React.FC = () => {
           {/* "+ New Note" Button */}
           <button
             onClick={handleCreateNewNote}
-            className="px-3 sm:px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span className="hidden sm:inline">New Note</span>
@@ -981,6 +985,14 @@ export const BibleJournalApp: React.FC = () => {
 
       {/* Main Workspace (2-Column: Left Sermon List, Right Editor Notepad) */}
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile Backdrop for Sidebar Drawer */}
+        {isMobileSidebarOpen && (
+          <div
+            onClick={() => setIsMobileSidebarOpen(false)}
+            className="md:hidden fixed inset-0 bg-black/50 z-20 backdrop-blur-xs animate-in fade-in duration-200"
+          />
+        )}
+
         {/* Left Column: Sermon Notes List & Search */}
         <aside
           className={`w-72 sm:w-80 border-r ${themeClasses.sidebar} flex flex-col shrink-0 transition-transform duration-200 z-30 absolute inset-y-0 left-0 md:relative md:translate-x-0 ${
@@ -1598,6 +1610,44 @@ export const BibleJournalApp: React.FC = () => {
           if (restored[0]) setActiveNoteId(restored[0].id);
         }}
       />
+
+      {/* Google Auth Error & Troubleshooting Modal */}
+      {authErrorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-stone-900 border border-stone-700/80 rounded-2xl shadow-2xl p-6 max-w-md w-full text-stone-100 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white tracking-tight">{authErrorModal.title}</h3>
+                <p className="text-xs text-stone-400">Google Authentication Notice</p>
+              </div>
+            </div>
+
+            <div className="bg-stone-950/60 p-3.5 rounded-xl border border-stone-800 text-xs sm:text-sm text-stone-300 space-y-2">
+              <p>{authErrorModal.message}</p>
+              {authErrorModal.actionTip && (
+                <div className="pt-2 border-t border-stone-800/80 text-amber-300/90 text-xs font-medium">
+                  👉 <strong>Fix:</strong> {authErrorModal.actionTip}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setAuthErrorModal(null);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

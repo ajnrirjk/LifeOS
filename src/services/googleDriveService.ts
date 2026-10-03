@@ -35,6 +35,53 @@ let cachedAccessToken: string | null = null;
 let isSigningIn = false;
 let cachedFolderId: string | null = null;
 
+export function getFriendlyAuthErrorMessage(error: any): { title: string; message: string; actionTip?: string } {
+  const code = error?.code || '';
+  const message = error?.message || String(error);
+
+  if (code === 'auth/unauthorized-domain') {
+    const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'your domain';
+    return {
+      title: 'Domain Not Authorized in Firebase',
+      message: `The current website domain ("${currentDomain}") is not yet authorized in your Firebase project.`,
+      actionTip: `To fix: Open Firebase Console ➔ Project "gen-lang-client-0080772173" ➔ Authentication ➔ Settings ➔ Authorized Domains ➔ Add "${currentDomain}".`
+    };
+  }
+  if (code === 'auth/popup-closed-by-user') {
+    return {
+      title: 'Sign-In Cancelled',
+      message: 'The Google popup was closed before completing login.',
+      actionTip: 'Click Connect or Sign In again to complete authentication.'
+    };
+  }
+  if (code === 'auth/popup-blocked') {
+    return {
+      title: 'Popup Blocked by Browser',
+      message: 'Your browser prevented the Google Sign-In popup from opening.',
+      actionTip: 'Please click the popup blocked icon in your browser address bar and allow popups for this site.'
+    };
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return {
+      title: 'Google Sign-In Not Enabled',
+      message: 'Google authentication provider is disabled in Firebase.',
+      actionTip: 'Go to Firebase Console ➔ Authentication ➔ Sign-in method ➔ Enable Google.'
+    };
+  }
+  if (message.includes('access_denied') || message.includes('403') || message.includes('verification') || message.includes('blocked')) {
+    return {
+      title: 'Google OAuth Test User Required',
+      message: 'Google OAuth blocked access because the app is in "Testing" mode.',
+      actionTip: 'In Google Cloud Console ➔ APIs & Services ➔ OAuth consent screen ➔ Under "Test users", click "Add users" and add aw03102008@gmail.com.'
+    };
+  }
+  return {
+    title: 'Sign-In Error',
+    message: message || 'An unexpected error occurred during Google Sign-In.',
+    actionTip: 'Check your network connection or review the developer console.'
+  };
+}
+
 export const googleDriveService = {
   // Initialize auth listener
   initAuth(
@@ -62,12 +109,9 @@ export const googleDriveService = {
       isSigningIn = true;
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (!credential?.accessToken) {
-        throw new Error('Failed to obtain Google Drive access token');
-      }
+      cachedAccessToken = credential?.accessToken || null;
 
-      cachedAccessToken = credential.accessToken;
-      return { user: result.user, accessToken: cachedAccessToken };
+      return { user: result.user, accessToken: cachedAccessToken || '' };
     } catch (error: any) {
       console.error('Google Sign-In Error:', error);
       throw error;

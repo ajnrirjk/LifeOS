@@ -37,9 +37,10 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const saved = localStorage.getItem('lifeos_apps_v5');
       if (saved) {
         const parsed = JSON.parse(saved);
-        const systemIds = new Set(parsed.map((a: LifeOSApp) => a.id));
+        const filtered = Array.isArray(parsed) ? parsed.filter((a: any) => a.id !== 'tiktok') : [];
+        const systemIds = new Set(filtered.map((a: LifeOSApp) => a.id));
         const missingSystem = DEFAULT_LIFEOS_APPS.filter(d => !systemIds.has(d.id));
-        return [...parsed, ...missingSystem];
+        return [...filtered, ...missingSystem];
       }
       return DEFAULT_LIFEOS_APPS;
     } catch {
@@ -80,7 +81,13 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [desktopWidgets, setDesktopWidgets] = useState<WidgetId[]>(() => {
     try {
       const saved = localStorage.getItem('lifeos_desktop_widgets_v2');
-      return saved ? JSON.parse(saved) : DEFAULT_ACTIVE_WIDGETS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id: string) => id !== 'tiktok') as WidgetId[];
+        }
+      }
+      return DEFAULT_ACTIVE_WIDGETS;
     } catch {
       return DEFAULT_ACTIVE_WIDGETS;
     }
@@ -158,15 +165,8 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return next;
     });
 
-    // If closing active app, switch to desktop or next window
-    if (activeAppId === appId) {
-      const remaining = Object.keys(openWindows).filter(id => id !== appId);
-      if (remaining.length > 0) {
-        setActiveAppId(remaining[0]);
-      } else {
-        setIsDesktopView(true);
-      }
-    }
+    // Close window and return to desktop view
+    setIsDesktopView(true);
   };
 
   const minimizeApp = (appId: string) => {

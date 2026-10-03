@@ -109,7 +109,7 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
             sounds.playTap();
             showDesktop();
           }}
-          className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-extrabold transition-all ${
+          className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-lg text-xs font-extrabold transition-all ${
             isDesktopView
               ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 shadow-sm'
               : 'hover:bg-white/15 text-stone-300'
@@ -117,37 +117,51 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
           title="Show LifeOS Desktop Widgets"
         >
           <span>🖥️</span>
-          <span>Desktop Widgets</span>
+          <span className="hidden sm:inline">Desktop Widgets</span>
+          <span className="sm:hidden">Widgets</span>
         </button>
 
-        {/* Active App Indicator */}
+        {/* Active App Indicator & Mobile Quick Return */}
         {!isDesktopView && activeApp && (
-          <button
-            onClick={() => launchApp(activeApp.id)}
-            className="hidden sm:flex items-center gap-1.5 font-bold text-stone-300 hover:text-white px-2 py-0.5 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            <span>{activeApp.emoji}</span>
-            <span>{activeApp.title}</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                sounds.playTap();
+                showDesktop();
+              }}
+              className="sm:hidden flex items-center gap-1 text-emerald-400 font-black text-[11px] px-2 py-0.5 rounded-md bg-emerald-950/70 border border-emerald-500/40"
+              title="Return to Desktop"
+            >
+              <span>◀</span>
+              <span>Home</span>
+            </button>
+            <button
+              onClick={() => launchApp(activeApp.id)}
+              className="hidden sm:flex items-center gap-1.5 font-bold text-stone-300 hover:text-white px-2 py-0.5 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <span>{activeApp.emoji}</span>
+              <span>{activeApp.title}</span>
+            </button>
+          </div>
         )}
       </div>
 
       {/* Center/Right: Privacy link & Live System Date/Time */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         {onOpenPrivacy && (
           <button
             onClick={() => {
               sounds.playTap();
               onOpenPrivacy();
             }}
-            className="text-[11px] font-semibold text-stone-300 hover:text-white px-2 py-0.5 rounded-md hover:bg-white/10 transition-colors flex items-center gap-1"
+            className="text-[11px] font-semibold text-stone-300 hover:text-white px-1.5 sm:px-2 py-0.5 rounded-md hover:bg-white/10 transition-colors flex items-center gap-1"
             title="View Life OS Privacy Policy"
           >
             <span>🛡️</span>
-            <span className="hidden sm:inline">Privacy Policy</span>
+            <span className="hidden md:inline">Privacy Policy</span>
           </button>
         )}
-        <div className="font-bold text-stone-200 tracking-tight text-[11px]">
+        <div className="font-bold text-stone-200 tracking-tight text-[11px] whitespace-nowrap">
           {timeStr}
         </div>
       </div>

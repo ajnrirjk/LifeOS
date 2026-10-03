@@ -257,11 +257,11 @@ export const YouTubeApp: React.FC = () => {
       </div>
 
       {/* MAIN VIEWPORT: ACTIVE PLAYER + SIDEBAR QUEUE */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col lg:flex-row gap-5">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col lg:flex-row gap-4 sm:gap-5">
         {/* Left Column: Embedded YouTube Player & Video Details */}
         <div className={`flex flex-col gap-3 transition-all duration-300 ${isTheaterMode ? 'w-full' : 'flex-1'}`}>
           {/* 16:9 Responsive Video Iframe Container */}
-          <div className="w-full aspect-video rounded-3xl overflow-hidden bg-black border border-white/15 shadow-2xl relative">
+          <div className="w-full aspect-video rounded-2xl sm:rounded-3xl overflow-hidden bg-black border border-white/15 shadow-2xl relative">
             {activeVideo?.youtubeId ? (
               <iframe
                 src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1`}

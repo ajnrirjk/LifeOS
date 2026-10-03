@@ -209,40 +209,45 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-col gap-6 p-4 sm:p-6 overflow-y-auto max-h-full">
+    <div className="w-full max-w-6xl mx-auto flex flex-col gap-3.5 sm:gap-6 p-2.5 sm:p-6 overflow-y-auto max-h-full">
       {/* Top Welcome & Actions Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 select-none pb-2 border-b border-white/10">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🌿</span>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">LifeOS Desktop</h1>
-            <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-stone-200 text-xs font-bold border border-white/20 backdrop-blur-md">
-              Dashboard
-            </span>
+      <div className="flex items-center justify-between gap-3 select-none pb-2 border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <span className="text-xl sm:text-2xl">🌿</span>
+          <div>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className="text-base sm:text-2xl font-black text-white tracking-tight leading-none">
+                LifeOS <span className="hidden sm:inline">Desktop</span>
+              </h1>
+              <span className="px-2 py-0.5 rounded-full bg-white/15 text-stone-200 text-[10px] sm:text-xs font-bold border border-white/20 backdrop-blur-md">
+                Dashboard
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-stone-300 mt-0.5 line-clamp-1">
+              Spiritual command center & widgets
+            </p>
           </div>
-          <p className="text-xs sm:text-sm text-stone-300 mt-1">
-            Your spiritual command center. Live widgets, sermon scribe, and scripture devotion.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => {
               sounds.playTap();
               onOpenAddModal();
             }}
-            className="px-4 py-2 rounded-2xl bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg transition-all active:scale-95"
+            className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95"
             title="Add or remove desktop widgets"
           >
-            <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Customize Widgets</span>
+            <Plus className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Customize Widgets</span>
+            <span className="sm:hidden">Widgets</span>
           </button>
         </div>
       </div>
 
       {/* Widgets Grid */}
       {activeWidgets.length === 0 ? (
-        <div className="p-12 text-center rounded-3xl bg-black/30 border border-white/10 backdrop-blur-xl flex flex-col items-center justify-center gap-3">
+        <div className="p-8 sm:p-12 text-center rounded-3xl bg-black/30 border border-white/10 backdrop-blur-xl flex flex-col items-center justify-center gap-3">
           <span className="text-4xl">🕊️</span>
           <h3 className="text-base font-bold text-white">No Widgets on Desktop</h3>
           <p className="text-xs text-stone-300 max-w-sm">
@@ -257,7 +262,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
           {activeWidgets.map((widgetId) => {
             const config = ALL_DESKTOP_WIDGETS.find(w => w.id === widgetId);
             if (!config) return null;
@@ -265,7 +270,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
             return (
               <div
                 key={widgetId}
-                className="group relative rounded-3xl bg-stone-900/60 hover:bg-stone-900/75 backdrop-blur-2xl border border-white/15 p-5 shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden"
+                className="group relative rounded-2xl sm:rounded-3xl bg-stone-900/60 hover:bg-stone-900/75 backdrop-blur-2xl border border-white/15 p-3.5 sm:p-5 shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden"
               >
                 {/* Delete Widget Button */}
                 <button
@@ -353,38 +358,6 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                       <div className="flex items-center justify-between text-[11px] font-bold text-stone-300 px-1">
                         <span className="text-stone-400">Jireh · Elevation · BibleProject</span>
                         <span className="text-red-400 font-black">HD Player</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TikTok & Faith Clips Widget */}
-                  {widgetId === 'tiktok' && (
-                    <div className="flex flex-col gap-3">
-                      <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-400 via-rose-500 to-black p-0.5 shadow-md">
-                            <div className="w-full h-full rounded-[10px] bg-black flex items-center justify-center text-xs">
-                              🎵
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black text-cyan-300">TikTok & Shorts Feed</h4>
-                            <p className="text-[11px] text-stone-300">
-                              Vertical scripture, inspiration & wholesome clips
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => launchApp('tiktok')}
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-rose-500 text-stone-950 font-black text-xs shadow-md transition-transform active:scale-95"
-                        >
-                          Watch
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] font-bold text-stone-300 px-1">
-                        <span className="text-stone-400">Swipeable 9:16 vertical clips</span>
-                        <span className="text-cyan-400">Trending 🔥</span>
                       </div>
                     </div>
                   )}

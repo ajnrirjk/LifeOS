@@ -1,6 +1,5 @@
 export type WidgetId = 
   | 'youtube'
-  | 'tiktok'
   | 'mini_cats'
   | 'church_notes'
   | 'faithlingo_stats'
@@ -30,15 +29,6 @@ export const ALL_DESKTOP_WIDGETS: DesktopWidgetConfig[] = [
     category: 'Study',
     span: 'medium',
     color: 'from-red-600/20 to-rose-700/20 border-red-500/30'
-  },
-  {
-    id: 'tiktok',
-    title: 'TikTok & Faith Clips',
-    subtitle: 'Trending vertical shorts, scripture & encouragement',
-    emoji: '🎵',
-    category: 'Study',
-    span: 'medium',
-    color: 'from-cyan-500/20 to-rose-600/20 border-cyan-500/30'
   },
   {
     id: 'mini_cats',
