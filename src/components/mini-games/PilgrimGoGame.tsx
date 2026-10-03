@@ -293,6 +293,55 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
     setInRun(true);
   };
 
+  // Battle VFX & Animation State
+  const fxListRef = useRef<Array<any>>([]);
+  const screenShakeRef = useRef(0);
+  const heroLungeRef = useRef(0);
+  const enemyLungeRef = useRef(0);
+  const enemyHitFlashRef = useRef(0);
+  const heroHitFlashRef = useRef(0);
+
+  // Trigger VFX Helper
+  const spawnVFX = (type: 'ring' | 'slash' | 'lightning' | 'sparks' | 'shield' | 'projectile' | 'manna', x: number, y: number, extra?: any) => {
+    if (type === 'ring') {
+      fxListRef.current.push({ type: 'ring', x, y, radius: 10, maxRadius: 110, alpha: 1, color: extra?.color || '#facc15' });
+    } else if (type === 'slash') {
+      fxListRef.current.push({ type: 'slash', x, y, progress: 0, color: extra?.color || '#38bdf8' });
+    } else if (type === 'lightning') {
+      fxListRef.current.push({ type: 'lightning', x, y, progress: 0, alpha: 1 });
+      screenShakeRef.current = 8;
+    } else if (type === 'sparks') {
+      for (let i = 0; i < 14; i++) {
+        const angle = (Math.PI * 2 * i) / 14 + Math.random() * 0.4;
+        const speed = 2 + Math.random() * 4;
+        fxListRef.current.push({
+          type: 'spark',
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: Math.random() < 0.5 ? '#facc15' : '#ef4444',
+          life: 1,
+          size: 3 + Math.random() * 3
+        });
+      }
+    } else if (type === 'shield') {
+      fxListRef.current.push({ type: 'shield', x, y, life: 1, maxLife: 1 });
+    } else if (type === 'manna') {
+      for (let i = 0; i < 5; i++) {
+        fxListRef.current.push({
+          type: 'manna',
+          sx: x + (Math.random() * 20 - 10),
+          sy: y + (Math.random() * 20 - 10),
+          tx: extra?.tx || x - 180,
+          ty: extra?.ty || y,
+          progress: 0,
+          speed: 0.04 + Math.random() * 0.02
+        });
+      }
+    }
+  };
+
   // 2D Canvas Parallax Animation for Walking Jesus & Worlds
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -306,6 +355,15 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       localFrame++;
       const width = canvas.width;
       const height = canvas.height;
+
+      // Screen Shake
+      ctx.save();
+      if (screenShakeRef.current > 0) {
+        const shakeX = (Math.random() - 0.5) * screenShakeRef.current * 1.5;
+        const shakeY = (Math.random() - 0.5) * screenShakeRef.current * 1.5;
+        ctx.translate(shakeX, shakeY);
+        screenShakeRef.current = Math.max(0, screenShakeRef.current - 0.4);
+      }
 
       // Parallax scroll speed
       if (runStage === 'walking') {
@@ -356,15 +414,26 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       ctx.fillStyle = '#fef08a33';
       ctx.fillRect(0, height - 48, width, 28);
 
-      // 5. Draw Jesus & Mount Character
-      const charX = runStage === 'battling' ? width * 0.32 : width * 0.45;
-      const charY = height - 55 + (runStage === 'walking' ? Math.abs(walk) * -5 : 0);
+      // Dynamic Character Positions
+      let baseCharX = runStage === 'battling' ? width * 0.30 : width * 0.45;
+      if (heroLungeRef.current > 0) {
+        baseCharX += Math.sin(heroLungeRef.current * Math.PI) * 75;
+      }
+      const charY = height - 55 + (runStage === 'walking' ? Math.abs(walk) * -5 : (heroLungeRef.current > 0 ? -10 : 0));
 
-      // Draw Mount if equipped
+      let baseEnemyX = width * 0.72;
+      if (enemyLungeRef.current > 0) {
+        baseEnemyX -= Math.sin(enemyLungeRef.current * Math.PI) * 65;
+      } else if (enemyHitFlashRef.current > 0) {
+        baseEnemyX += Math.sin(localFrame * 0.8) * 8 + 15;
+      }
+      const enemyY = height - 55;
+
+      // 5. Draw Jesus & Mount Character
       if (equipped.mount) {
         ctx.save();
-        ctx.translate(charX, charY + 12);
-        ctx.font = '32px sans-serif';
+        ctx.translate(baseCharX, charY + 12);
+        ctx.font = '34px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.mount.emoji, 0, 0);
@@ -373,19 +442,23 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
 
       // Draw Jesus (Capybara-Go Chibi Art Style)
       ctx.save();
-      ctx.translate(charX, equipped.mount ? charY - 14 : charY);
+      ctx.translate(baseCharX, equipped.mount ? charY - 14 : charY);
 
-      // Golden Radiant Halo
+      if (heroHitFlashRef.current > 0) {
+        ctx.filter = 'brightness(1.8) drop-shadow(0 0 10px #ef4444)';
+      }
+
+      // Golden Radiant Halo (Glowing pulsing)
       ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3.5;
       ctx.shadowColor = '#facc15';
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 14 + Math.sin(localFrame * 0.1) * 6;
       ctx.beginPath();
       ctx.arc(0, -26, 12, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.shadowBlur = 0;
 
       // Head & Face
-      ctx.fillStyle = '#fde047';
       ctx.fillStyle = '#fed7aa'; // skin
       ctx.beginPath();
       ctx.arc(0, -8, 14, 0, Math.PI * 2);
@@ -402,8 +475,8 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       // Eyes
       ctx.fillStyle = '#1c1917';
       ctx.beginPath();
-      ctx.arc(-4, -8, 1.8, 0, Math.PI * 2);
-      ctx.arc(4, -8, 1.8, 0, Math.PI * 2);
+      ctx.arc(-4, -8, 2, 0, Math.PI * 2);
+      ctx.arc(4, -8, 2, 0, Math.PI * 2);
       ctx.fill();
 
       // Flowing White Robe & Red Sash
@@ -422,12 +495,13 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       ctx.closePath();
       ctx.fill();
 
-      // Equipped Weapon held on shoulder
+      // Equipped Weapon with Swing Rotation
       if (equipped.weapon) {
         ctx.save();
         ctx.translate(14, 0);
-        ctx.rotate(runStage === 'battling' && heroAttacking ? 0.8 : -0.4);
-        ctx.font = '22px sans-serif';
+        const weaponAngle = heroLungeRef.current > 0 ? (heroLungeRef.current * 1.8 - 0.5) : -0.4;
+        ctx.rotate(weaponAngle);
+        ctx.font = '26px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.weapon.emoji, 0, 0);
@@ -439,8 +513,8 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       // Draw Pet trailing behind
       if (equipped.pet) {
         ctx.save();
-        ctx.translate(charX - 35, charY + 8 + Math.sin(localFrame * 0.1) * 3);
-        ctx.font = '20px sans-serif';
+        ctx.translate(baseCharX - 35, charY + 8 + Math.sin(localFrame * 0.1) * 3);
+        ctx.font = '22px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.pet.emoji, 0, 0);
@@ -449,34 +523,157 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
 
       // 6. Draw Battling Enemy on Right
       if (runStage === 'battling' && activeEnemy) {
-        const enemyX = width * 0.72;
-        const enemyY = height - 55 + (enemyAttacking ? Math.sin(localFrame * 0.3) * -8 : 0);
-
         ctx.save();
-        ctx.translate(enemyX, enemyY);
-        ctx.font = '40px sans-serif';
+        ctx.translate(baseEnemyX, enemyY);
+
+        if (enemyHitFlashRef.current > 0) {
+          ctx.filter = 'brightness(2.2) drop-shadow(0 0 14px #ef4444)';
+          ctx.scale(1.2, 0.85); // squash on hit
+        }
+
+        ctx.font = '44px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(activeEnemy.emoji, 0, 0);
 
         // Enemy HP Bar in 2D space
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(-25, -34, 50, 7);
+        ctx.filter = 'none';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(-28, -36, 56, 8);
         ctx.fillStyle = '#ef4444';
         const hpPercent = Math.max(0, activeEnemy.hp / activeEnemy.maxHp);
-        ctx.fillRect(-25, -34, 50 * hpPercent, 7);
+        ctx.fillRect(-28, -36, 56 * hpPercent, 8);
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-25, -34, 50, 7);
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-28, -36, 56, 8);
         ctx.restore();
       }
+
+      // 7. RENDER ANIMATED VFX PARTICLES (Rings, Slashes, Lightning, Sparks)
+      for (let i = fxListRef.current.length - 1; i >= 0; i--) {
+        const fx = fxListRef.current[i];
+
+        if (fx.type === 'ring') {
+          fx.radius += 7;
+          fx.alpha -= 0.05;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(fx.x, fx.y, fx.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = fx.color;
+          ctx.lineWidth = 5;
+          ctx.globalAlpha = Math.max(0, fx.alpha);
+          ctx.shadowColor = fx.color;
+          ctx.shadowBlur = 18;
+          ctx.stroke();
+
+          // Inner rotating energy spikes
+          ctx.beginPath();
+          for (let a = 0; a < 8; a++) {
+            const rot = (Math.PI * 2 * a) / 8 + fx.radius * 0.08;
+            const rx = fx.x + Math.cos(rot) * fx.radius;
+            const ry = fx.y + Math.sin(rot) * fx.radius;
+            ctx.arc(rx, ry, 4, 0, Math.PI * 2);
+          }
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.restore();
+
+          if (fx.alpha <= 0) fxListRef.current.splice(i, 1);
+        } else if (fx.type === 'slash') {
+          fx.progress += 0.12;
+          ctx.save();
+          ctx.translate(fx.x, fx.y);
+          ctx.strokeStyle = fx.color;
+          ctx.lineWidth = 7;
+          ctx.lineCap = 'round';
+          ctx.shadowColor = fx.color;
+          ctx.shadowBlur = 20;
+          ctx.globalAlpha = Math.max(0, 1 - fx.progress);
+          ctx.beginPath();
+          ctx.arc(0, 0, 48, -Math.PI * 0.4 + fx.progress * 2, Math.PI * 0.4 + fx.progress * 2);
+          ctx.stroke();
+          ctx.restore();
+
+          if (fx.progress >= 1) fxListRef.current.splice(i, 1);
+        } else if (fx.type === 'lightning') {
+          fx.progress += 0.15;
+          fx.alpha -= 0.08;
+          ctx.save();
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 6;
+          ctx.shadowColor = '#60a5fa';
+          ctx.shadowBlur = 24;
+          ctx.globalAlpha = Math.max(0, fx.alpha);
+
+          ctx.beginPath();
+          ctx.moveTo(fx.x, 0);
+          ctx.lineTo(fx.x - 15, fx.y * 0.35);
+          ctx.lineTo(fx.x + 20, fx.y * 0.65);
+          ctx.lineTo(fx.x, fx.y);
+          ctx.stroke();
+
+          // White hot core
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+          ctx.restore();
+
+          if (fx.alpha <= 0) fxListRef.current.splice(i, 1);
+        } else if (fx.type === 'spark') {
+          fx.x += fx.vx;
+          fx.y += fx.vy;
+          fx.life -= 0.04;
+          ctx.save();
+          ctx.fillStyle = fx.color;
+          ctx.globalAlpha = Math.max(0, fx.life);
+          ctx.beginPath();
+          ctx.arc(fx.x, fx.y, fx.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          if (fx.life <= 0) fxListRef.current.splice(i, 1);
+        } else if (fx.type === 'shield') {
+          fx.life -= 0.03;
+          ctx.save();
+          ctx.translate(fx.x, fx.y);
+          ctx.beginPath();
+          ctx.arc(0, -10, 36, 0, Math.PI * 2);
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 3.5;
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
+          ctx.globalAlpha = Math.max(0, fx.life);
+          ctx.shadowColor = '#38bdf8';
+          ctx.shadowBlur = 16;
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          if (fx.life <= 0) fxListRef.current.splice(i, 1);
+        } else if (fx.type === 'manna') {
+          fx.progress += fx.speed;
+          const currX = fx.sx + (fx.tx - fx.sx) * fx.progress;
+          const currY = fx.sy + (fx.ty - fx.sy) * fx.progress + Math.sin(fx.progress * Math.PI) * -35;
+          ctx.save();
+          ctx.fillStyle = '#4ade80';
+          ctx.shadowColor = '#4ade80';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(currX, currY, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          if (fx.progress >= 1) fxListRef.current.splice(i, 1);
+        }
+      }
+
+      ctx.restore(); // restore screen shake
 
       animFrameRef.current = requestAnimationFrame(render);
     };
 
     animFrameRef.current = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [runStage, speedMultiplier, activeEnemy, heroAttacking, enemyAttacking, currentWorld, equipped]);
+  }, [runStage, speedMultiplier, activeEnemy, currentWorld, equipped]);
 
   // Advance Day Loop in Run
   const advanceDay = useCallback(() => {
@@ -569,26 +766,47 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
     sounds.playTap();
   };
 
-  // Turn-based Combat Auto-Resolution Loop (Comfortable Pacing)
+  // Turn-based Combat Auto-Resolution Loop (Animated Capybara-Go Style)
   useEffect(() => {
     if (runStage !== 'battling' || !activeEnemy || showSkillSelect) return;
 
     const timer = setTimeout(() => {
-      // 1. Hero Attacks Enemy
+      // 1. HERO ATTACK PHASE (Lunge forward + Ring Shockwave + Slash Arc + Hit Sparks)
       setHeroAttacking(true);
-      const isCrit = Math.random() < 0.25;
+      heroLungeRef.current = 1;
+
+      // Spawn Holy Ring & Slash
+      spawnVFX('ring', 250, 320, { color: '#facc15' });
+      spawnVFX('slash', 520, 320, { color: '#38bdf8' });
+
+      const isCrit = Math.random() < 0.25 || learnedSkills.some(s => s.id === 'zealot_strike');
+      if (isCrit || learnedSkills.some(s => s.id === 'holy_lightning')) {
+        spawnVFX('lightning', 520, 320);
+      }
+
+      // Hit Sparks on Enemy
+      spawnVFX('sparks', 520, 320);
+      enemyHitFlashRef.current = 1;
+      screenShakeRef.current = isCrit ? 10 : 5;
+
       const heroDmg = Math.round((baseAtk + learnedSkills.length * 15) * (isCrit ? 1.8 : 1.0) + Math.random() * 10);
       const nextEnemyHp = Math.max(0, activeEnemy.hp - heroDmg);
 
       setFloatingDamage({ val: heroDmg, isCrit, isHero: false });
       setHitsCount(h => h + 1);
 
-      setTimeout(() => setHeroAttacking(false), 400);
-
-      // Lifesteal check
+      // Lifesteal particles
       if (learnedSkills.some(s => s.buffType === 'lifesteal')) {
+        spawnVFX('manna', 520, 320, { tx: 220, ty: 320 });
         setHeroHp(h => Math.min(heroMaxHp, h + Math.round(heroDmg * 0.3)));
       }
+
+      // Smooth lunge recovery
+      setTimeout(() => {
+        heroLungeRef.current = 0;
+        enemyHitFlashRef.current = 0;
+        setHeroAttacking(false);
+      }, 350);
 
       if (nextEnemyHp <= 0) {
         // Victory!
@@ -614,17 +832,28 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         return;
       }
 
-      // 2. Enemy Attacks Hero
+      // 2. ENEMY ATTACK PHASE (Enemy lunges + Claw slash + Shield barrier)
       setTimeout(() => {
         setEnemyAttacking(true);
+        enemyLungeRef.current = 1;
+
+        // Enemy slash & Hero shield
+        spawnVFX('slash', 220, 320, { color: '#ef4444' });
+        spawnVFX('shield', 220, 320);
+        heroHitFlashRef.current = 1;
+        screenShakeRef.current = 5;
+
         const enemyDmg = Math.max(5, activeEnemy.atk - Math.round(baseDef * 0.4));
         const nextHeroHp = heroHp - enemyDmg;
 
         setFloatingDamage({ val: enemyDmg, isCrit: false, isHero: true });
+
         setTimeout(() => {
+          enemyLungeRef.current = 0;
+          heroHitFlashRef.current = 0;
           setEnemyAttacking(false);
           setFloatingDamage(null);
-        }, 400);
+        }, 350);
 
         if (nextHeroHp <= 0) {
           // Defeat
@@ -784,17 +1013,34 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
               />
             </div>
 
+            {/* In-Battle Overhead Badges (Round & Hits Counter like Capybara Go) */}
+            {runStage === 'battling' && (
+              <div className="absolute top-16 left-0 right-0 z-10 flex items-center justify-between px-6 pointer-events-none">
+                <div className="px-3 py-1 rounded-xl bg-black/75 border border-amber-400 text-amber-300 font-black text-xs shadow-xl flex items-center gap-1.5 animate-pulse">
+                  <span>⚔️</span>
+                  <span>Round {battleRound}/30</span>
+                </div>
+
+                <div className="px-3 py-1 rounded-xl bg-black/75 border border-rose-500 text-rose-300 font-black text-xs shadow-xl flex items-center gap-1.5">
+                  <span>💥</span>
+                  <span>Hits: {hitsCount}</span>
+                </div>
+              </div>
+            )}
+
             {/* Combat Hit FX & Floating Numbers */}
             {floatingDamage && (
               <motion.div
                 initial={{ opacity: 0, y: 20, scale: 0.8 }}
-                animate={{ opacity: 1, y: -25, scale: 1.4 }}
+                animate={{ opacity: 1, y: -25, scale: 1.5 }}
                 exit={{ opacity: 0 }}
-                className={`absolute z-20 font-black text-xl drop-shadow-md ${
-                  floatingDamage.isHero ? 'left-[32%] top-[40%] text-rose-500' : 'right-[26%] top-[38%] text-yellow-300'
+                className={`absolute z-20 font-black text-2xl drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)] ${
+                  floatingDamage.isHero
+                    ? 'left-[28%] top-[38%] text-rose-400'
+                    : 'right-[24%] top-[34%] text-yellow-300'
                 }`}
               >
-                -{floatingDamage.val} {floatingDamage.isCrit && '⚡ CRIT!'}
+                -{floatingDamage.val} {floatingDamage.isCrit && '⚡ CRITICAL!'}
               </motion.div>
             )}
 
