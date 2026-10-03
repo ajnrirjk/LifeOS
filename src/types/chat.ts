@@ -37,3 +37,13 @@ export interface ChatChannel {
   lastMessage?: string;
   lastMessageTime?: number;
 }
+
+export interface ActiveChatMember {
+  id: string;
+  name: string;
+  photoURL?: string;
+  email?: string;
+  isGoogleUser: boolean;
+  lastSeen: number;
+}
+

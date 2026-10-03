@@ -1,4 +1,4 @@
-import { ChatMessage, ChatChannel, ChatUser } from '../types/chat';
+import { ChatMessage, ChatChannel, ChatUser, ActiveChatMember } from '../types/chat';
 
 type ChatEventListener = (event: { type: string; data: any }) => void;
 
@@ -7,23 +7,54 @@ class ChatService {
   private listeners: Set<ChatEventListener> = new Set();
   private isConnecting = false;
   private pollInterval: any = null;
+  private heartbeatInterval: any = null;
+  private currentUser: ChatUser | null = null;
 
   constructor() {
-    this.connectSSE();
-    // Background polling fallback every 4 seconds to guarantee sync
+    // Background polling fallback every 2.5 seconds for instant multi-device sync
     this.pollInterval = setInterval(() => {
       this.listeners.forEach(cb => cb({ type: 'poll_tick', data: Date.now() }));
-    }, 4000);
+    }, 2500);
+  }
+
+  // Update current user info and re-establish SSE if needed
+  setCurrentUser(user: ChatUser) {
+    const changed = !this.currentUser || this.currentUser.id !== user.id || this.currentUser.name !== user.name;
+    this.currentUser = user;
+    if (changed) {
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
+      this.connectSSE();
+    }
   }
 
   // Connect to real-time Server-Sent Events
-  private connectSSE() {
+  public connectSSE() {
     if (this.eventSource || this.isConnecting) return;
     this.isConnecting = true;
 
     try {
-      const es = new EventSource('/api/chat/stream');
+      const params = new URLSearchParams();
+      if (this.currentUser) {
+        params.set('userId', this.currentUser.id);
+        params.set('userName', this.currentUser.name);
+        if (this.currentUser.photoURL) params.set('userPhoto', this.currentUser.photoURL);
+        if (this.currentUser.email) params.set('userEmail', this.currentUser.email);
+        params.set('isGoogleUser', this.currentUser.isGoogleUser ? 'true' : 'false');
+      }
+
+      const url = `/api/chat/stream${params.toString() ? `?${params.toString()}` : ''}`;
+      const es = new EventSource(url);
       this.eventSource = es;
+
+      es.addEventListener('connected', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          this.emit({ type: 'presence', data });
+        } catch {}
+      });
 
       es.addEventListener('message', (e) => {
         try {
@@ -64,8 +95,8 @@ class ChatService {
         es.close();
         this.eventSource = null;
         this.isConnecting = false;
-        // Reconnect after 3 seconds
-        setTimeout(() => this.connectSSE(), 3000);
+        // Reconnect after 2 seconds
+        setTimeout(() => this.connectSSE(), 2000);
       };
 
       es.onopen = () => {
@@ -73,6 +104,25 @@ class ChatService {
       };
     } catch {
       this.isConnecting = false;
+    }
+
+    // Heartbeat to keep presence active
+    if (!this.heartbeatInterval) {
+      this.heartbeatInterval = setInterval(() => {
+        if (this.currentUser) {
+          fetch('/api/chat/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: this.currentUser.id,
+              userName: this.currentUser.name,
+              photoURL: this.currentUser.photoURL,
+              email: this.currentUser.email,
+              isGoogleUser: this.currentUser.isGoogleUser
+            })
+          }).catch(() => {});
+        }
+      }, 15000);
     }
   }
 
@@ -115,6 +165,15 @@ class ChatService {
     const res = await fetch(`/api/chat/messages?channelId=${encodeURIComponent(channelId)}&since=${since}`);
     if (!res.ok) throw new Error('Failed to fetch messages');
     return res.json();
+  }
+
+  // Fetch active presence and members list
+  async getPresence(): Promise<{ activeUsers: number; members: ActiveChatMember[] }> {
+    try {
+      const res = await fetch('/api/chat/presence');
+      if (res.ok) return res.json();
+    } catch {}
+    return { activeUsers: 1, members: [] };
   }
 
   // Send a message

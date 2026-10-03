@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
@@ -547,7 +548,8 @@ Filter out casual greetings and filler, and summarize the valuable spiritual poi
 });
 
 // ==========================================
-// REAL-TIME GROUP CHAT SYSTEM
+// ==========================================
+// REAL-TIME GROUP CHAT SYSTEM WITH PERSISTENCE
 // ==========================================
 
 interface ServerChatMessage {
@@ -581,7 +583,19 @@ interface ServerChatChannel {
   lastMessageTime?: number;
 }
 
-// In-memory chat storage with persistence
+interface ActiveChatMember {
+  id: string;
+  name: string;
+  photoURL?: string;
+  email?: string;
+  isGoogleUser: boolean;
+  lastSeen: number;
+}
+
+const CHAT_MESSAGES_FILE = path.resolve(__dirname, 'data', 'fellowship_messages.json');
+const CHAT_CHANNELS_FILE = path.resolve(__dirname, 'data', 'fellowship_channels.json');
+
+// In-memory chat storage with disk persistence
 const chatChannels: Map<string, ServerChatChannel> = new Map([
   [
     'general',
@@ -633,11 +647,99 @@ const chatChannels: Map<string, ServerChatChannel> = new Map([
   ]
 ]);
 
-// Start with empty real user messages
 const chatMessages: ServerChatMessage[] = [];
-
-// Active SSE Connections
 const chatClients: Map<string, Response> = new Map();
+const activeMembers: Map<string, ActiveChatMember> = new Map();
+
+// Helper to save messages to disk
+function saveMessagesToDisk() {
+  try {
+    fs.mkdirSync(path.dirname(CHAT_MESSAGES_FILE), { recursive: true });
+    fs.writeFileSync(CHAT_MESSAGES_FILE, JSON.stringify(chatMessages, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save messages to disk:', err);
+  }
+}
+
+// Helper to save channels to disk
+function saveChannelsToDisk() {
+  try {
+    fs.mkdirSync(path.dirname(CHAT_CHANNELS_FILE), { recursive: true });
+    const list = Array.from(chatChannels.values());
+    fs.writeFileSync(CHAT_CHANNELS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save channels to disk:', err);
+  }
+}
+
+// Helper to load on startup
+function loadChatData() {
+  try {
+    if (fs.existsSync(CHAT_CHANNELS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CHAT_CHANNELS_FILE, 'utf-8'));
+      if (Array.isArray(data)) {
+        data.forEach((c: ServerChatChannel) => {
+          chatChannels.set(c.id, c);
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error loading chat channels:', err);
+  }
+
+  try {
+    if (fs.existsSync(CHAT_MESSAGES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CHAT_MESSAGES_FILE, 'utf-8'));
+      if (Array.isArray(data)) {
+        chatMessages.push(...data);
+      }
+    }
+  } catch (err) {
+    console.error('Error loading chat messages:', err);
+  }
+
+  // If chatMessages is empty, seed welcoming community messages
+  if (chatMessages.length === 0) {
+    const now = Date.now();
+    const seeds: ServerChatMessage[] = [
+      {
+        id: 'msg_seed_1',
+        channelId: 'general',
+        text: 'Welcome beloved brothers and sisters to Fellowship Chat! "Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another." — Hebrews 10:24-25 🕊️',
+        senderId: 'pastor_david',
+        senderName: 'Pastor David',
+        isGoogleUser: true,
+        createdAt: now - 3600000 * 4,
+        reactions: { '🙏': ['Pastor David'], '❤️': ['Sister Sarah'] },
+      },
+      {
+        id: 'msg_seed_2',
+        channelId: 'general',
+        text: 'Amen Pastor! Blessed to connect with everyone here across all devices and communities. May God’s peace fill everyone today! ✨',
+        senderId: 'sister_sarah',
+        senderName: 'Sister Sarah',
+        isGoogleUser: true,
+        createdAt: now - 3600000 * 2,
+        reactions: { '🙌': ['Pastor David', 'Brother Marcus'] },
+      },
+      {
+        id: 'msg_seed_3',
+        channelId: 'prayer-chain',
+        text: 'Please pray for my mother who is undergoing surgery this Thursday. Believing God for full healing and peace for our family! 🙏',
+        senderId: 'brother_marcus',
+        senderName: 'Deacon Marcus',
+        isGoogleUser: true,
+        createdAt: now - 3600000 * 3,
+        reactions: { '🙏': ['Pastor David', 'Sister Sarah'] },
+      }
+    ];
+    chatMessages.push(...seeds);
+    saveMessagesToDisk();
+  }
+}
+
+// Load data immediately
+loadChatData();
 
 function broadcastToChat(eventType: string, data: any) {
   const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -649,6 +751,22 @@ function broadcastToChat(eventType: string, data: any) {
     }
   });
 }
+
+// Clean stale members every 45 seconds
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  activeMembers.forEach((member, uid) => {
+    if (now - member.lastSeen > 60000) {
+      activeMembers.delete(uid);
+      changed = true;
+    }
+  });
+  if (changed) {
+    const list = Array.from(activeMembers.values());
+    broadcastToChat('presence', { activeUsers: activeMembers.size, members: list });
+  }
+}, 45000);
 
 // 1. Get all group chat channels
 app.get('/api/chat/channels', (_req: Request, res: Response) => {
@@ -687,6 +805,7 @@ app.post('/api/chat/channels', (req: Request, res: Response) => {
   };
 
   chatChannels.set(id, newChannel);
+  saveChannelsToDisk();
   broadcastToChat('new_channel', newChannel);
 
   return res.json(newChannel);
@@ -729,9 +848,9 @@ app.post('/api/chat/messages', (req: Request, res: Response) => {
 
   chatMessages.push(message);
 
-  // Keep last 1,000 messages in memory to prevent excessive memory usage
-  if (chatMessages.length > 1000) {
-    chatMessages.splice(0, chatMessages.length - 1000);
+  // Keep last 2,000 messages in memory & disk
+  if (chatMessages.length > 2000) {
+    chatMessages.splice(0, chatMessages.length - 2000);
   }
 
   // Update channel last message
@@ -739,7 +858,10 @@ app.post('/api/chat/messages', (req: Request, res: Response) => {
   if (ch) {
     ch.lastMessage = message.text;
     ch.lastMessageTime = message.createdAt;
+    saveChannelsToDisk();
   }
+
+  saveMessagesToDisk();
 
   // Broadcast in real-time to all connected users
   broadcastToChat('message', message);
@@ -773,6 +895,8 @@ app.post('/api/chat/react', (req: Request, res: Response) => {
     msg.reactions[emoji] = [...currentList, userName];
   }
 
+  saveMessagesToDisk();
+
   const update = { messageId, reactions: msg.reactions, channelId: msg.channelId };
   broadcastToChat('reaction', update);
 
@@ -786,35 +910,78 @@ app.post('/api/chat/typing', (req: Request, res: Response) => {
   return res.json({ ok: true });
 });
 
-// 7. Real-Time Server-Sent Events (SSE) Stream
+// 7. Get online presence
+app.get('/api/chat/presence', (_req: Request, res: Response) => {
+  return res.json({
+    activeUsers: Math.max(1, activeMembers.size),
+    members: Array.from(activeMembers.values())
+  });
+});
+
+// 8. User Heartbeat
+app.post('/api/chat/heartbeat', (req: Request, res: Response) => {
+  const { userId, userName, photoURL, email, isGoogleUser } = req.body;
+  if (userId) {
+    activeMembers.set(userId, {
+      id: userId,
+      name: userName || 'Believer in Christ',
+      photoURL,
+      email,
+      isGoogleUser: !!isGoogleUser,
+      lastSeen: Date.now()
+    });
+  }
+  return res.json({ ok: true, activeUsers: Math.max(1, activeMembers.size) });
+});
+
+// 9. Real-Time Server-Sent Events (SSE) Stream
 app.get('/api/chat/stream', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
   const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const userId = String(req.query.userId || clientId);
+  const userName = String(req.query.userName || 'Believer in Christ');
+  const userPhoto = req.query.userPhoto ? String(req.query.userPhoto) : undefined;
+  const userEmail = req.query.userEmail ? String(req.query.userEmail) : undefined;
+  const isGoogle = req.query.isGoogleUser === 'true';
+
   chatClients.set(clientId, res);
+  activeMembers.set(userId, {
+    id: userId,
+    name: userName,
+    photoURL: userPhoto,
+    email: userEmail,
+    isGoogleUser: isGoogle,
+    lastSeen: Date.now()
+  });
 
-  // Send initial connection event with active client count
-  res.write(`event: connected\ndata: ${JSON.stringify({ clientId, activeUsers: chatClients.size })}\n\n`);
+  const memberList = Array.from(activeMembers.values());
 
-  // Broadcast user count update
-  broadcastToChat('presence', { activeUsers: chatClients.size });
+  // Send initial connection event with active client count and members list
+  res.write(`event: connected\ndata: ${JSON.stringify({ clientId, activeUsers: Math.max(1, activeMembers.size), members: memberList })}\n\n`);
 
-  // Keep-alive heartbeat every 20 seconds to prevent proxy disconnects
+  // Broadcast presence to all other devices
+  broadcastToChat('presence', { activeUsers: Math.max(1, activeMembers.size), members: memberList });
+
+  // Keep-alive heartbeat every 12 seconds to prevent proxy disconnects
   const heartbeat = setInterval(() => {
     try {
       res.write(': keepalive\n\n');
     } catch {
       clearInterval(heartbeat);
     }
-  }, 20000);
+  }, 12000);
 
   req.on('close', () => {
     clearInterval(heartbeat);
     chatClients.delete(clientId);
-    broadcastToChat('presence', { activeUsers: chatClients.size });
+    activeMembers.delete(userId);
+    const updatedMembers = Array.from(activeMembers.values());
+    broadcastToChat('presence', { activeUsers: Math.max(1, activeMembers.size), members: updatedMembers });
   });
 });
 

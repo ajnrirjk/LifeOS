@@ -1,0 +1,38 @@
+[
+  {
+    "id": "general",
+    "name": "general-fellowship",
+    "topic": "Welcome, daily encouragement, and community fellowship in Christ",
+    "emoji": "🕊️",
+    "createdAt": 1790990602871,
+    "lastMessage": "Testing cross-device fellowship chat",
+    "lastMessageTime": 1790990609686
+  },
+  {
+    "id": "sermon-discussion",
+    "name": "sermon-discussion",
+    "topic": "Discussing Sunday sermons, preacher insights, and notes",
+    "emoji": "📖",
+    "createdAt": 1790990602871,
+    "lastMessage": "",
+    "lastMessageTime": 1790990602871
+  },
+  {
+    "id": "prayer-chain",
+    "name": "prayer-chain",
+    "topic": "Post live prayer requests and celebrate answered prayers together",
+    "emoji": "🙏",
+    "createdAt": 1790990602871,
+    "lastMessage": "",
+    "lastMessageTime": 1790990602871
+  },
+  {
+    "id": "bible-study",
+    "name": "scripture-deep-dive",
+    "topic": "Daily Bible questions, Greek/Hebrew word study, and verses",
+    "emoji": "📜",
+    "createdAt": 1790990602871,
+    "lastMessage": "",
+    "lastMessageTime": 1790990602871
+  }
+]
