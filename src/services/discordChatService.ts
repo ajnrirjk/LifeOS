@@ -1,3 +1,17 @@
+import { initializeApp, getApps } from 'firebase/app';
+import {
+  getFirestore,
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  limit
+} from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
 import {
   ChatMessage,
   ChatChannel,
@@ -6,6 +20,19 @@ import {
   ActiveChatMember,
   UserStatusType
 } from '../types/chat';
+
+// Active Firebase Configuration
+const activeFirebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
+};
+
+const app = getApps().length === 0 ? initializeApp(activeFirebaseConfig) : getApps()[0];
+export const db = getFirestore(app);
 
 export const DEFAULT_SERVERS: DiscordServer[] = [
   {
@@ -94,7 +121,7 @@ export const DEFAULT_CHANNELS: ChatChannel[] = [
     type: 'text',
     emoji: '🕊️',
     createdAt: 1790900000000,
-    lastMessage: 'Welcome to Discord-styled Fellowship! Real-time across all tabs & devices.',
+    lastMessage: 'Welcome to Fellowship Chat! Real-time across all your devices like iMessage.',
     lastMessageTime: 1790900000000,
   },
   {
@@ -134,11 +161,11 @@ export const DEFAULT_CHANNELS: ChatChannel[] = [
     id: 'test-chat',
     serverId: 'server_fellowship',
     name: 'live-test-lounge',
-    topic: 'Instant sync sandbox — test multi-tab & mobile messaging here',
+    topic: 'Instant real-time test lounge — text message across your phone & laptop here',
     type: 'text',
     emoji: '⚡',
     createdAt: 1790900000000,
-    lastMessage: 'Send a message here from your phone or incognito tab to test live sync!',
+    lastMessage: 'Type here on any phone or computer to watch it sync live!',
     lastMessageTime: 1790900000000,
   },
   {
@@ -215,7 +242,7 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
     id: 'msg_seed_1',
     channelId: 'general',
     serverId: 'server_fellowship',
-    text: 'Welcome everyone to the new Discord-styled Fellowship Community! 🕊️\n\n"Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another." — **Hebrews 10:24-25**',
+    text: 'Welcome everyone to Fellowship Chat! 🕊️\n\n"Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another." — **Hebrews 10:24-25**',
     senderId: 'pastor_david',
     senderName: 'Pastor David',
     senderRole: 'Pastor',
@@ -225,7 +252,7 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
     reactions: { '🙏': ['Pastor David', 'Sister Sarah'], '❤️': ['Brother Marcus', 'Sister Sarah'] },
     embed: {
       title: '📖 Welcome to Fellowship Hub',
-      description: 'A Discord-styled sanctuary built right into LifeOS. Chat in real time, share Bible verses with rich embeds, post church notes, and pray together across all your devices.',
+      description: 'A Discord & iMessage-styled sanctuary built right into LifeOS. Messages sync across all devices instantly in real-time.',
       color: '#10B981',
       author: 'Fellowship Ministry',
       footer: 'Grace and Peace be with you all',
@@ -235,7 +262,7 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
     id: 'msg_seed_2',
     channelId: 'general',
     serverId: 'server_fellowship',
-    text: 'Glory to God! The new interface feels so fast and clean. Love having separate study rooms and prayer chains here. ✨',
+    text: 'Glory to God! The real-time Firestore sync is live! Messages appear across phone & computer instantly.',
     senderId: 'sister_sarah',
     senderName: 'Sister Sarah',
     senderRole: 'Moderator',
@@ -312,18 +339,15 @@ export const DEFAULT_MEMBERS: ActiveChatMember[] = [
   }
 ];
 
-const CLOUD_RELAY_TOPIC = 'lifeos_discord_v3';
-const CLOUD_RELAY_URL = `https://ntfy.sh/${CLOUD_RELAY_TOPIC}`;
-
 type DiscordEventListener = (event: { type: string; data: any }) => void;
 
 class DiscordChatService {
-  private cloudEventSource: EventSource | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private listeners: Set<DiscordEventListener> = new Set();
-  private syncInterval: any = null;
+  private unsubscribeFirestore: (() => void) | null = null;
+
   public currentUser: ChatUser = {
-    id: 'guest_user',
+    id: 'guest_user_' + Math.random().toString(36).substring(2, 7),
     name: 'Believer in Christ',
     discriminator: '7777',
     isGoogleUser: false,
@@ -340,14 +364,7 @@ class DiscordChatService {
   constructor() {
     this.initCaches();
     this.initBroadcastChannel();
-    this.initCloudRelay();
-    this.fetchCloudHistory();
-    this.initVisibilitySync();
-
-    // Regular rapid background sync interval (2s)
-    this.syncInterval = setInterval(() => {
-      this.fetchCloudHistory();
-    }, 2000);
+    this.initFirestoreRealtimeListener();
   }
 
   private initCaches() {
@@ -373,22 +390,11 @@ class DiscordChatService {
     } catch {
       this.messagesCache = DEFAULT_SEED_MESSAGES;
     }
-
-    try {
-      const savedChans = localStorage.getItem('lifeos_discord_channels');
-      if (savedChans) {
-        const parsed = JSON.parse(savedChans);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          this.channelsCache = parsed;
-        }
-      }
-    } catch {}
   }
 
   private saveCaches() {
     try {
       localStorage.setItem('lifeos_discord_messages', JSON.stringify(this.messagesCache));
-      localStorage.setItem('lifeos_discord_channels', JSON.stringify(this.channelsCache));
       localStorage.setItem('lifeos_discord_user', JSON.stringify(this.currentUser));
     } catch {}
   }
@@ -396,185 +402,82 @@ class DiscordChatService {
   private initBroadcastChannel() {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
-        this.broadcastChannel = new BroadcastChannel('lifeos_discord_sync_v3');
+        this.broadcastChannel = new BroadcastChannel('lifeos_discord_sync_v4');
         this.broadcastChannel.onmessage = (e) => {
           if (e.data && e.data.type) {
-            this.handleIncoming(e.data.type, e.data.data, false);
+            this.handleLocalEvent(e.data.type, e.data.data);
           }
         };
       } catch {}
     }
   }
 
-  private initVisibilitySync() {
-    if (typeof window === 'undefined') return;
-    window.addEventListener('focus', () => this.fetchCloudHistory());
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        this.fetchCloudHistory();
-      }
-    });
-  }
-
-  // Fetch past messages stored in the cloud relay
-  public async fetchCloudHistory() {
-    if (typeof window === 'undefined') return;
+  // Real-Time Sub-second Firestore Sync (Exactly like iMessage)
+  private initFirestoreRealtimeListener() {
     try {
-      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1&since=all`);
-      if (!res.ok) return;
-      const text = await res.text();
-      const lines = text.trim().split('\n').filter(Boolean);
-      let hasNew = false;
+      const messagesRef = collection(db, 'fellowship_messages');
+      const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(300));
 
-      for (const line of lines) {
-        try {
-          const raw = JSON.parse(line);
-          if (raw.event === 'message' && raw.message) {
-            let payload: any = null;
-            try {
-              payload = JSON.parse(raw.message);
-              if (payload && payload.message && typeof payload.message === 'string') {
-                try { payload = JSON.parse(payload.message); } catch {}
-              }
-            } catch {
-              payload = null;
+      this.unsubscribeFirestore = onSnapshot(
+        q,
+        (snapshot) => {
+          const map = new Map<string, ChatMessage>();
+          // Pre-populate with default seeds
+          DEFAULT_SEED_MESSAGES.forEach((m) => map.set(m.id, m));
+          this.messagesCache.forEach((m) => map.set(m.id, m));
+
+          snapshot.docs.forEach((docSnap) => {
+            const data = docSnap.data() as ChatMessage;
+            if (data && data.text) {
+              map.set(docSnap.id, {
+                ...data,
+                id: docSnap.id,
+              });
             }
+          });
 
-            if (payload && payload.type && payload.data) {
-              if (payload.type === 'message') {
-                const msg: ChatMessage = payload.data;
-                if (msg && msg.id && msg.text) {
-                  if (!this.messagesCache.some(m => m.id === msg.id)) {
-                    this.messagesCache.push(msg);
-                    hasNew = true;
-                    // Update channel preview
-                    const chan = this.channelsCache.find(c => c.id === msg.channelId);
-                    if (chan && (!chan.lastMessageTime || msg.createdAt > chan.lastMessageTime)) {
-                      chan.lastMessage = msg.text;
-                      chan.lastMessageTime = msg.createdAt;
-                    }
-                  }
-                }
-              } else if (payload.type === 'reaction') {
-                const { messageId, reactions } = payload.data;
-                this.messagesCache = this.messagesCache.map(m =>
-                  m.id === messageId ? { ...m, reactions } : m
-                );
-                hasNew = true;
-              } else if (payload.type === 'delete_message') {
-                const { messageId } = payload.data;
-                this.messagesCache = this.messagesCache.filter(m => m.id !== messageId);
-                hasNew = true;
-              } else if (payload.type === 'pin_message') {
-                const { messageId, pinned } = payload.data;
-                this.messagesCache = this.messagesCache.map(m =>
-                  m.id === messageId ? { ...m, pinned } : m
-                );
-                hasNew = true;
-              }
-            }
-          }
-        } catch {}
-      }
-
-      if (hasNew) {
-        this.saveCaches();
-        this.emit({ type: 'sync_all', data: this.messagesCache });
-      }
-    } catch {}
+          this.messagesCache = Array.from(map.values()).sort((a, b) => a.createdAt - b.createdAt);
+          this.saveCaches();
+          this.emit({ type: 'sync_all', data: this.messagesCache });
+        },
+        (error) => {
+          console.warn('Firestore realtime fallback to local:', error);
+        }
+      );
+    } catch (err) {
+      console.warn('Firestore initialization fallback:', err);
+    }
   }
 
-  private initCloudRelay() {
-    if (typeof window === 'undefined') return;
-    try {
-      if (this.cloudEventSource) {
-        try { this.cloudEventSource.close(); } catch {}
-      }
-      const sse = new EventSource(`${CLOUD_RELAY_URL}/sse`);
-      this.cloudEventSource = sse;
-
-      sse.onmessage = (event) => {
-        try {
-          const raw = JSON.parse(event.data);
-          if (raw.event === 'message' && raw.message) {
-            let payload: any = null;
-            try {
-              payload = JSON.parse(raw.message);
-              if (payload && payload.message && typeof payload.message === 'string') {
-                try { payload = JSON.parse(payload.message); } catch {}
-              }
-            } catch {
-              payload = null;
-            }
-
-            if (payload && payload.type && payload.data) {
-              this.handleIncoming(payload.type, payload.data, false);
-            }
-          }
-        } catch {}
-      };
-
-      sse.onerror = () => {
-        this.fetchCloudHistory();
-      };
-    } catch {}
-  }
-
-  private handleIncoming(type: string, data: any, shouldBroadcast = true) {
+  private handleLocalEvent(type: string, data: any) {
     if (type === 'message') {
       const msg: ChatMessage = data;
-      if (!msg || !msg.id || !msg.text) return;
-      const exists = this.messagesCache.some(m => m.id === msg.id);
-      if (!exists) {
+      if (!this.messagesCache.some((m) => m.id === msg.id)) {
         this.messagesCache.push(msg);
-        // Update channel last message
-        const chan = this.channelsCache.find(c => c.id === msg.channelId);
-        if (chan) {
-          chan.lastMessage = msg.text;
-          chan.lastMessageTime = msg.createdAt;
-        }
         this.saveCaches();
         this.emit({ type: 'message', data: msg });
       }
     } else if (type === 'reaction') {
       const { messageId, reactions } = data;
-      this.messagesCache = this.messagesCache.map(m =>
+      this.messagesCache = this.messagesCache.map((m) =>
         m.id === messageId ? { ...m, reactions } : m
       );
       this.saveCaches();
       this.emit({ type: 'reaction', data });
-    } else if (type === 'delete_message') {
-      const { messageId } = data;
-      this.messagesCache = this.messagesCache.filter(m => m.id !== messageId);
-      this.saveCaches();
-      this.emit({ type: 'delete_message', data });
     } else if (type === 'pin_message') {
       const { messageId, pinned } = data;
-      this.messagesCache = this.messagesCache.map(m =>
+      this.messagesCache = this.messagesCache.map((m) =>
         m.id === messageId ? { ...m, pinned } : m
       );
       this.saveCaches();
       this.emit({ type: 'pin_message', data });
-    } else if (type === 'typing' || type === 'presence' || type === 'user_status') {
+    } else if (type === 'delete_message') {
+      const { messageId } = data;
+      this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
+      this.saveCaches();
+      this.emit({ type: 'delete_message', data });
+    } else if (type === 'typing' || type === 'user_status') {
       this.emit({ type, data });
-    }
-
-    if (shouldBroadcast) {
-      // 1. Broadcast locally to other tabs
-      try {
-        this.broadcastChannel?.postMessage({ type, data });
-      } catch {}
-
-      // 2. Broadcast persistent events to cloud relay
-      if (type === 'message' || type === 'reaction' || type === 'delete_message' || type === 'pin_message') {
-        try {
-          fetch(CLOUD_RELAY_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, data }),
-          }).catch(() => {});
-        } catch {}
-      }
     }
   }
 
@@ -586,38 +489,27 @@ class DiscordChatService {
   }
 
   private emit(event: { type: string; data: any }) {
-    this.listeners.forEach(l => {
+    this.listeners.forEach((l) => {
       try { l(event); } catch {}
     });
   }
 
-  // User & Profile management
   public setCurrentUser(user: Partial<ChatUser>) {
     this.currentUser = {
       ...this.currentUser,
       ...user,
     };
     this.saveCaches();
-    this.handleIncoming('user_status', { user: this.currentUser }, true);
+    this.broadcastChannel?.postMessage({ type: 'user_status', data: { user: this.currentUser } });
   }
 
-  public setUserStatus(status: UserStatusType, customStatus?: string) {
-    this.currentUser.status = status;
-    if (customStatus !== undefined) {
-      this.currentUser.customStatus = customStatus;
-    }
-    this.saveCaches();
-    this.handleIncoming('user_status', { user: this.currentUser }, true);
-  }
-
-  // Get messages for a channel
   public getMessages(channelId: string): ChatMessage[] {
     return this.messagesCache
-      .filter(m => m.channelId === channelId)
+      .filter((m) => m.channelId === channelId)
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
-  // Send a message (with reply, embed, verse, or attachments)
+  // Send Message - Writes to Firestore and Broadcasts (iMessage real-time speed)
   public async sendMessage(payload: {
     channelId: string;
     serverId: string;
@@ -626,15 +518,16 @@ class DiscordChatService {
     attachment?: ChatMessage['attachment'];
     embed?: ChatMessage['embed'];
   }): Promise<ChatMessage> {
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newMsg: ChatMessage = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: messageId,
       channelId: payload.channelId,
       serverId: payload.serverId,
       text: payload.text.trim(),
       senderId: this.currentUser.id,
       senderName: this.currentUser.name,
-      senderPhoto: this.currentUser.photoURL,
-      senderEmail: this.currentUser.email,
+      senderPhoto: this.currentUser.photoURL || undefined,
+      senderEmail: this.currentUser.email || undefined,
       senderRole: this.currentUser.role || 'Believer',
       senderRoleColor: this.currentUser.roleColor || '#10B981',
       isGoogleUser: this.currentUser.isGoogleUser,
@@ -645,13 +538,47 @@ class DiscordChatService {
       embed: payload.embed,
     };
 
-    this.handleIncoming('message', newMsg, true);
+    // 1. Local Optimistic Update & Cross-tab Broadcast
+    if (!this.messagesCache.some((m) => m.id === newMsg.id)) {
+      this.messagesCache.push(newMsg);
+      this.saveCaches();
+      this.emit({ type: 'message', data: newMsg });
+    }
+    try {
+      this.broadcastChannel?.postMessage({ type: 'message', data: newMsg });
+    } catch {}
+
+    // 2. Persist to Firebase Firestore (Real-time iMessage push to all other devices)
+    try {
+      const cleanData: Record<string, any> = {
+        channelId: newMsg.channelId,
+        serverId: newMsg.serverId,
+        text: newMsg.text,
+        senderId: newMsg.senderId,
+        senderName: newMsg.senderName,
+        isGoogleUser: !!newMsg.isGoogleUser,
+        createdAt: newMsg.createdAt,
+        reactions: newMsg.reactions || {},
+      };
+      if (newMsg.senderPhoto) cleanData.senderPhoto = newMsg.senderPhoto;
+      if (newMsg.senderEmail) cleanData.senderEmail = newMsg.senderEmail;
+      if (newMsg.senderRole) cleanData.senderRole = newMsg.senderRole;
+      if (newMsg.senderRoleColor) cleanData.senderRoleColor = newMsg.senderRoleColor;
+      if (newMsg.replyTo) cleanData.replyTo = newMsg.replyTo;
+      if (newMsg.attachment) cleanData.attachment = newMsg.attachment;
+      if (newMsg.embed) cleanData.embed = newMsg.embed;
+
+      await setDoc(doc(db, 'fellowship_messages', messageId), cleanData);
+    } catch (err) {
+      console.warn('Firestore setDoc failed:', err);
+    }
+
     return newMsg;
   }
 
-  // Toggle emoji reaction on a message
-  public toggleReaction(messageId: string, emoji: string) {
-    const msg = this.messagesCache.find(m => m.id === messageId);
+  // Toggle emoji reaction
+  public async toggleReaction(messageId: string, emoji: string) {
+    const msg = this.messagesCache.find((m) => m.id === messageId);
     if (!msg) return;
 
     const currentReactions = { ...(msg.reactions || {}) };
@@ -659,7 +586,7 @@ class DiscordChatService {
     const myName = this.currentUser.name;
 
     if (userList.includes(myName)) {
-      currentReactions[emoji] = userList.filter(u => u !== myName);
+      currentReactions[emoji] = userList.filter((u) => u !== myName);
       if (currentReactions[emoji].length === 0) {
         delete currentReactions[emoji];
       }
@@ -667,34 +594,69 @@ class DiscordChatService {
       currentReactions[emoji] = [...userList, myName];
     }
 
-    const update = { messageId, reactions: currentReactions, channelId: msg.channelId };
-    this.handleIncoming('reaction', update, true);
+    msg.reactions = currentReactions;
+    this.saveCaches();
+    this.emit({ type: 'reaction', data: { messageId, reactions: currentReactions } });
+    try {
+      this.broadcastChannel?.postMessage({
+        type: 'reaction',
+        data: { messageId, reactions: currentReactions },
+      });
+    } catch {}
+
+    try {
+      await updateDoc(doc(db, 'fellowship_messages', messageId), {
+        reactions: currentReactions,
+      });
+    } catch {}
   }
 
-  // Pin / Unpin message
-  public togglePin(messageId: string) {
-    const msg = this.messagesCache.find(m => m.id === messageId);
+  // Pin / Unpin
+  public async togglePin(messageId: string) {
+    const msg = this.messagesCache.find((m) => m.id === messageId);
     if (!msg) return;
     const newPinned = !msg.pinned;
-    this.handleIncoming('pin_message', { messageId, pinned: newPinned, channelId: msg.channelId }, true);
+    msg.pinned = newPinned;
+    this.saveCaches();
+    this.emit({ type: 'pin_message', data: { messageId, pinned: newPinned } });
+    try {
+      this.broadcastChannel?.postMessage({
+        type: 'pin_message',
+        data: { messageId, pinned: newPinned },
+      });
+    } catch {}
+
+    try {
+      await updateDoc(doc(db, 'fellowship_messages', messageId), {
+        pinned: newPinned,
+      });
+    } catch {}
   }
 
   // Delete message
-  public deleteMessage(messageId: string) {
-    const msg = this.messagesCache.find(m => m.id === messageId);
-    if (!msg) return;
-    this.handleIncoming('delete_message', { messageId, channelId: msg.channelId }, true);
+  public async deleteMessage(messageId: string) {
+    this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
+    this.saveCaches();
+    this.emit({ type: 'delete_message', data: { messageId } });
+    try {
+      this.broadcastChannel?.postMessage({ type: 'delete_message', data: { messageId } });
+    } catch {}
+
+    try {
+      await deleteDoc(doc(db, 'fellowship_messages', messageId));
+    } catch {}
   }
 
-  // Typing broadcast
   public sendTyping(channelId: string, isTyping: boolean) {
-    this.handleIncoming('typing', {
-      channelId,
-      userId: this.currentUser.id,
-      userName: this.currentUser.name,
-      isTyping,
-      timestamp: Date.now()
-    }, true);
+    this.broadcastChannel?.postMessage({
+      type: 'typing',
+      data: {
+        channelId,
+        userName: this.currentUser.name,
+        isTyping,
+        timestamp: Date.now(),
+      },
+    });
   }
 }
 

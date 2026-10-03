@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A chat message sent in Fellowship Discord chat",
+      "type": "object",
+      "properties": {
+        "channelId": { "type": "string", "maxLength": 100 },
+        "serverId": { "type": "string", "maxLength": 100 },
+        "text": { "type": "string", "maxLength": 5000 },
+        "senderId": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 128 },
+        "senderPhoto": { "type": "string", "maxLength": 1000 },
+        "senderEmail": { "type": "string", "maxLength": 256 },
+        "senderRole": { "type": "string", "maxLength": 64 },
+        "senderRoleColor": { "type": "string", "maxLength": 32 },
+        "isGoogleUser": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "reactions": { "type": "object" },
+        "replyTo": { "type": "object" },
+        "pinned": { "type": "boolean" },
+        "embed": { "type": "object" },
+        "attachment": { "type": "object" }
+      },
+      "required": ["channelId", "text", "senderId", "senderName", "createdAt"]
+    },
+    "ChatChannel": {
+      "title": "ChatChannel",
+      "description": "A channel in a Fellowship server",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "serverId": { "type": "string", "maxLength": 100 },
+        "topic": { "type": "string", "maxLength": 500 },
+        "type": { "type": "string", "enum": ["text", "voice", "announcement"] },
+        "emoji": { "type": "string", "maxLength": 10 },
+        "createdAt": { "type": "number" },
+        "lastMessage": { "type": "string", "maxLength": 500 },
+        "lastMessageTime": { "type": "number" }
+      },
+      "required": ["name", "serverId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/fellowship_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Public fellowship chat messages stream across channels"
+    },
+    "/fellowship_channels/{channelId}": {
+      "schema": "ChatChannel",
+      "description": "Fellowship channels and topics"
+    }
+  }
+}
