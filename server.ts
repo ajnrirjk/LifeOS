@@ -1029,7 +1029,10 @@ function loadGlobalConfigAndMembers() {
       const data = JSON.parse(fs.readFileSync(FELLOWSHIP_MEMBERS_FILE, 'utf-8'));
       if (Array.isArray(data)) {
         data.forEach((m: RealFellowshipMember) => {
-          realFellowshipMembers.set(m.id, m);
+          const key = (m.email?.toLowerCase() === 'aw03102008@gmail.com')
+            ? 'master_admin_aw'
+            : (m.handle?.toLowerCase() || m.id);
+          realFellowshipMembers.set(key, m);
         });
       }
     }
@@ -1107,14 +1110,16 @@ app.post('/api/fellowship/register', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Name is required' });
   }
 
-  const userId = String(id || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
-  const isMasterAdmin = String(email || '').toLowerCase() === 'aw03102008@gmail.com';
+  const cleanHandle = String(handle || `@${String(name).toLowerCase().replace(/[^a-z0-9_]/g, '')}`).trim().toLowerCase();
+  const isMasterAdmin = String(email || '').toLowerCase() === 'aw03102008@gmail.com' || cleanHandle.includes('aw03102008');
   
-  const existing = realFellowshipMembers.get(userId);
+  const storageKey = isMasterAdmin ? 'master_admin_aw' : cleanHandle;
+  const existing = realFellowshipMembers.get(storageKey);
+
   const updatedMember: RealFellowshipMember = {
-    id: userId,
+    id: isMasterAdmin ? 'usr_master_admin_aw' : (existing?.id || id || `usr_handle_${cleanHandle.replace(/[^a-z0-9]/g, '')}`),
     name: String(name).trim(),
-    handle: String(handle || `@${String(name).toLowerCase().replace(/[^a-z0-9_]/g, '')}`).trim(),
+    handle: cleanHandle,
     avatar: isMasterAdmin ? '👑' : (avatar || existing?.avatar || '🕊️'),
     photoURL: photoURL || existing?.photoURL,
     role: isMasterAdmin ? 'superadmin' : (existing?.role || 'user'),
@@ -1127,13 +1132,13 @@ app.post('/api/fellowship/register', (req: Request, res: Response) => {
     notes: isMasterAdmin ? 'Master System Administrator' : (existing?.notes || 'Fellowship Believer')
   };
 
-  realFellowshipMembers.set(userId, updatedMember);
+  realFellowshipMembers.set(storageKey, updatedMember);
   saveFellowshipMembersToDisk();
 
   // Broadcast members list update
   broadcastToChat('fellowship_members_updated', Array.from(realFellowshipMembers.values()));
 
-  return res.json({ success: true, member: updatedMember });
+  return res.json({ success: true, member: updatedMember, members: Array.from(realFellowshipMembers.values()) });
 });
 
 // POST Moderate Fellowship Member (Promote, Mute, Ban, Delete)
@@ -1141,14 +1146,16 @@ app.post('/api/fellowship/moderate', (req: Request, res: Response) => {
   const { memberId, action, role, status } = req.body;
   if (!memberId) return res.status(400).json({ error: 'memberId is required' });
 
-  if (action === 'delete') {
-    realFellowshipMembers.delete(memberId);
-  } else {
-    const member = realFellowshipMembers.get(memberId);
-    if (member) {
-      if (role) member.role = role;
-      if (status) member.status = status;
-      realFellowshipMembers.set(memberId, member);
+  for (const [key, mem] of realFellowshipMembers.entries()) {
+    if (mem.id === memberId || mem.handle.toLowerCase() === memberId.toLowerCase()) {
+      if (action === 'delete') {
+        realFellowshipMembers.delete(key);
+      } else {
+        if (role) mem.role = role;
+        if (status) mem.status = status;
+        realFellowshipMembers.set(key, mem);
+      }
+      break;
     }
   }
 
@@ -1203,6 +1210,8 @@ app.get('/api/chat/stream', (req: Request, res: Response) => {
 
   // Send initial connection event with active client count and members list
   res.write(`event: connected\ndata: ${JSON.stringify({ clientId, activeUsers: Math.max(1, activeMembers.size), members: memberList })}\n\n`);
+  res.write(`event: fellowship_members_updated\ndata: ${JSON.stringify(Array.from(realFellowshipMembers.values()))}\n\n`);
+  res.write(`event: global_config_updated\ndata: ${JSON.stringify(globalConfig)}\n\n`);
 
   // Broadcast presence to all other devices
   broadcastToChat('presence', { activeUsers: Math.max(1, activeMembers.size), members: memberList });
