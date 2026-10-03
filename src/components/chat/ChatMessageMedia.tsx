@@ -34,7 +34,15 @@ export const ChatMessageMedia: React.FC<ChatMessageMediaProps> = ({
     ? message.attachment?.url
     : inlineImageUrl;
 
-  if (!activeImageUrl || imageError) return null;
+  // Validate that activeImageUrl is a legitimate URL or data uri
+  const isValidUrl =
+    activeImageUrl &&
+    (activeImageUrl.startsWith('http://') ||
+      activeImageUrl.startsWith('https://') ||
+      activeImageUrl.startsWith('data:image/') ||
+      activeImageUrl.startsWith('/'));
+
+  if (!isValidUrl || imageError) return null;
 
   const title = isImageAttachment ? message.attachment?.title : undefined;
   const caption = isImageAttachment ? (message.attachment?.caption || message.attachment?.content) : undefined;

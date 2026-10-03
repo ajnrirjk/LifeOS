@@ -558,7 +558,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const totalUnreadDMs = dmChannels.reduce((sum, dm) => sum + (unreadCounts[dm.id] || 0), 0);
 
   return (
-    <div className="relative flex h-full w-full bg-[#1e1f22] text-[#dbdee1] font-sans antialiased select-none overflow-hidden rounded-2xl shadow-2xl border border-white/10">
+    <div className="relative flex h-full w-full bg-[#1e1f22] text-[#dbdee1] font-sans antialiased select-none overflow-hidden rounded-none md:rounded-2xl shadow-none md:shadow-2xl border-0 md:border md:border-white/10">
       {/* ========================================================================= */}
       {/* MOBILE OVERLAY BACKDROPS                                                  */}
       {/* ========================================================================= */}
@@ -1322,7 +1322,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                   value={inputText}
                   onChange={handleInputChange}
                   placeholder={isDMView ? `Message @${activeChannel.name}...` : `Message #${activeChannel.name}...`}
-                  className="flex-1 bg-transparent text-white text-xs sm:text-xs placeholder-[#80848e] focus:outline-none min-w-0"
+                  className="flex-1 bg-transparent text-white text-base md:text-xs placeholder-[#80848e] focus:outline-none min-w-0 py-0.5"
                 />
 
                 <div className="relative shrink-0">
@@ -2128,7 +2128,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                     if (onboardingError) setOnboardingError('');
                   }}
                   placeholder="e.g. Sarah Jenkins, Marcus, or Brother John"
-                  className="w-full px-3.5 py-2.5 bg-[#1e1f22] border border-[#3f4147] focus:border-amber-400 rounded-xl text-white text-sm font-semibold focus:outline-none transition-all placeholder:text-stone-500 shadow-inner"
+                  className="w-full px-3.5 py-2.5 bg-[#1e1f22] border border-[#3f4147] focus:border-amber-400 rounded-xl text-white text-base md:text-sm font-semibold focus:outline-none transition-all placeholder:text-stone-500 shadow-inner"
                 />
               </div>
 
@@ -2141,7 +2141,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                   value={onboardingStatus}
                   onChange={(e) => setOnboardingStatus(e.target.value)}
                   placeholder="e.g. Walking with Christ ✝️"
-                  className="w-full px-3.5 py-2 bg-[#1e1f22] border border-[#3f4147] focus:border-emerald-400 rounded-xl text-white text-xs font-medium focus:outline-none transition-all placeholder:text-stone-500"
+                  className="w-full px-3.5 py-2 bg-[#1e1f22] border border-[#3f4147] focus:border-emerald-400 rounded-xl text-white text-base md:text-xs font-medium focus:outline-none transition-all placeholder:text-stone-500"
                 />
 
                 {/* Status Chips */}

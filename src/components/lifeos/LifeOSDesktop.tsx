@@ -116,7 +116,7 @@ export const LifeOSDesktop: React.FC = () => {
   const activeWindowState = openWindows[activeAppId];
 
   return (
-    <div className={`h-screen w-screen flex flex-col overflow-hidden relative ${wallpaperClasses}`}>
+    <div className={`h-[100dvh] w-full flex flex-col overflow-hidden relative select-none ${wallpaperClasses}`}>
       {/* Top System Menu Bar (Desktop always; Mobile only on Desktop/Widgets view) */}
       <div className={!isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? 'hidden md:block' : 'block'}>
         <LifeOSTopBar onOpenPrivacy={() => setIsPrivacyModalOpen(true)} />
