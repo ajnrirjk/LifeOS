@@ -334,7 +334,7 @@ class DiscordChatService {
       if (savedGoogleUser) {
         const parsedG = JSON.parse(savedGoogleUser);
         if (parsedG && (parsedG.email || parsedG.displayName)) {
-          const isOwner = parsedG.email === SUPER_ADMIN_EMAIL;
+          const isOwner = Boolean(parsedG.email && parsedG.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase());
           this.currentUser = {
             id: parsedG.uid || parsedG.email || this.currentUser.id,
             name: isOwner ? 'Anthony Williams (Owner)' : (parsedG.displayName || parsedG.email?.split('@')[0] || 'Believer in Christ'),
@@ -361,13 +361,25 @@ class DiscordChatService {
       }
     } catch {}
 
-    // Verify Super Admin
-    if (this.currentUser.email === SUPER_ADMIN_EMAIL) {
+    // Verify Super Admin strictly for authentic Google User aw03102008@gmail.com
+    const isMasterGoogle = Boolean(
+      this.currentUser.isGoogleUser &&
+      this.currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
+    );
+
+    if (isMasterGoogle) {
       this.currentUser.isOwner = true;
       this.currentUser.isAdmin = true;
       this.currentUser.name = 'Anthony Williams (Owner)';
       this.currentUser.role = 'Super Admin';
       this.currentUser.roleColor = '#F59E0B';
+    } else {
+      this.currentUser.isOwner = false;
+      this.currentUser.isAdmin = false;
+      if (this.currentUser.role === 'Super Admin' || this.currentUser.role === 'Admin') {
+        this.currentUser.role = 'Believer';
+        this.currentUser.roleColor = '#10B981';
+      }
     }
 
     try {
@@ -689,7 +701,10 @@ class DiscordChatService {
       roleColor: incomingUser.roleColor || '#10B981',
     };
 
-    const isOwner = incomingUser.email === SUPER_ADMIN_EMAIL;
+    const isOwner = Boolean(
+      incomingUser.isGoogleUser &&
+      incomingUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
+    );
 
     const existingIndex = this.membersCache.findIndex((m) => m.id === incomingUser.id);
     const memberObj: ActiveChatMember = {
@@ -802,7 +817,9 @@ class DiscordChatService {
   }
 
   public setCurrentUser(user: Partial<ChatUser>) {
-    const isOwner = user.email === SUPER_ADMIN_EMAIL || this.currentUser.email === SUPER_ADMIN_EMAIL;
+    const effectiveGoogle = Boolean(user.isGoogleUser ?? this.currentUser.isGoogleUser);
+    const effectiveEmail = (user.email ?? this.currentUser.email)?.toLowerCase().trim();
+    const isOwner = effectiveGoogle && effectiveEmail === SUPER_ADMIN_EMAIL.toLowerCase();
     this.currentUser = {
       ...this.currentUser,
       ...user,

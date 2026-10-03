@@ -215,13 +215,33 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // Master Admin is strictly restricted to aw03102008@gmail.com
-  const isAuthorizedAdmin = 
-    (googleUser?.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) || 
-    (settings.profile.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase());
+  // Master Admin is strictly restricted to authenticated Google User aw03102008@gmail.com
+  const isAuthorizedAdmin = Boolean(
+    googleUser && 
+    googleUser.email && 
+    googleUser.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()
+  );
+
+  // Security guard: If this device is not authenticated as aw03102008@gmail.com, completely strip admin role and lock mode
+  useEffect(() => {
+    if (!isAuthorizedAdmin) {
+      if (settings.adminModeUnlocked || settings.profile.role === 'superadmin' || settings.profile.role === 'admin') {
+        setSettings(prev => ({
+          ...prev,
+          adminModeUnlocked: false,
+          profile: {
+            ...prev.profile,
+            role: 'user',
+            avatar: prev.profile.avatar === '👑' ? '🕊️' : prev.profile.avatar
+          }
+        }));
+      }
+    }
+  }, [isAuthorizedAdmin, settings.adminModeUnlocked, settings.profile.role]);
 
   const unlockAdmin = () => {
     // Only callable by aw03102008@gmail.com
+    if (!isAuthorizedAdmin) return;
     updateProfile({ role: 'superadmin', email: MASTER_ADMIN_EMAIL, avatar: '👑' });
     sounds.playVictory();
     logAuditEvent('Master Admin Verified', `God-Mode active for ${MASTER_ADMIN_EMAIL}`, 'admin');
@@ -572,6 +592,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const verifyAdminPin = (pin: string) => {
+    if (!isAuthorizedAdmin) {
+      sounds.playIncorrect();
+      return false;
+    }
     if (pin === settings.adminPin || pin === '7777') {
       updateSettings({ adminModeUnlocked: true });
       sounds.playCorrect();

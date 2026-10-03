@@ -51,8 +51,10 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
         } catch {}
       }
 
-      const isMasterAdmin = (googleUser?.email?.toLowerCase().trim() === 'aw03102008@gmail.com') ||
-                            (settings.profile.email?.toLowerCase().trim() === 'aw03102008@gmail.com');
+      const isMasterAdmin = Boolean(
+        googleUser?.email &&
+        googleUser.email.toLowerCase().trim() === 'aw03102008@gmail.com'
+      );
       const userId = isMasterAdmin ? 'usr_master_admin_aw' : (googleUser?.uid || deviceUserId);
 
       // Register with global Firestore and backend

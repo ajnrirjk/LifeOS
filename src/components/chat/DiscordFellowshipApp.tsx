@@ -157,7 +157,10 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<any>(null);
 
-  const isSuperAdmin = currentUser.email === SUPER_ADMIN_EMAIL || currentUser.isOwner;
+  const isSuperAdmin = Boolean(
+    currentUser.isGoogleUser && 
+    currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
+  );
 
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
   const activeChannel = isDMView
@@ -181,7 +184,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   useEffect(() => {
     const unsubAuth = googleDriveService.initAuth((user) => {
       if (user) {
-        const isOwner = user.email === SUPER_ADMIN_EMAIL;
+        const isOwner = Boolean(user.email && user.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase());
         const userObj = {
           id: user.uid || user.email || 'google_user',
           name: isOwner ? 'Anthony Williams (Owner)' : (user.displayName || user.email?.split('@')[0] || 'Believer in Christ'),
@@ -472,7 +475,10 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       return;
     }
 
-    const isOwner = currentUser.email === SUPER_ADMIN_EMAIL;
+    const isOwner = Boolean(
+      currentUser.isGoogleUser && 
+      currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
+    );
     const updatedUser = {
       ...currentUser,
       name: cleanName,
@@ -499,7 +505,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     sounds.playTap();
     try {
       const { user } = await googleDriveService.signIn();
-      const isOwner = user.email === SUPER_ADMIN_EMAIL;
+      const isOwner = Boolean(user.email && user.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase());
       const updatedUser = {
         id: user.uid || user.email || 'google_user',
         name: isOwner ? 'Anthony Williams (Owner)' : (user.displayName || user.email?.split('@')[0] || 'Believer in Christ'),
