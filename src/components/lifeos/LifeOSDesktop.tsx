@@ -202,7 +202,7 @@ export const LifeOSDesktop: React.FC = () => {
       {/* Desktop Workspace / Active App Window / Desktop Widgets */}
       <div className={`flex-1 relative overflow-hidden flex flex-col ${
         !isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized
-          ? 'p-0 md:p-3 pb-16 md:pb-24'
+          ? 'p-0 md:p-3 pb-0 md:pb-24'
           : 'p-2 sm:p-3 pb-20 md:pb-24'
       }`}>
         <AnimatePresence mode="wait">
@@ -335,7 +335,7 @@ export const LifeOSDesktop: React.FC = () => {
               </div>
 
               {/* Window Body: Specific App Rendering */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 {settings.appVisibility[activeApp.id] === false ? (
                   <div className="h-full min-h-[300px] flex flex-col items-center justify-center p-8 text-center bg-stone-950/95 text-white">
                     <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border-2 border-rose-500/30 flex items-center justify-center text-3xl mb-4">

@@ -1269,7 +1269,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
           </div>
 
           {/* Input Bar */}
-          <div className="px-2.5 sm:px-4 pb-3 sm:pb-4 pt-1 bg-[#313338] shrink-0">
+          <div className="px-2.5 sm:px-4 pb-[calc(58px+env(safe-area-inset-bottom,0px))] md:pb-3 pt-1 bg-[#313338] shrink-0">
             {replyingTo && (
               <div className="flex items-center justify-between px-3 py-1 bg-[#2b2d31] rounded-t-lg text-xs text-stone-300 border-b border-[#1f2023]">
                 <div className="flex items-center gap-1.5 truncate">

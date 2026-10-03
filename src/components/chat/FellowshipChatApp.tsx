@@ -827,7 +827,7 @@ export const FellowshipChatApp: React.FC = () => {
         )}
 
         {/* Chat Input Bar */}
-        <div className="p-3.5 bg-black/40 border-t border-white/10 shrink-0">
+        <div className="p-3.5 pb-[calc(58px+env(safe-area-inset-bottom,0px))] md:pb-3.5 bg-black/40 border-t border-white/10 shrink-0">
           <form onSubmit={handleSendMessage} className="flex items-center gap-2">
             {/* Quick Share Verse on Mobile */}
             <button
