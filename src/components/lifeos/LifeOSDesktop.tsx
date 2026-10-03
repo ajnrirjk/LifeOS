@@ -29,6 +29,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft, Megaphone } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
+import { WelcomeOnboardingModal } from './WelcomeOnboardingModal';
 
 // Renders the full flagship FaithLingo app inside its LifeOS window
 const FaithLingoWindowContent: React.FC = () => {
@@ -79,6 +80,16 @@ export const LifeOSDesktop: React.FC = () => {
   } = useLifeOS();
 
   const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const isRegistered = localStorage.getItem('lifeos_user_registered_v2');
+      const googleUser = localStorage.getItem('lifeos_persistent_google_user');
+      return !isRegistered && !googleUser;
+    } catch {
+      return false;
+    }
+  });
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
     const isDirectPrivacyRoute =
@@ -371,6 +382,12 @@ export const LifeOSDesktop: React.FC = () => {
         onAddWidget={addDesktopWidget}
         onRemoveWidget={removeDesktopWidget}
         onResetDefaults={resetDesktopWidgets}
+      />
+
+      {/* Welcome & Name Registration Onboarding Modal for First-time users */}
+      <WelcomeOnboardingModal
+        isOpen={isOnboardingOpen}
+        onComplete={() => setIsOnboardingOpen(false)}
       />
 
       {/* Official Life OS Privacy Policy Modal */}

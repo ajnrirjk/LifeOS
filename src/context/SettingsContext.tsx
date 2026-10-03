@@ -398,6 +398,101 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAuditLogs(prev => [newLog, ...prev.slice(0, 99)]);
   };
 
+  // Load Global Config & Real Fellowship Members on mount and listen to updates
+  useEffect(() => {
+    // 1. Fetch Global System Config
+    const fetchGlobalConfig = async () => {
+      try {
+        const res = await fetch('/api/global/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            setSettings(prev => ({
+              ...prev,
+              activeAnnouncement: data.activeAnnouncement ?? prev.activeAnnouncement,
+              appVisibility: data.appVisibility ? { ...prev.appVisibility, ...data.appVisibility } : prev.appVisibility,
+              maintenanceMode: data.maintenanceMode ?? prev.maintenanceMode,
+              maintenanceMessage: data.maintenanceMessage ?? prev.maintenanceMessage
+            }));
+          }
+        }
+      } catch {}
+    };
+
+    // 2. Fetch Real Fellowship Members
+    const fetchRealMembers = async () => {
+      try {
+        const res = await fetch('/api/fellowship/members');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.members && Array.isArray(data.members) && data.members.length > 0) {
+            setMembers(data.members);
+          }
+        }
+      } catch {}
+    };
+
+    fetchGlobalConfig();
+    fetchRealMembers();
+
+    // 3. Connect to SSE Stream for instant global updates
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/chat/stream');
+      eventSource.addEventListener('global_config_updated', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data) {
+            setSettings(prev => ({
+              ...prev,
+              activeAnnouncement: data.activeAnnouncement,
+              appVisibility: data.appVisibility ? { ...prev.appVisibility, ...data.appVisibility } : prev.appVisibility,
+              maintenanceMode: data.maintenanceMode ?? prev.maintenanceMode
+            }));
+          }
+        } catch {}
+      });
+
+      eventSource.addEventListener('fellowship_members_updated', (e: MessageEvent) => {
+        try {
+          const list = JSON.parse(e.data);
+          if (Array.isArray(list) && list.length > 0) {
+            setMembers(list);
+          }
+        } catch {}
+      });
+    } catch {}
+
+    // Polling fallback every 10s
+    const pollInterval = setInterval(() => {
+      fetchGlobalConfig();
+      fetchRealMembers();
+    }, 10000);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      clearInterval(pollInterval);
+    };
+  }, []);
+
+  // Update real user in backend registry whenever profile changes
+  useEffect(() => {
+    if (settings.profile.name && settings.profile.name !== 'Believer (Faith Explorer)') {
+      fetch('/api/fellowship/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: googleUser?.uid || settings.profile.id,
+          name: settings.profile.name,
+          handle: settings.profile.handle,
+          avatar: settings.profile.avatar,
+          email: googleUser?.email || settings.profile.email,
+          photoURL: googleUser?.photoURL || settings.profile.photoURL
+        })
+      }).catch(() => {});
+    }
+  }, [settings.profile.name, settings.profile.handle, settings.profile.avatar, googleUser]);
+
   const updateSettings = (updates: Partial<UserSettings>) => {
     setSettings(prev => {
       const next = { ...prev, ...updates };
@@ -407,44 +502,90 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateProfile = (updates: Partial<UserProfile>) => {
-    setSettings(prev => ({
-      ...prev,
-      profile: { ...prev.profile, ...updates }
-    }));
+    setSettings(prev => {
+      const updatedProfile = { ...prev.profile, ...updates };
+      return {
+        ...prev,
+        profile: updatedProfile
+      };
+    });
     logAuditEvent('Profile Modified', `Updated profile: ${Object.keys(updates).join(', ')}`, 'settings');
   };
 
-  const updateMemberRole = (memberId: string, role: UserRole) => {
+  const updateMemberRole = async (memberId: string, role: UserRole) => {
     setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role } : m));
     logAuditEvent('User Role Changed', `Member ${memberId} assigned new role: ${role}`, 'admin');
+    try {
+      await fetch('/api/fellowship/moderate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, role })
+      });
+    } catch {}
   };
 
-  const updateMemberStatus = (memberId: string, status: 'active' | 'muted' | 'banned') => {
+  const updateMemberStatus = async (memberId: string, status: 'active' | 'muted' | 'banned') => {
     setMembers(prev => prev.map(m => m.id === memberId ? { ...m, status } : m));
     logAuditEvent('User Moderated', `Member ${memberId} status set to: ${status}`, 'moderation');
+    try {
+      await fetch('/api/fellowship/moderate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, status })
+      });
+    } catch {}
   };
 
-  const addMember = (member: Omit<FellowshipMember, 'id'>) => {
+  const addMember = async (member: Omit<FellowshipMember, 'id'>) => {
     const newMember: FellowshipMember = {
       ...member,
       id: `mem_${Date.now()}`
     };
     setMembers(prev => [newMember, ...prev]);
     logAuditEvent('New Member Added', `Registered believer: ${member.name} (${member.role})`, 'admin');
+    try {
+      await fetch('/api/fellowship/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMember)
+      });
+    } catch {}
   };
 
-  const deleteMember = (memberId: string) => {
+  const deleteMember = async (memberId: string) => {
     setMembers(prev => prev.filter(m => m.id !== memberId));
     logAuditEvent('Member Removed', `Removed believer account ID: ${memberId}`, 'admin');
+    try {
+      await fetch('/api/fellowship/moderate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, action: 'delete' })
+      });
+    } catch {}
   };
 
-  const setAnnouncement = (announcement: SystemAnnouncement | null) => {
+  const setAnnouncement = async (announcement: SystemAnnouncement | null) => {
     setSettings(prev => ({ ...prev, activeAnnouncement: announcement }));
     if (announcement) {
       logAuditEvent('Announcement Broadcasted', `Title: "${announcement.title}"`, 'admin');
     } else {
       logAuditEvent('Announcement Cleared', 'Dismissed broadcast', 'admin');
     }
+
+    // Transmit to all global devices via server API
+    try {
+      await fetch('/api/global/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(announcement ? {
+          title: announcement.title,
+          message: announcement.message,
+          type: announcement.type,
+          author: announcement.author || 'Master Administrator',
+          isActive: true
+        } : { isActive: false })
+      });
+    } catch {}
   };
 
   const toggleMaintenanceMode = (enabled: boolean, message?: string) => {
@@ -456,19 +597,29 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     logAuditEvent('Maintenance Mode Toggle', `Status: ${enabled ? 'ENABLED' : 'DISABLED'}`, 'admin');
   };
 
-  const toggleAppVisibility = (appId: string) => {
+  const toggleAppVisibility = async (appId: string) => {
+    let nextAppVisibility: Record<string, boolean> = {};
     setSettings(prev => {
       const current = prev.appVisibility[appId] !== false;
-      const next = {
-        ...prev,
-        appVisibility: {
-          ...prev.appVisibility,
-          [appId]: !current
-        }
+      nextAppVisibility = {
+        ...prev.appVisibility,
+        [appId]: !current
       };
-      return next;
+      return {
+        ...prev,
+        appVisibility: nextAppVisibility
+      };
     });
     logAuditEvent('App Feature Flag Toggled', `App: ${appId}`, 'admin');
+
+    // Transmit feature flag update to all devices
+    try {
+      await fetch('/api/global/app-visibility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appVisibility: nextAppVisibility })
+      });
+    } catch {}
   };
 
   const exportBackup = () => {

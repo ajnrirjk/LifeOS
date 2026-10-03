@@ -1,21 +1,27 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLifeOS } from '../../context/LifeOSContext';
+import { useSettings } from '../../context/SettingsContext';
 import { Search, X, Plus, Trash2 } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 
 export const LaunchpadModal: React.FC = () => {
   const { apps, launchApp, isLaunchpadOpen, setIsLaunchpadOpen, deleteApp } = useLifeOS();
+  const { settings } = useSettings();
   const [search, setSearch] = useState('');
 
   if (!isLaunchpadOpen) return null;
 
-  const filteredApps = apps.filter(a => 
-    !search.trim() || 
-    a.title.toLowerCase().includes(search.toLowerCase()) || 
-    a.category.toLowerCase().includes(search.toLowerCase()) || 
-    a.description.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredApps = apps.filter(a => {
+    const isVisible = settings.appVisibility[a.id] !== false;
+    if (!isVisible) return false;
+    return (
+      !search.trim() || 
+      a.title.toLowerCase().includes(search.toLowerCase()) || 
+      a.category.toLowerCase().includes(search.toLowerCase()) || 
+      a.description.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   return (
     <AnimatePresence>

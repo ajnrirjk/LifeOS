@@ -928,6 +928,236 @@ app.get('/api/chat/presence', (_req: Request, res: Response) => {
   });
 });
 
+// ==========================================
+// GLOBAL CONFIG & BROADCAST SYSTEM
+// ==========================================
+
+const GLOBAL_CONFIG_FILE = path.resolve(__dirname, 'data', 'system_global_config.json');
+const FELLOWSHIP_MEMBERS_FILE = path.resolve(__dirname, 'data', 'fellowship_members.json');
+
+interface GlobalSystemConfig {
+  activeAnnouncement: {
+    id: string;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'alert' | 'celebration';
+    isActive: boolean;
+    author: string;
+    timestamp: string;
+  } | null;
+  appVisibility: Record<string, boolean>;
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  lastUpdated: number;
+}
+
+interface RealFellowshipMember {
+  id: string;
+  name: string;
+  handle: string;
+  avatar: string;
+  photoURL?: string;
+  role: 'user' | 'moderator' | 'admin' | 'superadmin';
+  status: 'active' | 'muted' | 'banned';
+  email?: string;
+  lastActive: string;
+  xp: number;
+  streak: number;
+  warningsCount: number;
+  notes?: string;
+  isOnline?: boolean;
+}
+
+let globalConfig: GlobalSystemConfig = {
+  activeAnnouncement: {
+    id: 'ann_welcome',
+    title: '🌿 Welcome to LifeOS 2.0',
+    message: 'Global synchronization is live across all devices! Welcome to the fellowship.',
+    type: 'celebration',
+    isActive: true,
+    author: 'Master Administrator (aw03102008@gmail.com)',
+    timestamp: 'Just now'
+  },
+  appVisibility: {
+    faithlingo: true,
+    bible_journal: true,
+    fellowship_chat: true,
+    mini_cats: true,
+    mini_games: true,
+    youtube: true
+  },
+  maintenanceMode: false,
+  maintenanceMessage: 'System maintenance in progress. All offline features remain functional.',
+  lastUpdated: Date.now()
+};
+
+const realFellowshipMembers: Map<string, RealFellowshipMember> = new Map();
+
+function saveGlobalConfigToDisk() {
+  try {
+    fs.mkdirSync(path.dirname(GLOBAL_CONFIG_FILE), { recursive: true });
+    fs.writeFileSync(GLOBAL_CONFIG_FILE, JSON.stringify(globalConfig, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save global config:', err);
+  }
+}
+
+function saveFellowshipMembersToDisk() {
+  try {
+    fs.mkdirSync(path.dirname(FELLOWSHIP_MEMBERS_FILE), { recursive: true });
+    const list = Array.from(realFellowshipMembers.values());
+    fs.writeFileSync(FELLOWSHIP_MEMBERS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save fellowship members:', err);
+  }
+}
+
+function loadGlobalConfigAndMembers() {
+  try {
+    if (fs.existsSync(GLOBAL_CONFIG_FILE)) {
+      const data = JSON.parse(fs.readFileSync(GLOBAL_CONFIG_FILE, 'utf-8'));
+      if (data && typeof data === 'object') {
+        globalConfig = { ...globalConfig, ...data };
+      }
+    }
+  } catch (err) {
+    console.error('Error loading global config:', err);
+  }
+
+  try {
+    if (fs.existsSync(FELLOWSHIP_MEMBERS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(FELLOWSHIP_MEMBERS_FILE, 'utf-8'));
+      if (Array.isArray(data)) {
+        data.forEach((m: RealFellowshipMember) => {
+          realFellowshipMembers.set(m.id, m);
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error loading fellowship members:', err);
+  }
+}
+
+loadGlobalConfigAndMembers();
+
+// GET Global Config (Announcements, App Visibility flags, Maintenance status)
+app.get('/api/global/config', (_req: Request, res: Response) => {
+  return res.json(globalConfig);
+});
+
+// POST Send Global Announcement Broadcast (Transmits to all devices)
+app.post('/api/global/broadcast', (req: Request, res: Response) => {
+  const { title, message, type = 'celebration', author = 'Master Admin', isActive = true } = req.body;
+  
+  if (isActive && (!title || !message)) {
+    return res.status(400).json({ error: 'Title and message are required for active broadcast' });
+  }
+
+  globalConfig.activeAnnouncement = isActive ? {
+    id: `ann_${Date.now()}`,
+    title: String(title).trim(),
+    message: String(message).trim(),
+    type,
+    isActive: true,
+    author: String(author).trim(),
+    timestamp: 'Just now'
+  } : null;
+
+  globalConfig.lastUpdated = Date.now();
+  saveGlobalConfigToDisk();
+
+  // Broadcast to all connected clients via SSE
+  broadcastToChat('global_config_updated', globalConfig);
+
+  return res.json({ success: true, config: globalConfig });
+});
+
+// POST Update App Visibility Feature Flags
+app.post('/api/global/app-visibility', (req: Request, res: Response) => {
+  const { appVisibility } = req.body;
+  if (appVisibility && typeof appVisibility === 'object') {
+    globalConfig.appVisibility = { ...globalConfig.appVisibility, ...appVisibility };
+    globalConfig.lastUpdated = Date.now();
+    saveGlobalConfigToDisk();
+
+    // Broadcast change to all devices
+    broadcastToChat('global_config_updated', globalConfig);
+    return res.json({ success: true, appVisibility: globalConfig.appVisibility });
+  }
+  return res.status(400).json({ error: 'Invalid appVisibility payload' });
+});
+
+// GET Real Fellowship Members List
+app.get('/api/fellowship/members', (_req: Request, res: Response) => {
+  const list = Array.from(realFellowshipMembers.values()).map(m => {
+    // Check if currently online in active chat members
+    const isOnlineNow = activeMembers.has(m.id) || (Date.now() - (m.xp ? 0 : 0) < 60000);
+    return {
+      ...m,
+      isOnline: isOnlineNow
+    };
+  });
+  return res.json({ members: list, count: list.length });
+});
+
+// POST Register / Update Real User in Fellowship
+app.post('/api/fellowship/register', (req: Request, res: Response) => {
+  const { id, name, handle, avatar, email, photoURL, xp = 0, streak = 1 } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+
+  const userId = String(id || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+  const isMasterAdmin = String(email || '').toLowerCase() === 'aw03102008@gmail.com';
+  
+  const existing = realFellowshipMembers.get(userId);
+  const updatedMember: RealFellowshipMember = {
+    id: userId,
+    name: String(name).trim(),
+    handle: String(handle || `@${String(name).toLowerCase().replace(/[^a-z0-9_]/g, '')}`).trim(),
+    avatar: isMasterAdmin ? '👑' : (avatar || existing?.avatar || '🕊️'),
+    photoURL: photoURL || existing?.photoURL,
+    role: isMasterAdmin ? 'superadmin' : (existing?.role || 'user'),
+    status: existing?.status || 'active',
+    email: email || existing?.email,
+    lastActive: 'Just now',
+    xp: Math.max(Number(xp) || 0, existing?.xp || 0),
+    streak: Math.max(Number(streak) || 1, existing?.streak || 1),
+    warningsCount: existing?.warningsCount || 0,
+    notes: isMasterAdmin ? 'Master System Administrator' : (existing?.notes || 'Fellowship Believer')
+  };
+
+  realFellowshipMembers.set(userId, updatedMember);
+  saveFellowshipMembersToDisk();
+
+  // Broadcast members list update
+  broadcastToChat('fellowship_members_updated', Array.from(realFellowshipMembers.values()));
+
+  return res.json({ success: true, member: updatedMember });
+});
+
+// POST Moderate Fellowship Member (Promote, Mute, Ban, Delete)
+app.post('/api/fellowship/moderate', (req: Request, res: Response) => {
+  const { memberId, action, role, status } = req.body;
+  if (!memberId) return res.status(400).json({ error: 'memberId is required' });
+
+  if (action === 'delete') {
+    realFellowshipMembers.delete(memberId);
+  } else {
+    const member = realFellowshipMembers.get(memberId);
+    if (member) {
+      if (role) member.role = role;
+      if (status) member.status = status;
+      realFellowshipMembers.set(memberId, member);
+    }
+  }
+
+  saveFellowshipMembersToDisk();
+  broadcastToChat('fellowship_members_updated', Array.from(realFellowshipMembers.values()));
+
+  return res.json({ success: true, members: Array.from(realFellowshipMembers.values()) });
+});
+
 // 8. User Heartbeat
 app.post('/api/chat/heartbeat', (req: Request, res: Response) => {
   const { userId, userName, photoURL, email, isGoogleUser } = req.body;
