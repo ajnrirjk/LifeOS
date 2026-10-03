@@ -82,7 +82,7 @@ class ChatService {
   private cloudEventSource: EventSource | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private listeners: Set<ChatEventListener> = new Set();
-  private pollInterval: any = null;
+  private historyInterval: any = null;
   private currentUser: ChatUser | null = null;
 
   // In-memory + localStorage Cache
@@ -96,18 +96,22 @@ class ChatService {
     this.fetchHistoryFromCloudRelay();
     this.initLocalSSE();
 
-    // Background sync check every 3.5 seconds
-    this.pollInterval = setInterval(() => {
+    // Gentle background history sync every 15s (without spamming public relay)
+    this.historyInterval = setInterval(() => {
       this.fetchHistoryFromCloudRelay();
-      this.listeners.forEach(cb => cb({ type: 'poll_tick', data: Date.now() }));
-    }, 3500);
+    }, 15000);
   }
 
   private initCaches() {
     try {
       const savedChannels = localStorage.getItem('lifeos_fellowship_channels_cache');
       if (savedChannels) {
-        this.channelsCache = JSON.parse(savedChannels);
+        const parsed = JSON.parse(savedChannels);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.channelsCache = parsed;
+        } else {
+          this.channelsCache = DEFAULT_CHANNELS;
+        }
       } else {
         this.channelsCache = DEFAULT_CHANNELS;
       }
@@ -118,7 +122,12 @@ class ChatService {
     try {
       const savedMsgs = localStorage.getItem('lifeos_fellowship_messages_cache');
       if (savedMsgs) {
-        this.messagesCache = JSON.parse(savedMsgs);
+        const parsed = JSON.parse(savedMsgs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.messagesCache = parsed;
+        } else {
+          this.messagesCache = DEFAULT_SEED_MESSAGES;
+        }
       } else {
         this.messagesCache = DEFAULT_SEED_MESSAGES;
       }
@@ -148,8 +157,8 @@ class ChatService {
     }
   }
 
-  // Fetch past messages stored in the cloud relay so new tabs & devices see everything
-  private async fetchHistoryFromCloudRelay() {
+  // Fetch past messages stored in cloud relay cache
+  public async fetchHistoryFromCloudRelay() {
     if (typeof window === 'undefined') return;
     try {
       const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1`);
@@ -165,7 +174,6 @@ class ChatService {
             let payload: any = null;
             try {
               payload = JSON.parse(raw.message);
-              // Handle nested payloads
               if (payload && payload.message && typeof payload.message === 'string') {
                 try {
                   payload = JSON.parse(payload.message);
@@ -178,9 +186,11 @@ class ChatService {
             if (payload && payload.type && payload.data) {
               if (payload.type === 'message') {
                 const msg: ChatMessage = payload.data;
-                if (!this.messagesCache.some(m => m.id === msg.id)) {
-                  this.messagesCache.push(msg);
-                  hasNew = true;
+                if (msg && msg.id && msg.text) {
+                  if (!this.messagesCache.some(m => m.id === msg.id)) {
+                    this.messagesCache.push(msg);
+                    hasNew = true;
+                  }
                 }
               } else if (payload.type === 'reaction') {
                 const { messageId, reactions } = payload.data;
@@ -190,9 +200,11 @@ class ChatService {
                 hasNew = true;
               } else if (payload.type === 'new_channel') {
                 const chan: ChatChannel = payload.data;
-                if (!this.channelsCache.some(c => c.id === chan.id)) {
-                  this.channelsCache.push(chan);
-                  hasNew = true;
+                if (chan && chan.id) {
+                  if (!this.channelsCache.some(c => c.id === chan.id)) {
+                    this.channelsCache.push(chan);
+                    hasNew = true;
+                  }
                 }
               }
             }
@@ -202,7 +214,7 @@ class ChatService {
 
       if (hasNew) {
         this.saveCaches();
-        this.emit({ type: 'history_sync', data: Date.now() });
+        this.emit({ type: 'history_sync', data: this.messagesCache });
       }
     } catch {}
   }
@@ -212,6 +224,9 @@ class ChatService {
     if (typeof window === 'undefined') return;
 
     try {
+      if (this.cloudEventSource) {
+        this.cloudEventSource.close();
+      }
       const sse = new EventSource(`${CLOUD_RELAY_URL}/sse`);
       this.cloudEventSource = sse;
 
@@ -222,7 +237,6 @@ class ChatService {
             let payload: any = null;
             try {
               payload = JSON.parse(raw.message);
-              // Handle single or double nested payloads
               if (payload && payload.message && typeof payload.message === 'string') {
                 try {
                   payload = JSON.parse(payload.message);
@@ -240,12 +254,12 @@ class ChatService {
       };
 
       sse.onerror = () => {
-        // Auto-reconnect after 3s
         if (this.cloudEventSource) {
           this.cloudEventSource.close();
           this.cloudEventSource = null;
         }
-        setTimeout(() => this.initCloudRelay(), 3000);
+        // Auto-reconnect after 4s
+        setTimeout(() => this.initCloudRelay(), 4000);
       };
     } catch {}
   }
@@ -297,6 +311,7 @@ class ChatService {
   private handleIncomingEvent(type: string, data: any, shouldBroadcast = true) {
     if (type === 'message') {
       const msg: ChatMessage = data;
+      if (!msg || !msg.id || !msg.text) return;
       const exists = this.messagesCache.some(m => m.id === msg.id);
       if (!exists) {
         this.messagesCache.push(msg);
@@ -312,6 +327,7 @@ class ChatService {
       this.emit({ type: 'reaction', data });
     } else if (type === 'new_channel') {
       const chan: ChatChannel = data;
+      if (!chan || !chan.id) return;
       const exists = this.channelsCache.some(c => c.id === chan.id);
       if (!exists) {
         this.channelsCache.push(chan);
@@ -323,25 +339,28 @@ class ChatService {
     }
 
     if (shouldBroadcast) {
-      // 1. Broadcast to other tabs on same machine
+      // 1. Broadcast to other tabs on same device (all events including typing/presence)
       try {
         this.broadcastChannel?.postMessage({ type, data });
       } catch {}
 
-      // 2. Broadcast directly to cloud relay for other devices & accounts
-      try {
-        fetch(CLOUD_RELAY_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type, data })
-        }).catch(() => {});
-      } catch {}
+      // 2. Only broadcast persistent events (message, reaction, new_channel) to cloud relay
+      // (This avoids flooding the relay and prevents rate limit 429 errors)
+      if (type === 'message' || type === 'reaction' || type === 'new_channel') {
+        try {
+          fetch(CLOUD_RELAY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, data })
+          }).catch(() => {});
+        } catch {}
+      }
     }
   }
 
   setCurrentUser(user: ChatUser) {
     this.currentUser = user;
-    // Broadcast user presence to cloud relay
+    // Broadcast user presence locally
     this.handleIncomingEvent('presence', {
       activeUsers: 2,
       members: [{
@@ -534,13 +553,6 @@ class ChatService {
   // Send typing indicator
   async sendTyping(channelId: string, userName: string, isTyping: boolean): Promise<void> {
     this.handleIncomingEvent('typing', { channelId, userName, isTyping, timestamp: Date.now() }, true);
-    try {
-      fetch('/api/chat/typing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId, userName, isTyping }),
-      }).catch(() => {});
-    } catch {}
   }
 }
 
