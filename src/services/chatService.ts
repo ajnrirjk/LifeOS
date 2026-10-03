@@ -95,11 +95,12 @@ class ChatService {
     this.initCloudRelay();
     this.fetchHistoryFromCloudRelay();
     this.initLocalSSE();
+    this.initVisibilityListeners();
 
-    // Gentle background history sync every 15s (without spamming public relay)
+    // Fast 2.5s fallback pull to guarantee real-time delivery even if SSE is sleeping
     this.historyInterval = setInterval(() => {
       this.fetchHistoryFromCloudRelay();
-    }, 15000);
+    }, 2500);
   }
 
   private initCaches() {
@@ -157,7 +158,18 @@ class ChatService {
     }
   }
 
-  // Fetch past messages stored in cloud relay cache
+  // Refresh instantly when user focuses tab or window
+  private initVisibilityListeners() {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('focus', () => this.fetchHistoryFromCloudRelay());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.fetchHistoryFromCloudRelay();
+      }
+    });
+  }
+
+  // Fetch past messages stored in cloud relay cache & server
   public async fetchHistoryFromCloudRelay() {
     if (typeof window === 'undefined') return;
     try {
@@ -219,14 +231,15 @@ class ChatService {
     } catch {}
   }
 
-  // Universal Cloud Relay using ntfy.sh for Cross-Device & Vercel sync
+  // Universal Cloud Relay using native auto-reconnecting SSE
   private initCloudRelay() {
     if (typeof window === 'undefined') return;
 
     try {
       if (this.cloudEventSource) {
-        this.cloudEventSource.close();
+        try { this.cloudEventSource.close(); } catch {}
       }
+
       const sse = new EventSource(`${CLOUD_RELAY_URL}/sse`);
       this.cloudEventSource = sse;
 
@@ -253,13 +266,10 @@ class ChatService {
         } catch {}
       };
 
+      // Allow the browser's native EventSource reconnection engine to manage retries
       sse.onerror = () => {
-        if (this.cloudEventSource) {
-          this.cloudEventSource.close();
-          this.cloudEventSource = null;
-        }
-        // Auto-reconnect after 4s
-        setTimeout(() => this.initCloudRelay(), 4000);
+        // Trigger fallback poll immediately on disconnect
+        this.fetchHistoryFromCloudRelay();
       };
     } catch {}
   }
@@ -298,13 +308,6 @@ class ChatService {
           this.emit({ type: 'presence', data });
         } catch {}
       });
-
-      sse.onerror = () => {
-        if (this.localEventSource) {
-          this.localEventSource.close();
-          this.localEventSource = null;
-        }
-      };
     } catch {}
   }
 
@@ -339,13 +342,12 @@ class ChatService {
     }
 
     if (shouldBroadcast) {
-      // 1. Broadcast to other tabs on same device (all events including typing/presence)
+      // 1. Broadcast to other tabs on same device
       try {
         this.broadcastChannel?.postMessage({ type, data });
       } catch {}
 
-      // 2. Only broadcast persistent events (message, reaction, new_channel) to cloud relay
-      // (This avoids flooding the relay and prevents rate limit 429 errors)
+      // 2. Broadcast persistent events (message, reaction, new_channel) to cloud relay
       if (type === 'message' || type === 'reaction' || type === 'new_channel') {
         try {
           fetch(CLOUD_RELAY_URL, {
