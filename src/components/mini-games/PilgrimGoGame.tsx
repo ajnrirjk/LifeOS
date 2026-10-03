@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { sounds } from '../../services/soundEffects';
 import {
@@ -22,7 +22,13 @@ import {
   CheckCircle2,
   RefreshCw,
   ShoppingBag,
-  BookOpen
+  BookOpen,
+  ChevronRight,
+  Package,
+  Layers,
+  Sparkle,
+  Plus,
+  Lock
 } from 'lucide-react';
 
 interface PilgrimGoGameProps {
@@ -31,905 +37,1096 @@ interface PilgrimGoGameProps {
   highScore: number;
 }
 
-// Gear Types
-interface GearItem {
-  id: string;
-  name: string;
-  type: 'weapon' | 'armor' | 'helmet' | 'relic';
-  emoji: string;
-  rarity: 'common' | 'rare' | 'epic' | 'legendary';
-  atkBonus: number;
-  hpBonus: number;
-  special: string;
-}
+// Equipment Types & Database
+export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'sacred';
+export type ItemSlot = 'weapon' | 'armor' | 'ring' | 'amulet' | 'mount' | 'pet';
 
-// Companion Types
-interface Companion {
+export interface Equipment {
   id: string;
   name: string;
-  emoji: string;
+  slot: ItemSlot;
+  rarity: ItemRarity;
   level: number;
-  description: string;
-  buffType: 'heal' | 'shield' | 'damage' | 'crit' | 'coins';
+  emoji: string;
+  atk: number;
+  hp: number;
+  def: number;
+  critRate?: number;
+  specialTrait: string;
+  priceGold?: number;
+  priceGems?: number;
 }
 
-// Skill Blessings
-interface HolySkill {
+export const SHOP_ITEMS: Equipment[] = [
+  { id: 'shepherd_staff', name: "Shepherd's Crook", slot: 'weapon', rarity: 'common', level: 1, emoji: '🦯', atk: 25, hp: 40, def: 5, specialTrait: '+5% Healing', priceGold: 120 },
+  { id: 'david_sling', name: "David's Slingshot", slot: 'weapon', rarity: 'rare', level: 1, emoji: '🪨', atk: 55, hp: 80, def: 10, critRate: 15, specialTrait: '200% First Turn Strike', priceGold: 450 },
+  { id: 'sword_gideon', name: 'Sword of Gideon', slot: 'weapon', rarity: 'epic', level: 1, emoji: '⚔️', atk: 120, hp: 150, def: 25, critRate: 25, specialTrait: '+35% Holy Slash DMG', priceGold: 1200 },
+  { id: 'staff_moses', name: 'Staff of Moses', slot: 'weapon', rarity: 'sacred', level: 1, emoji: '⚡', atk: 280, hp: 350, def: 60, critRate: 35, specialTrait: 'Calls Red Sea Lightning', priceGems: 80 },
+
+  { id: 'linen_tunic', name: 'Galilee Linen Robe', slot: 'armor', rarity: 'common', level: 1, emoji: '🥋', atk: 5, hp: 110, def: 18, specialTrait: '+10% Dodge', priceGold: 100 },
+  { id: 'breastplate_faith', name: 'Breastplate of Faith', slot: 'armor', rarity: 'rare', level: 1, emoji: '🛡️', atk: 15, hp: 260, def: 45, specialTrait: 'Blocks 20% Damage', priceGold: 500 },
+  { id: 'robe_righteousness', name: 'Robe of Righteousness', slot: 'armor', rarity: 'epic', level: 1, emoji: '🥻', atk: 40, hp: 580, def: 95, specialTrait: '+25% Max HP Shield', priceGold: 1400 },
+  { id: 'armor_light', name: 'Celestial Armor of Light', slot: 'armor', rarity: 'sacred', level: 1, emoji: '✨', atk: 90, hp: 1200, def: 210, specialTrait: 'Immunity to Lethal Blows', priceGems: 100 },
+
+  { id: 'olive_ring', name: 'Mount of Olives Ring', slot: 'ring', rarity: 'common', level: 1, emoji: '💍', atk: 15, hp: 50, def: 8, specialTrait: '+10% Gold Drops', priceGold: 150 },
+  { id: 'ark_ring', name: 'Covenant Seal Ring', slot: 'ring', rarity: 'rare', level: 1, emoji: '💫', atk: 45, hp: 120, def: 20, critRate: 10, specialTrait: '+15% Critical Chance', priceGold: 600 },
+  { id: 'solomon_ring', name: 'Ring of Solomon', slot: 'ring', rarity: 'legendary', level: 1, emoji: '👑', atk: 110, hp: 320, def: 55, specialTrait: '+30% Skill Trigger Rate', priceGold: 2200 },
+
+  { id: 'mustard_seed', name: 'Mustard Seed Amulet', slot: 'amulet', rarity: 'rare', level: 1, emoji: '🌱', atk: 30, hp: 180, def: 25, specialTrait: 'Boosts Manna by 25%', priceGold: 550 },
+  { id: 'dove_pendant', name: 'Holy Spirit Pendant', slot: 'amulet', rarity: 'epic', level: 1, emoji: '🕊️', atk: 75, hp: 420, def: 60, specialTrait: 'Regenerates 5% HP per Turn', priceGold: 1600 },
+
+  { id: 'gentle_donkey', name: 'Faithful Colt Donkey', slot: 'mount', rarity: 'rare', level: 1, emoji: '🫏', atk: 35, hp: 200, def: 30, specialTrait: '+20% Travel Speed', priceGold: 700 },
+  { id: 'lion_judah', name: 'Lion of Judah', slot: 'mount', rarity: 'sacred', level: 1, emoji: '🦁', atk: 180, hp: 650, def: 90, specialTrait: 'Roars every 3 turns for 400 DMG', priceGems: 150 },
+
+  { id: 'peace_dove_pet', name: 'Peace Dove', slot: 'pet', rarity: 'rare', level: 1, emoji: '🕊️', atk: 20, hp: 150, def: 15, specialTrait: 'Heals 80 HP after combat', priceGold: 400 },
+  { id: 'lamb_god_pet', name: 'Pure Lamb', slot: 'pet', rarity: 'legendary', level: 1, emoji: '🐑', atk: 60, hp: 450, def: 50, specialTrait: 'Grants +35% EXP & Tokens', priceGold: 2000 }
+];
+
+export interface SkillChoice {
   id: string;
   name: string;
   tagline: string;
   emoji: string;
-  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Sacred';
+  color: string;
   description: string;
-  category: 'attack' | 'defense' | 'utility' | 'passive';
+  buffType: 'atk' | 'def' | 'hp' | 'lifesteal' | 'lightning' | 'shield' | 'crit';
+  value: number;
 }
 
-const ALL_SKILLS_POOL: HolySkill[] = [
-  { id: 'elijah_lightning', name: "Elijah's Heavenly Fire", tagline: 'Call down lightning from above', emoji: '⚡', rarity: 'rare', description: 'Strikes enemies for 150% Holy ATK every 3 turns', category: 'attack' },
-  { id: 'shield_of_faith', name: 'Shield of Faith', tagline: 'Extinguish all fiery darts', emoji: '🛡️', rarity: 'rare', description: 'Reduces incoming damage by 30% and reflects 15% holy burn', category: 'defense' },
-  { id: 'manna_lifesteal', name: 'Manna of Life', tagline: 'Spiritual renewal through battle', emoji: '🕊️', rarity: 'rare', description: 'Heals for 25% of all physical damage dealt', category: 'passive' },
-  { id: 'sword_of_spirit', name: 'Sword of the Spirit', tagline: 'Sharp as a two-edged blade', emoji: '⚔️', rarity: 'epic', description: '+35% Critical Strike chance and bypasses armor', category: 'attack' },
-  { id: 'loaves_fishes', name: 'Loaves & Fishes Bounty', tagline: 'Supernatural abundance', emoji: '🍞', rarity: 'common', description: 'Earn +40% more coins and start battles with +20 Max Shield', category: 'utility' },
-  { id: 'jericho_trumpet', name: 'Trumpet of Jericho', tagline: 'Walls come tumbling down', emoji: '🎺', rarity: 'epic', description: 'Reduces enemy Defense by 40% and stuns on turn 1', category: 'attack' },
-  { id: 'david_slingshot', name: "David's Five Smooth Stones", tagline: 'Faith over giants', emoji: '🪨', rarity: 'rare', description: 'Launches a 200% critical rock at the start of every combat', category: 'attack' },
-  { id: 'fruit_of_spirit', name: 'Fruits of the Spirit', tagline: 'Gentle continuous restoration', emoji: '🌿', rarity: 'common', description: 'Regenerates 8% Max HP at the end of every combat turn', category: 'defense' },
-  { id: 'parting_sea', name: 'Parting of the Red Sea', tagline: 'Clear a righteous path', emoji: '🌊', rarity: 'legendary', description: 'Deals 250% AoE Holy Damage to all foes and clears negative status', category: 'attack' },
-  { id: 'crown_of_life', name: 'Crown of Life', tagline: 'Faithful until the end', emoji: '👑', rarity: 'legendary', description: 'Revives with 60% HP upon fatal defeat (once per run)', category: 'passive' },
-  { id: 'samaritan_mercy', name: 'Samaritan Oil & Wine', tagline: 'Binding up all wounds', emoji: '🏺', rarity: 'common', description: 'Restores 35 HP immediately after every encounter', category: 'defense' },
-  { id: 'lion_of_judah', name: 'Lion of Judah Fury', tagline: 'The righteous are bold as lions', emoji: '🦁', rarity: 'legendary', description: '+50% ATK when HP drops below 50%', category: 'attack' }
+const SKILL_POOL: SkillChoice[] = [
+  { id: 'royal_crown', name: 'Crown of Glory', tagline: 'All Attributes Boost', emoji: '👑', rarity: 'Epic', color: 'from-amber-500 to-yellow-400', description: 'ATK +35%, DEF +25%, Max HP +30%', buffType: 'atk', value: 35 },
+  { id: 'holy_lightning', name: "Elijah's Thunderbolt", tagline: 'Heavenly Smite', emoji: '⚡', rarity: 'Sacred', color: 'from-cyan-500 to-blue-500', description: 'Strikes enemies for 250% Holy ATK every 2 turns', buffType: 'lightning', value: 250 },
+  { id: 'armor_god', name: 'Armor of God', tagline: 'Divine Barrier', emoji: '🛡️', rarity: 'Rare', color: 'from-blue-600 to-indigo-600', description: 'Reflects 30% incoming damage & gains 200 Shield', buffType: 'shield', value: 200 },
+  { id: 'manna_lifesteal', name: 'Living Water Lifesteal', tagline: 'Renewal in Battle', emoji: '🕊️', rarity: 'Rare', color: 'from-emerald-500 to-teal-500', description: 'Restores 30% of all damage dealt as HP', buffType: 'lifesteal', value: 30 },
+  { id: 'zealot_strike', name: 'Zeal of David', tagline: 'Unstoppable Momentum', emoji: '⚔️', rarity: 'Epic', color: 'from-rose-500 to-red-600', description: '+40% Critical Strike Rate & +50% Crit Damage', buffType: 'crit', value: 40 },
+  { id: 'jericho_shout', name: 'Trumpet of Jericho', tagline: 'Wall Breaker', emoji: '🎺', rarity: 'Rare', color: 'from-orange-500 to-amber-500', description: 'Reduces enemy Defense by 50% permanently', buffType: 'def', value: 50 },
+  { id: 'five_loaves', name: 'Multiplication Miracle', tagline: 'Abundant Grace', emoji: '🍞', rarity: 'Common', color: 'from-yellow-500 to-amber-600', description: 'Earn +50% Gold and restore 15% Max HP each day', buffType: 'hp', value: 15 },
+  { id: 'parting_waters', name: 'Parting the Seas', tagline: 'Sweeping Wave', emoji: '🌊', rarity: 'Sacred', color: 'from-sky-500 to-cyan-600', description: 'AoE holy wave hits all foes for 300% Holy ATK', buffType: 'atk', value: 60 }
 ];
 
-const COMPANIONS_POOL: Companion[] = [
-  { id: 'dove', name: 'Peace Dove', emoji: '🕊️', level: 1, description: 'Heals 12 HP every 3 combat turns & grants +15% dodge.', buffType: 'heal' },
-  { id: 'lamb', name: 'Gentle Lamb', emoji: '🐑', level: 1, description: 'Absorbs 1 fatal blow per run & increases gold by 30%.', buffType: 'coins' },
-  { id: 'lion', name: 'Judah Lion', emoji: '🦁', level: 1, description: 'Roars every 4 turns to deal 80 Holy Damage to enemies.', buffType: 'damage' },
-  { id: 'fish', name: 'Galilee Fish', emoji: '🐟', level: 1, description: '+20% Critical strike chance and +10% lifesteal.', buffType: 'crit' },
-  { id: 'mastiff', name: "Shepherd's Mastiff", emoji: '🐕', level: 1, description: 'Bites enemies every turn for 40% player ATK.', buffType: 'damage' }
-];
-
-interface EnemyData {
+export interface WorldTheme {
+  id: number;
   name: string;
-  emoji: string;
-  maxHp: number;
-  hp: number;
-  atk: number;
-  isBoss: boolean;
-  rewardExp: number;
-  rewardCoins: number;
+  sub: string;
+  skyGradient: [string, string];
+  groundColor: string;
+  treeColor: string;
+  enemyTypes: Array<{ name: string; emoji: string; hpMult: number; atkMult: number }>;
 }
 
-const ENEMIES_BY_CHAPTER: Record<number, EnemyData[]> = {
-  1: [
-    { name: 'Desert Jackal', emoji: '🐺', maxHp: 65, hp: 65, atk: 12, isBoss: false, rewardExp: 25, rewardCoins: 15 },
-    { name: 'Wild Marauder', emoji: '🗡️', maxHp: 80, hp: 80, atk: 14, isBoss: false, rewardExp: 30, rewardCoins: 20 },
-    { name: 'Philistine Scout', emoji: '🏹', maxHp: 95, hp: 95, atk: 18, isBoss: false, rewardExp: 35, rewardCoins: 25 },
-    { name: 'Giant of Gath', emoji: '👹', maxHp: 220, hp: 220, atk: 26, isBoss: true, rewardExp: 100, rewardCoins: 80 }
-  ],
-  2: [
-    { name: 'Roman Legionary', emoji: '🛡️', maxHp: 130, hp: 130, atk: 22, isBoss: false, rewardExp: 45, rewardCoins: 35 },
-    { name: 'Shadow Tempter', emoji: '👥', maxHp: 150, hp: 150, atk: 28, isBoss: false, rewardExp: 55, rewardCoins: 40 },
-    { name: 'Scorpion of the Valley', emoji: '🦂', maxHp: 140, hp: 140, atk: 32, isBoss: false, rewardExp: 50, rewardCoins: 38 },
-    { name: 'Centurion Commander', emoji: '⚔️', maxHp: 380, hp: 380, atk: 42, isBoss: true, rewardExp: 180, rewardCoins: 120 }
-  ],
-  3: [
-    { name: 'Desert Phantom', emoji: '🌪️', maxHp: 220, hp: 220, atk: 38, isBoss: false, rewardExp: 75, rewardCoins: 60 },
-    { name: 'Fiery Dart Archer', emoji: '🔥', maxHp: 240, hp: 240, atk: 46, isBoss: false, rewardExp: 85, rewardCoins: 70 },
-    { name: 'Dragon of Babylon', emoji: '🐉', maxHp: 650, hp: 650, atk: 65, isBoss: true, rewardExp: 350, rewardCoins: 250 }
-  ]
-};
+const WORLDS: WorldTheme[] = [
+  {
+    id: 1,
+    name: '1. Shores of Galilee',
+    sub: 'Green pastures & calm waters',
+    skyGradient: ['#38bdf8', '#bae6fd'],
+    groundColor: '#4ade80',
+    treeColor: '#15803d',
+    enemyTypes: [
+      { name: 'Playful Galilee Slime', emoji: '🟢', hpMult: 1, atkMult: 1 },
+      { name: 'Lake Fisherman Bandit', emoji: '🎣', hpMult: 1.3, atkMult: 1.2 },
+      { name: 'Roman Guard Scout', emoji: '🛡️', hpMult: 1.8, atkMult: 1.5 },
+      { name: 'Desert Jackal', emoji: '🐺', hpMult: 1.5, atkMult: 1.4 }
+    ]
+  },
+  {
+    id: 2,
+    name: '2. Valley of Elah',
+    sub: 'Where stones defeat giants',
+    skyGradient: ['#f59e0b', '#fed7aa'],
+    groundColor: '#ca8a04',
+    treeColor: '#78350f',
+    enemyTypes: [
+      { name: 'Canyon Scorpion', emoji: '🦂', hpMult: 2.2, atkMult: 2.0 },
+      { name: 'Philistine Warrior', emoji: '🗡️', hpMult: 2.8, atkMult: 2.4 },
+      { name: 'Giant Vanguard', emoji: '👹', hpMult: 4.5, atkMult: 3.2 }
+    ]
+  },
+  {
+    id: 3,
+    name: '3. Wilderness of Temptation',
+    sub: 'Fasting in the desert dunes',
+    skyGradient: ['#7c2d12', '#fdba74'],
+    groundColor: '#ea580c',
+    treeColor: '#7c2d12',
+    enemyTypes: [
+      { name: 'Desert Shadow Spirit', emoji: '👥', hpMult: 3.8, atkMult: 3.5 },
+      { name: 'Fiery Dart Phantom', emoji: '🔥', hpMult: 4.2, atkMult: 4.0 },
+      { name: 'Dragon of Babylon Boss', emoji: '🐉', hpMult: 8.0, atkMult: 5.5 }
+    ]
+  },
+  {
+    id: 4,
+    name: '4. Golden Gates of Jerusalem',
+    sub: 'Holy temple city of victory',
+    skyGradient: ['#a855f7', '#fbcfe8'],
+    groundColor: '#eab308',
+    treeColor: '#ca8a04',
+    enemyTypes: [
+      { name: 'Temple Inquisitor', emoji: '📜', hpMult: 5.5, atkMult: 5.0 },
+      { name: 'Centurion Legatus', emoji: '⚔️', hpMult: 6.8, atkMult: 6.0 },
+      { name: 'Celestial Gatekeeper', emoji: '👼', hpMult: 12.0, atkMult: 8.0 }
+    ]
+  }
+];
 
 export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack, highScore }) => {
-  // Game Loop State
+  // Navigation Tabs (Like Capybara Go bottom bar)
+  const [activeTab, setActiveTab] = useState<'adventure' | 'equip' | 'shop' | 'talents'>('adventure');
+
+  // Player Currencies & Global Progress
+  const [gold, setGold] = useState(() => {
+    try { return Number(localStorage.getItem('jesus_go_gold')) || 650; } catch { return 650; }
+  });
+  const [gems, setGems] = useState(() => {
+    try { return Number(localStorage.getItem('jesus_go_gems')) || 45; } catch { return 45; }
+  });
+  const [energy, setEnergy] = useState(30);
+  const [maxEnergy] = useState(30);
+  const [longestSurvived, setLongestSurvived] = useState(() => {
+    try { return Number(localStorage.getItem('jesus_go_max_day')) || 12; } catch { return 12; }
+  });
+
+  // Equipped Gear Inventory
+  const [equipped, setEquipped] = useState<Record<ItemSlot, Equipment | null>>({
+    weapon: SHOP_ITEMS[0],
+    armor: SHOP_ITEMS[4],
+    ring: SHOP_ITEMS[8],
+    amulet: null,
+    mount: SHOP_ITEMS[12],
+    pet: SHOP_ITEMS[14]
+  });
+
+  const [inventory, setInventory] = useState<Equipment[]>([
+    SHOP_ITEMS[0],
+    SHOP_ITEMS[4],
+    SHOP_ITEMS[8],
+    SHOP_ITEMS[12],
+    SHOP_ITEMS[14]
+  ]);
+
+  // Persistent Save
+  useEffect(() => {
+    try {
+      localStorage.setItem('jesus_go_gold', String(gold));
+      localStorage.setItem('jesus_go_gems', String(gems));
+      localStorage.setItem('jesus_go_max_day', String(longestSurvived));
+    } catch {}
+  }, [gold, gems, longestSurvived]);
+
+  // Current In-Run Adventure State
+  const [inRun, setInRun] = useState(false);
+  const [worldIndex, setWorldIndex] = useState(0);
   const [day, setDay] = useState(1);
-  const [isAutoWalking, setIsAutoWalking] = useState(false);
-  const [gameSpeed, setGameSpeed] = useState<1 | 2 | 3>(1);
+  const [autoWalk, setAutoWalk] = useState(true);
+  const [speedMultiplier, setSpeedMultiplier] = useState<1 | 2>(1);
   const [soundMuted, setSoundMuted] = useState(false);
 
-  // Hero Stats
-  const [hero, setHero] = useState({
-    name: 'Faithful Pilgrim',
-    level: 1,
-    exp: 0,
-    maxExp: 60,
-    hp: 120,
-    maxHp: 120,
-    atk: 25,
-    def: 8,
-    coins: 50,
-    graceTokens: 0,
-    hasRevived: false
-  });
+  // In-Run Hero Stats
+  const [heroLevel, setHeroLevel] = useState(1);
+  const [heroExp, setHeroExp] = useState(0);
+  const [heroMaxExp, setHeroMaxExp] = useState(50);
+  const [heroHp, setHeroHp] = useState(500);
+  const [heroMaxHp, setHeroMaxHp] = useState(500);
+  const [heroShield, setHeroShield] = useState(0);
 
-  // Equipped Skills & Gear & Companions
-  const [activeSkills, setActiveSkills] = useState<HolySkill[]>([]);
-  const [equippedGear, setEquippedGear] = useState<{
-    weapon: GearItem | null;
-    armor: GearItem | null;
-    helmet: GearItem | null;
-    relic: GearItem | null;
-  }>({
-    weapon: { id: 'crook', name: "Shepherd's Staff", type: 'weapon', emoji: '🦯', rarity: 'common', atkBonus: 8, hpBonus: 0, special: '+5% Healing' },
-    armor: { id: 'robe', name: 'Linen Tunic', type: 'armor', emoji: '🥋', rarity: 'common', atkBonus: 0, hpBonus: 30, special: '+3 Armor' },
-    helmet: null,
-    relic: null
-  });
-  const [activeCompanion, setActiveCompanion] = useState<Companion>(COMPANIONS_POOL[0]);
+  // In-Run Chosen Skills
+  const [learnedSkills, setLearnedSkills] = useState<SkillChoice[]>([]);
+  const [showSkillSelect, setShowSkillSelect] = useState(false);
+  const [offeredSkills, setOfferedSkills] = useState<SkillChoice[]>([]);
+  const [skillRefreshes, setSkillRefreshes] = useState(1);
 
-  // Current Encounter State
-  const [currentEvent, setCurrentEvent] = useState<{
-    type: 'idle_walk' | 'combat' | 'parable' | 'treasure' | 'campfire' | 'level_up' | 'game_over';
-    title: string;
-    description: string;
-    enemy?: EnemyData;
-    choices?: Array<{ text: string; action: () => void }>;
-    rewards?: { coins: number; exp: number; item?: GearItem };
-  }>({
-    type: 'idle_walk',
-    title: 'Beginning the Pilgrimage',
-    description: 'The morning sun rises over the Sea of Galilee. Take your staff and step forward in faith.'
-  });
+  // In-Run Combat / Event Status
+  const [runStage, setRunStage] = useState<'walking' | 'event' | 'battling' | 'victory' | 'gameover'>('walking');
+  const [eventText, setEventText] = useState('Jesus begins walking across the shores of Galilee...');
+  const [activeEnemy, setActiveEnemy] = useState<{
+    name: string;
+    emoji: string;
+    hp: number;
+    maxHp: number;
+    atk: number;
+  } | null>(null);
 
-  // 3-Skill Choice Selection Modal
-  const [skillChoices, setSkillChoices] = useState<HolySkill[] | null>(null);
+  const [battleRound, setBattleRound] = useState(1);
+  const [heroAttacking, setHeroAttacking] = useState(false);
+  const [enemyAttacking, setEnemyAttacking] = useState(false);
+  const [floatingDamage, setFloatingDamage] = useState<{ val: number; isCrit: boolean; isHero: boolean } | null>(null);
+  const [hitsCount, setHitsCount] = useState(0);
 
-  // Combat Log & Animation
-  const [combatLog, setCombatLog] = useState<string[]>([]);
-  const [combatTurn, setCombatTurn] = useState(0);
-  const [combatRoundHeroHit, setCombatRoundHeroHit] = useState(false);
-  const [combatRoundEnemyHit, setCombatRoundEnemyHit] = useState(false);
-  const [damageNumber, setDamageNumber] = useState<{ val: number; isCrit: boolean; isEnemy: boolean } | null>(null);
+  // Canvas Ref for Parallax Animated World
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animFrameRef = useRef<number | 0>(0);
+  const scrollOffsetRef = useRef(0);
+  const walkCycleRef = useRef(0);
 
-  // Chapter calculation
-  const chapter = day <= 5 ? 1 : day <= 10 ? 2 : 3;
+  const currentWorld = WORLDS[worldIndex % WORLDS.length];
 
-  // Total Atk & MaxHp with Gear Buffs
-  const totalAtk = hero.atk + (equippedGear.weapon?.atkBonus || 0) + (equippedGear.helmet?.atkBonus || 0) + (equippedGear.relic?.atkBonus || 0);
-  const totalMaxHp = hero.maxHp + (equippedGear.armor?.hpBonus || 0) + (equippedGear.helmet?.hpBonus || 0) + (equippedGear.relic?.hpBonus || 0);
+  // Base Stats calculation from equipment
+  const baseAtk = Object.values(equipped).reduce((sum, item) => sum + (item?.atk || 0), 30);
+  const baseHp = Object.values(equipped).reduce((sum, item) => sum + (item?.hp || 0), 280);
+  const baseDef = Object.values(equipped).reduce((sum, item) => sum + (item?.def || 0), 15);
+  const powerRating = Math.round(baseAtk * 12 + baseHp * 3.5 + baseDef * 8);
 
-  // Trigger 3-Skill Selection
-  const triggerSkillSelection = () => {
-    // Pick 3 random skills not already at max
-    const shuffled = [...ALL_SKILLS_POOL].sort(() => 0.5 - Math.random());
-    setSkillChoices(shuffled.slice(0, 3));
-    if (!soundMuted) sounds.playLevelComplete();
-  };
-
-  const handleChooseSkill = (skill: HolySkill) => {
-    sounds.playTap();
-    setActiveSkills((prev) => [...prev, skill]);
-    setSkillChoices(null);
-
-    // Continue Journey
-    advanceDay();
-  };
-
-  // Advance Day & Spawn Encounter
-  const advanceDay = () => {
-    const nextDay = day + 1;
-    setDay(nextDay);
-    if (!soundMuted) sounds.playWhoosh();
-
-    // Check boss encounter every 5 days
-    if (nextDay % 5 === 0) {
-      const enemies = ENEMIES_BY_CHAPTER[chapter] || ENEMIES_BY_CHAPTER[3];
-      const boss = enemies.find(e => e.isBoss) || enemies[enemies.length - 1];
-      startCombat({ ...boss, hp: boss.maxHp });
+  // Start Adventure Run
+  const startAdventure = () => {
+    if (energy < 5) {
+      alert('⚡ Not enough energy! Wait for it to restore or pray for grace.');
       return;
     }
+    setEnergy(e => e - 5);
+    sounds.playTap();
+    setDay(1);
+    setHeroLevel(1);
+    setHeroExp(0);
+    setHeroMaxExp(60);
+    setHeroHp(baseHp);
+    setHeroMaxHp(baseHp);
+    setHeroShield(0);
+    setLearnedSkills([]);
+    setRunStage('walking');
+    setEventText(`Day 1: Jesus and His disciples step out on the ${currentWorld.name}.`);
+    setInRun(true);
+  };
+
+  // 2D Canvas Parallax Animation for Walking Jesus & Worlds
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let localFrame = 0;
+
+    const render = () => {
+      localFrame++;
+      const width = canvas.width;
+      const height = canvas.height;
+
+      // Parallax scroll speed
+      if (runStage === 'walking') {
+        scrollOffsetRef.current += 1.8 * speedMultiplier;
+        walkCycleRef.current += 0.12 * speedMultiplier;
+      }
+
+      const offset = scrollOffsetRef.current;
+      const walk = Math.sin(walkCycleRef.current);
+
+      // 1. Sky Gradient
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+      skyGrad.addColorStop(0, currentWorld.skyGradient[0]);
+      skyGrad.addColorStop(1, currentWorld.skyGradient[1]);
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // 2. Distant Clouds & Mountains
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      for (let i = 0; i < 6; i++) {
+        const cx = ((i * 180 - offset * 0.2) % (width + 200)) - 100;
+        ctx.beginPath();
+        ctx.arc(cx, 40 + (i % 3) * 15, 30, 0, Math.PI * 2);
+        ctx.arc(cx + 25, 32 + (i % 3) * 15, 22, 0, Math.PI * 2);
+        ctx.arc(cx - 20, 42 + (i % 3) * 15, 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 3. Middleground Hills & Olive Trees
+      ctx.fillStyle = currentWorld.treeColor;
+      for (let i = 0; i < 8; i++) {
+        const tx = ((i * 120 - offset * 0.6) % (width + 150)) - 50;
+        ctx.beginPath();
+        ctx.arc(tx, height - 90, 24, 0, Math.PI * 2);
+        ctx.arc(tx + 18, height - 100, 20, 0, Math.PI * 2);
+        ctx.fill();
+        // Tree trunk
+        ctx.fillStyle = '#451a03';
+        ctx.fillRect(tx + 6, height - 75, 8, 25);
+        ctx.fillStyle = currentWorld.treeColor;
+      }
+
+      // 4. Foreground Walking Path
+      ctx.fillStyle = currentWorld.groundColor;
+      ctx.fillRect(0, height - 60, width, 60);
+
+      // Road dirt track
+      ctx.fillStyle = '#fef08a33';
+      ctx.fillRect(0, height - 48, width, 28);
+
+      // 5. Draw Jesus & Mount Character
+      const charX = runStage === 'battling' ? width * 0.32 : width * 0.45;
+      const charY = height - 55 + (runStage === 'walking' ? Math.abs(walk) * -5 : 0);
+
+      // Draw Mount if equipped
+      if (equipped.mount) {
+        ctx.save();
+        ctx.translate(charX, charY + 12);
+        ctx.font = '32px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(equipped.mount.emoji, 0, 0);
+        ctx.restore();
+      }
+
+      // Draw Jesus (Capybara-Go Chibi Art Style)
+      ctx.save();
+      ctx.translate(charX, equipped.mount ? charY - 14 : charY);
+
+      // Golden Radiant Halo
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#facc15';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(0, -26, 12, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Head & Face
+      ctx.fillStyle = '#fde047';
+      ctx.fillStyle = '#fed7aa'; // skin
+      ctx.beginPath();
+      ctx.arc(0, -8, 14, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hair & Beard
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.arc(-8, -12, 6, 0, Math.PI * 2);
+      ctx.arc(8, -12, 6, 0, Math.PI * 2);
+      ctx.arc(0, 0, 10, 0, Math.PI); // beard
+      ctx.fill();
+
+      // Eyes
+      ctx.fillStyle = '#1c1917';
+      ctx.beginPath();
+      ctx.arc(-4, -8, 1.8, 0, Math.PI * 2);
+      ctx.arc(4, -8, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Flowing White Robe & Red Sash
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(-12, 2, 24, 20, 6);
+      ctx.fill();
+
+      // Red Sash
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.moveTo(-10, 2);
+      ctx.lineTo(8, 22);
+      ctx.lineTo(12, 22);
+      ctx.lineTo(-6, 2);
+      ctx.closePath();
+      ctx.fill();
+
+      // Equipped Weapon held on shoulder
+      if (equipped.weapon) {
+        ctx.save();
+        ctx.translate(14, 0);
+        ctx.rotate(runStage === 'battling' && heroAttacking ? 0.8 : -0.4);
+        ctx.font = '22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(equipped.weapon.emoji, 0, 0);
+        ctx.restore();
+      }
+
+      ctx.restore();
+
+      // Draw Pet trailing behind
+      if (equipped.pet) {
+        ctx.save();
+        ctx.translate(charX - 35, charY + 8 + Math.sin(localFrame * 0.1) * 3);
+        ctx.font = '20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(equipped.pet.emoji, 0, 0);
+        ctx.restore();
+      }
+
+      // 6. Draw Battling Enemy on Right
+      if (runStage === 'battling' && activeEnemy) {
+        const enemyX = width * 0.72;
+        const enemyY = height - 55 + (enemyAttacking ? Math.sin(localFrame * 0.3) * -8 : 0);
+
+        ctx.save();
+        ctx.translate(enemyX, enemyY);
+        ctx.font = '40px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(activeEnemy.emoji, 0, 0);
+
+        // Enemy HP Bar in 2D space
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(-25, -34, 50, 7);
+        ctx.fillStyle = '#ef4444';
+        const hpPercent = Math.max(0, activeEnemy.hp / activeEnemy.maxHp);
+        ctx.fillRect(-25, -34, 50 * hpPercent, 7);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-25, -34, 50, 7);
+        ctx.restore();
+      }
+
+      animFrameRef.current = requestAnimationFrame(render);
+    };
+
+    animFrameRef.current = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, [runStage, speedMultiplier, activeEnemy, heroAttacking, enemyAttacking, currentWorld, equipped]);
+
+  // Advance Day Loop in Run
+  const advanceDay = useCallback(() => {
+    sounds.playTap();
+    const nextDay = day + 1;
+    setDay(nextDay);
+    if (nextDay > longestSurvived) setLongestSurvived(nextDay);
 
     // Roll random encounter
     const roll = Math.random();
-    if (roll < 0.45) {
-      // Combat encounter
-      const enemies = ENEMIES_BY_CHAPTER[chapter] || ENEMIES_BY_CHAPTER[1];
-      const standardEnemies = enemies.filter(e => !e.isBoss);
-      const enemy = standardEnemies[Math.floor(Math.random() * standardEnemies.length)];
-      startCombat({ ...enemy, hp: enemy.maxHp });
-    } else if (roll < 0.70) {
-      // Parable / Story Choice Encounter
-      triggerParableEvent(nextDay);
-    } else if (roll < 0.88) {
-      // Holy Treasure Chest
-      triggerTreasureEvent();
+
+    // 50% Combat encounter
+    if (roll < 0.55 || nextDay % 5 === 0) {
+      const enemyPool = currentWorld.enemyTypes;
+      const chosen = enemyPool[Math.floor(Math.random() * enemyPool.length)];
+      const scale = 1 + (nextDay * 0.18);
+      const enemyHp = Math.round(180 * chosen.hpMult * scale);
+      const enemyAtk = Math.round(22 * chosen.atkMult * scale);
+
+      setActiveEnemy({
+        name: chosen.name,
+        emoji: chosen.emoji,
+        hp: enemyHp,
+        maxHp: enemyHp,
+        atk: enemyAtk
+      });
+      setBattleRound(1);
+      setRunStage('battling');
+      setEventText(`Day ${nextDay}: A ${chosen.name} ${chosen.emoji} appeared singing battle cries!`);
+      if (!soundMuted) sounds.playWhoosh();
     } else {
-      // Campfire & Meditation
-      triggerCampfireEvent();
-    }
-  };
-
-  // Start Combat Encounter
-  const startCombat = (enemy: EnemyData) => {
-    setCombatTurn(1);
-    setCombatLog([`⚔️ You encountered ${enemy.name}! Prepare your heart and shield.`]);
-    setCurrentEvent({
-      type: 'combat',
-      title: enemy.isBoss ? `⚠️ BOSS BATTLE: ${enemy.name}` : `Combat: ${enemy.name}`,
-      description: enemy.isBoss ? 'A mighty champion blocks your path. Stand firm in the armor of God!' : 'Dark forces challenge your pilgrimage.',
-      enemy: { ...enemy }
-    });
-  };
-
-  // Automated Combat Turn Execution
-  useEffect(() => {
-    if (currentEvent.type !== 'combat' || !currentEvent.enemy) return;
-
-    const timer = setTimeout(() => {
-      executeCombatTurn();
-    }, 1100 / gameSpeed);
-
-    return () => clearTimeout(timer);
-  }, [currentEvent, combatTurn, gameSpeed]);
-
-  const executeCombatTurn = () => {
-    if (!currentEvent.enemy) return;
-    const enemy = { ...currentEvent.enemy };
-
-    // 1. Hero Attacks Enemy
-    const isCrit = Math.random() < 0.25 || activeSkills.some(s => s.id === 'sword_of_spirit');
-    let heroDamage = Math.round(totalAtk * (isCrit ? 1.75 : 1.0) + (Math.random() * 6 - 3));
-    if (activeSkills.some(s => s.id === 'david_slingshot') && combatTurn === 1) {
-      heroDamage = Math.round(heroDamage * 2);
-    }
-
-    // Companion buff
-    if (activeCompanion.id === 'mastiff') {
-      heroDamage += Math.round(totalAtk * 0.4);
-    }
-    if (activeCompanion.id === 'lion' && combatTurn % 4 === 0) {
-      heroDamage += 80;
-    }
-
-    const nextEnemyHp = Math.max(0, enemy.hp - heroDamage);
-    enemy.hp = nextEnemyHp;
-
-    // Visual animation
-    setCombatRoundEnemyHit(true);
-    setDamageNumber({ val: heroDamage, isCrit, isEnemy: true });
-    setTimeout(() => {
-      setCombatRoundEnemyHit(false);
-      setDamageNumber(null);
-    }, 400);
-
-    // Life Steal Skill
-    if (activeSkills.some(s => s.id === 'manna_lifesteal')) {
-      const healAmt = Math.round(heroDamage * 0.25);
-      setHero(h => ({ ...h, hp: Math.min(totalMaxHp, h.hp + healAmt) }));
-    }
-
-    // Check Enemy Defeated
-    if (nextEnemyHp <= 0) {
-      if (!soundMuted) sounds.playCorrect();
-      const earnedExp = enemy.rewardExp;
-      const earnedCoins = enemy.rewardCoins;
-
-      setCombatLog(prev => [`🏆 Victory! Defeated ${enemy.name}! (+${earnedCoins} coins, +${earnedExp} EXP)`, ...prev.slice(0, 3)]);
-
-      // Add EXP & Coins
-      setHero(h => {
-        let newExp = h.exp + earnedExp;
-        let newLvl = h.level;
-        let newMaxExp = h.maxExp;
-        let newAtk = h.atk;
-        let newHp = h.maxHp;
-
-        if (newExp >= newMaxExp) {
-          newExp -= newMaxExp;
-          newLvl += 1;
-          newMaxExp = Math.round(newMaxExp * 1.5);
-          newAtk += 6;
-          newHp += 25;
+      // Story Parable / Treasure / Small Fortune
+      setRunStage('event');
+      const rewardsGold = 45 + nextDay * 8;
+      const rewardsExp = 35 + nextDay * 5;
+      setGold(g => g + rewardsGold);
+      setHeroExp(e => {
+        const nextExp = e + rewardsExp;
+        if (nextExp >= heroMaxExp) {
+          triggerLevelUp();
+          return nextExp - heroMaxExp;
         }
-
-        return {
-          ...h,
-          coins: h.coins + earnedCoins,
-          level: newLvl,
-          exp: newExp,
-          maxExp: newMaxExp,
-          atk: newAtk,
-          maxHp: newHp,
-          hp: Math.min(newHp, h.hp + 20)
-        };
+        return nextExp;
       });
 
-      // Boss or Level Up triggers 3-skill choice!
-      if (enemy.isBoss || hero.exp + earnedExp >= hero.maxExp) {
-        triggerSkillSelection();
-      } else {
-        setCurrentEvent({
-          type: 'idle_walk',
-          title: `Victory over ${enemy.name}!`,
-          description: `You gave thanks to God and continued your holy pilgrimage along the path.`
-        });
-        if (isAutoWalking) {
-          setTimeout(advanceDay, 1200 / gameSpeed);
-        }
+      const events = [
+        `Day ${nextDay}: You met a weary Samaritan on the road and shared blessed bread (+${rewardsGold} Gold, +${rewardsExp} EXP).`,
+        `Day ${nextDay}: Resting by Jacob's well restored your spirit and filled your waterskins (+${rewardsGold} Gold).`,
+        `Day ${nextDay}: A fisherman brought fresh catch from the Sea of Galilee (+${rewardsExp} EXP).`
+      ];
+      setEventText(events[Math.floor(Math.random() * events.length)]);
+    }
+  }, [day, longestSurvived, currentWorld, heroMaxExp, soundMuted]);
+
+  // Trigger Roguelike 3-Skill Selection (Capybara Go Style)
+  const triggerLevelUp = () => {
+    setHeroLevel(l => l + 1);
+    setHeroMaxExp(m => Math.round(m * 1.4));
+    setHeroMaxHp(h => h + 45);
+    setHeroHp(h => h + 45);
+
+    const shuffled = [...SKILL_POOL].sort(() => 0.5 - Math.random());
+    setOfferedSkills(shuffled.slice(0, 3));
+    setShowSkillSelect(true);
+    if (!soundMuted) sounds.playLevelComplete();
+  };
+
+  const handleSelectSkill = (skill: SkillChoice) => {
+    sounds.playTap();
+    setLearnedSkills(prev => [...prev, skill]);
+    setShowSkillSelect(false);
+  };
+
+  const refreshSkills = () => {
+    if (skillRefreshes <= 0 && gems < 5) return;
+    if (skillRefreshes > 0) {
+      setSkillRefreshes(r => r - 1);
+    } else {
+      setGems(g => g - 5);
+    }
+    const shuffled = [...SKILL_POOL].sort(() => 0.5 - Math.random());
+    setOfferedSkills(shuffled.slice(0, 3));
+    sounds.playTap();
+  };
+
+  // Turn-based Combat Auto-Resolution Loop
+  useEffect(() => {
+    if (runStage !== 'battling' || !activeEnemy || showSkillSelect) return;
+
+    const timer = setTimeout(() => {
+      // 1. Hero Attacks Enemy
+      setHeroAttacking(true);
+      const isCrit = Math.random() < 0.25;
+      const heroDmg = Math.round((baseAtk + learnedSkills.length * 15) * (isCrit ? 1.8 : 1.0) + Math.random() * 10);
+      const nextEnemyHp = Math.max(0, activeEnemy.hp - heroDmg);
+
+      setFloatingDamage({ val: heroDmg, isCrit, isHero: false });
+      setHitsCount(h => h + 1);
+
+      setTimeout(() => setHeroAttacking(false), 300);
+
+      // Lifesteal check
+      if (learnedSkills.some(s => s.buffType === 'lifesteal')) {
+        setHeroHp(h => Math.min(heroMaxHp, h + Math.round(heroDmg * 0.3)));
       }
-      return;
-    }
 
-    // 2. Enemy Attacks Hero
-    let enemyDmg = Math.max(4, enemy.atk - hero.def);
-    if (activeSkills.some(s => s.id === 'shield_of_faith')) {
-      enemyDmg = Math.round(enemyDmg * 0.7);
-    }
-    // Companion dodge
-    if (activeCompanion.id === 'dove' && Math.random() < 0.2) {
-      enemyDmg = 0;
-    }
+      if (nextEnemyHp <= 0) {
+        // Victory!
+        if (!soundMuted) sounds.playCorrect();
+        const earnedGold = 60 + day * 12;
+        const earnedExp = 45 + day * 8;
+        setGold(g => g + earnedGold);
+        setRunStage('victory');
+        setEventText(`Victory! Defeated ${activeEnemy.name}! Gained +${earnedGold} Gold & +${earnedExp} EXP.`);
 
-    const nextHeroHp = hero.hp - enemyDmg;
+        setHeroExp(e => {
+          const nExp = e + earnedExp;
+          if (nExp >= heroMaxExp) {
+            triggerLevelUp();
+            return nExp - heroMaxExp;
+          }
+          return nExp;
+        });
 
-    setCombatRoundHeroHit(true);
-    if (!soundMuted) sounds.playTap();
-    setTimeout(() => setCombatRoundHeroHit(false), 400);
-
-    // Turn regeneration
-    let regenHp = nextHeroHp;
-    if (activeSkills.some(s => s.id === 'fruit_of_spirit')) {
-      regenHp = Math.min(totalMaxHp, regenHp + Math.round(totalMaxHp * 0.08));
-    }
-    if (activeCompanion.id === 'dove' && combatTurn % 3 === 0) {
-      regenHp = Math.min(totalMaxHp, regenHp + 14);
-    }
-
-    // Check Hero Defeat
-    if (nextHeroHp <= 0) {
-      // Crown of Life Revive Check
-      if (activeSkills.some(s => s.id === 'crown_of_life') && !hero.hasRevived) {
-        setHero(h => ({ ...h, hp: Math.round(totalMaxHp * 0.6), hasRevived: true }));
-        setCombatLog(prev => ['👑 Crown of Life triggered! You are raised back up in faith!', ...prev]);
-        setCurrentEvent(curr => ({ ...curr, enemy }));
-        setCombatTurn(t => t + 1);
+        setActiveEnemy(null);
         return;
       }
 
-      // Game Over
-      if (!soundMuted) sounds.playIncorrect();
-      setCurrentEvent({
-        type: 'game_over',
-        title: 'Pilgrimage Rested',
-        description: `You completed ${day} Days on the Holy Journey to Jerusalem!`
-      });
-      setIsAutoWalking(false);
+      // 2. Enemy Attacks Hero
+      setTimeout(() => {
+        setEnemyAttacking(true);
+        const enemyDmg = Math.max(5, activeEnemy.atk - Math.round(baseDef * 0.4));
+        const nextHeroHp = heroHp - enemyDmg;
 
-      if (onGameOver) onGameOver(day, Math.floor(hero.coins / 5) + day);
-      return;
-    }
+        setFloatingDamage({ val: enemyDmg, isCrit: false, isHero: true });
+        setTimeout(() => {
+          setEnemyAttacking(false);
+          setFloatingDamage(null);
+        }, 300);
 
-    setHero(h => ({ ...h, hp: regenHp }));
-    setCurrentEvent(curr => ({ ...curr, enemy }));
-    setCombatTurn(t => t + 1);
-  };
-
-  // Parable Events (Story Choice)
-  const triggerParableEvent = (currentDay: number) => {
-    const events = [
-      {
-        title: 'The Good Samaritan on the Jericho Road',
-        description: 'You find an injured traveler beaten on the side of the road. How will you show mercy?',
-        choices: [
-          {
-            text: '🍷 Pour oil & wine, bandage wounds (-10 coins)',
-            action: () => {
-              sounds.playTap();
-              setHero(h => ({ ...h, coins: Math.max(0, h.coins - 10), hp: totalMaxHp, atk: h.atk + 4 }));
-              advanceDay();
-            }
-          },
-          {
-            text: '🙏 Lay hands & pray in faith (+40 EXP, +15 Max HP)',
-            action: () => {
-              sounds.playTap();
-              setHero(h => ({ ...h, maxHp: h.maxHp + 15, hp: h.hp + 15, exp: h.exp + 40 }));
-              advanceDay();
-            }
-          }
-        ]
-      },
-      {
-        title: 'Miracle of the Loaves and Fishes',
-        description: 'A hungry multitude gathers by the lake. A young boy offers five barley loaves and two fish.',
-        choices: [
-          {
-            text: '✨ Lift up the basket in thanksgiving (Full Heal & +50 Coins)',
-            action: () => {
-              if (!soundMuted) sounds.playCorrect();
-              setHero(h => ({ ...h, coins: h.coins + 50, hp: totalMaxHp }));
-              advanceDay();
-            }
-          }
-        ]
-      },
-      {
-        title: "Jacob's Well in Sychar",
-        description: 'You rest under the midday sun. Jesus offers water so that you will never thirst again.',
-        choices: [
-          {
-            text: '💧 Drink the Living Water (+50 Max HP, +10 ATK)',
-            action: () => {
-              if (!soundMuted) sounds.playCorrect();
-              setHero(h => ({ ...h, maxHp: h.maxHp + 50, hp: h.maxHp + 50, atk: h.atk + 10 }));
-              advanceDay();
-            }
-          }
-        ]
-      }
-    ];
-
-    const chosen = events[Math.floor(Math.random() * events.length)];
-    setCurrentEvent({
-      type: 'parable',
-      title: chosen.title,
-      description: chosen.description,
-      choices: chosen.choices
-    });
-  };
-
-  // Treasure Event
-  const triggerTreasureEvent = () => {
-    const rewards: GearItem[] = [
-      { id: 'sword_spirit', name: 'Sword of Truth', type: 'weapon', emoji: '⚔️', rarity: 'rare', atkBonus: 22, hpBonus: 10, special: '+15% Crit' },
-      { id: 'breastplate', name: 'Breastplate of Righteousness', type: 'armor', emoji: '🛡️', rarity: 'epic', atkBonus: 5, hpBonus: 70, special: '+12 Defense' },
-      { id: 'helmet_salv', name: 'Helmet of Salvation', type: 'helmet', emoji: '🪖', rarity: 'rare', atkBonus: 10, hpBonus: 40, special: '+10% Block' },
-      { id: 'ark_relic', name: 'Altar Incense Censer', type: 'relic', emoji: '🏺', rarity: 'legendary', atkBonus: 25, hpBonus: 50, special: '+25% Holy Damage' }
-    ];
-
-    const loot = rewards[Math.floor(Math.random() * rewards.length)];
-
-    setCurrentEvent({
-      type: 'treasure',
-      title: 'Ark of the Covenant Altar',
-      description: `You found a sacred treasure chest on the mountain trail! You received: ${loot.emoji} ${loot.name} (${loot.rarity.toUpperCase()})!`,
-      choices: [
-        {
-          text: `Equip ${loot.name} (+${loot.atkBonus} ATK, +${loot.hpBonus} HP)`,
-          action: () => {
-            sounds.playTap();
-            setEquippedGear(prev => ({ ...prev, [loot.type]: loot }));
-            advanceDay();
-          }
+        if (nextHeroHp <= 0) {
+          // Defeat
+          if (!soundMuted) sounds.playIncorrect();
+          setHeroHp(0);
+          setRunStage('gameover');
+          setEventText(`Pilgrimage ended on Day ${day}. Longest survived: ${Math.max(day, longestSurvived)} days.`);
+          if (onGameOver) onGameOver(day, Math.floor(gold / 10));
+          return;
         }
-      ]
-    });
-  };
 
-  // Campfire Event
-  const triggerCampfireEvent = () => {
-    setCurrentEvent({
-      type: 'campfire',
-      title: 'Olive Grove Campfire',
-      description: 'You set up camp under starry skies. Meditating upon Psalm 23 restores your soul.',
-      choices: [
-        {
-          text: '📖 Meditate on Scripture (Restore 50 HP & +30 EXP)',
-          action: () => {
-            sounds.playTap();
-            setHero(h => ({ ...h, hp: Math.min(totalMaxHp, h.hp + 50), exp: h.exp + 30 }));
-            advanceDay();
-          }
-        },
-        {
-          text: '🍖 Share fellowship with companions (+35 Coins)',
-          action: () => {
-            sounds.playTap();
-            setHero(h => ({ ...h, coins: h.coins + 35 }));
-            advanceDay();
-          }
-        }
-      ]
-    });
-  };
+        setHeroHp(nextHeroHp);
+        setActiveEnemy({ ...activeEnemy, hp: nextEnemyHp });
+        setBattleRound(r => r + 1);
+      }, 400 / speedMultiplier);
 
-  // Auto Walking interval
+    }, 900 / speedMultiplier);
+
+    return () => clearTimeout(timer);
+  }, [runStage, activeEnemy, heroHp, baseAtk, baseDef, heroMaxHp, day, speedMultiplier, showSkillSelect, soundMuted]);
+
+  // Auto-advance loop when walking
   useEffect(() => {
-    if (!isAutoWalking || currentEvent.type !== 'idle_walk') return;
+    if (!inRun || !autoWalk || runStage === 'battling' || runStage === 'gameover' || showSkillSelect) return;
 
     const timer = setTimeout(() => {
       advanceDay();
-    }, 1500 / gameSpeed);
+    }, 1800 / speedMultiplier);
 
     return () => clearTimeout(timer);
-  }, [isAutoWalking, currentEvent, gameSpeed]);
+  }, [inRun, autoWalk, runStage, showSkillSelect, speedMultiplier, advanceDay]);
 
-  const restartRun = () => {
-    sounds.playTap();
-    setDay(1);
-    setHero({
-      name: 'Faithful Pilgrim',
-      level: 1,
-      exp: 0,
-      maxExp: 60,
-      hp: 120,
-      maxHp: 120,
-      atk: 25,
-      def: 8,
-      coins: 50,
-      graceTokens: 0,
-      hasRevived: false
-    });
-    setActiveSkills([]);
-    setCurrentEvent({
-      type: 'idle_walk',
-      title: 'Beginning the Pilgrimage',
-      description: 'The morning sun rises over the Sea of Galilee. Take your staff and step forward in faith.'
-    });
+  // Buy Shop Equipment
+  const handleBuyItem = (item: Equipment) => {
+    if (typeof item.priceGems === 'number') {
+      if (gems < item.priceGems) {
+        alert('💎 Not enough Grace Gems!');
+        return;
+      }
+      setGems(g => g - item.priceGems!);
+    } else if (typeof item.priceGold === 'number') {
+      if (gold < item.priceGold) {
+        alert('🪙 Not enough Gold Coins!');
+        return;
+      }
+      setGold(g => g - item.priceGold!);
+    }
+
+    sounds.playCoinSound();
+    setInventory(inv => [...inv, { ...item, id: `${item.id}_${Date.now()}` }]);
+    setEquipped(prev => ({ ...prev, [item.slot]: item }));
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full max-w-5xl mx-auto select-none">
-      {/* Top Header Bar */}
-      <div className="w-full flex items-center justify-between mb-2 text-stone-200">
+    <div className="flex flex-col items-center justify-center p-1 sm:p-3 w-full max-w-5xl mx-auto select-none font-sans text-white">
+      {/* Top Capybara-Go Style Global Header Bar */}
+      <div className="w-full flex items-center justify-between bg-stone-900/90 border border-stone-800 rounded-2xl px-4 py-2 mb-2 shadow-xl">
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
               sounds.playTap();
-              if (onBack) onBack();
+              if (inRun) setInRun(false);
+              else if (onBack) onBack();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all active:scale-95"
+            className="p-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 active:scale-95"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Arcade Hub</span>
+            <ArrowLeft className="w-4 h-4" />
           </button>
-
-          <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 font-black text-xs border border-amber-500/30 flex items-center gap-1">
-            <span>☀️ DAY {day}</span>
-            <span className="opacity-60">• Chapter {chapter}</span>
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xl">👑</span>
+            <div>
+              <div className="text-xs font-black text-amber-300 leading-none">Jesus Go: Holy Adventure</div>
+              <div className="text-[10px] text-stone-400 font-bold">Power: {powerRating.toLocaleString()}</div>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Speed Toggle */}
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setGameSpeed(s => (s === 1 ? 2 : s === 2 ? 3 : 1));
-            }}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white font-black text-xs"
-            title="Game Speed"
-          >
-            <FastForward className="w-3.5 h-3.5 text-amber-400" />
-            <span>{gameSpeed}x</span>
-          </button>
+        {/* Currencies: Energy, Gems, Gold */}
+        <div className="flex items-center gap-2 sm:gap-4 text-xs font-black">
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            <Zap className="w-3.5 h-3.5 fill-blue-400" />
+            <span>{energy}/{maxEnergy}</span>
+          </div>
 
-          {/* Auto Walk Toggle */}
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setIsAutoWalking(!isAutoWalking);
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition-all ${
-              isAutoWalking
-                ? 'bg-emerald-500 text-stone-950 shadow-lg shadow-emerald-500/30'
-                : 'bg-white/10 text-stone-300 hover:text-white'
-            }`}
-          >
-            {isAutoWalking ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-            <span>{isAutoWalking ? 'AUTO ON' : 'AUTO WALK'}</span>
-          </button>
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30">
+            <span>💎 {gems}</span>
+          </div>
+
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            <span>🪙 {gold.toLocaleString()}</span>
+          </div>
 
           <button
             onClick={() => setSoundMuted(!soundMuted)}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white transition-colors"
+            className="p-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300"
           >
             {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* Main Widescreen Landscape Game Container (16:9) */}
-      <div className="relative w-full aspect-[16/9] max-h-[66vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-amber-500/30 bg-stone-950 flex flex-col justify-between p-4 sm:p-5">
-        {/* Animated Background Landscape (Galilee / Judea / Jerusalem) */}
-        <div className="absolute inset-0 bg-gradient-to-b from-sky-900 via-amber-950 to-stone-950 opacity-90 pointer-events-none" />
-        <div className="absolute top-0 left-0 right-0 h-44 bg-gradient-to-b from-amber-500/10 to-transparent pointer-events-none" />
-
-        {/* Top HUD: Hero Status Bar & Stats */}
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-2.5 sm:p-3">
-          {/* Hero Profile */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-xl shadow-lg shrink-0">
-              🚶‍♂️
-            </div>
-            <div>
+      {/* Main Game Screen (16:9 Landscape Layout) */}
+      <div className="relative w-full aspect-[16/9] max-h-[66vh] rounded-3xl overflow-hidden shadow-2xl border-4 border-amber-500/40 bg-stone-950 flex flex-col justify-between">
+        {/* VIEW 1: ACTIVE IN-RUN GAMEPLAY (Exact Capybara Go Screen) */}
+        {inRun ? (
+          <div className="relative w-full h-full flex flex-col justify-between p-3 sm:p-4">
+            {/* Top In-Run Day Progress Tracker */}
+            <div className="relative z-10 flex items-center justify-between bg-black/60 backdrop-blur-md rounded-2xl px-4 py-2 border border-white/10 text-xs font-bold">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-white">{hero.name}</span>
-                <span className="px-1.5 py-0.5 rounded-md bg-amber-500/30 text-amber-300 font-bold text-[10px]">
-                  Lv.{hero.level}
-                </span>
+                <span className="text-amber-400 font-black text-sm">DAY {day}</span>
+                <span className="text-stone-400 text-[11px]">• {currentWorld.name}</span>
               </div>
-              {/* HP Bar */}
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
-                <div className="w-24 sm:w-36 h-2 rounded-full bg-stone-800 overflow-hidden border border-white/10">
-                  <div
-                    className="h-full bg-gradient-to-r from-rose-500 to-emerald-500 transition-all duration-300"
-                    style={{ width: `${Math.max(0, Math.min(100, (hero.hp / totalMaxHp) * 100))}%` }}
-                  />
-                </div>
-                <span className="text-[10px] font-bold text-stone-300">{hero.hp}/{totalMaxHp}</span>
-              </div>
-            </div>
-          </div>
 
-          {/* Stats Badges */}
-          <div className="flex items-center gap-2 text-xs">
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-stone-900 border border-white/10 text-rose-300 font-black">
-              <Sword className="w-3.5 h-3.5 text-rose-400" />
-              <span>{totalAtk} ATK</span>
-            </div>
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-stone-900 border border-white/10 text-cyan-300 font-black">
-              <Shield className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{hero.def} DEF</span>
-            </div>
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300 font-black">
-              <span>🪙 {hero.coins}</span>
-            </div>
-          </div>
-
-          {/* Active Companion */}
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-200 text-xs font-bold">
-            <span className="text-base">{activeCompanion.emoji}</span>
-            <span className="hidden sm:inline">{activeCompanion.name}</span>
-          </div>
-        </div>
-
-        {/* Center Stage: Dynamic Encounter View */}
-        <div className="relative z-10 flex-1 flex flex-col justify-center items-center my-3 text-center">
-          {/* 1. Combat View */}
-          {currentEvent.type === 'combat' && currentEvent.enemy && (
-            <div className="w-full max-w-lg flex flex-col items-center">
-              {/* Battle Arena Avatars */}
-              <div className="flex items-center justify-around w-full px-6 py-2">
-                {/* Hero Avatar */}
-                <motion.div
-                  animate={{
-                    x: combatRoundHeroHit ? [0, -12, 12, 0] : 0,
-                    scale: combatRoundHeroHit ? [1, 0.9, 1] : 1
-                  }}
-                  className="flex flex-col items-center"
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSpeedMultiplier(s => (s === 1 ? 2 : 1))}
+                  className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 font-black text-[11px] flex items-center gap-1"
                 >
-                  <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-3xl shadow-xl shadow-amber-500/30 border-2 border-white/30">
-                    🚶‍♂️
-                  </div>
-                  <span className="text-xs font-bold text-white mt-1">Pilgrim</span>
-                </motion.div>
+                  <FastForward className="w-3 h-3" />
+                  <span>{speedMultiplier}x</span>
+                </button>
 
-                {/* VS Holy Light */}
-                <div className="flex flex-col items-center">
-                  <div className="text-xl font-black text-amber-400 drop-shadow animate-pulse">VS</div>
-                  <div className="text-[10px] text-stone-400 uppercase font-bold">Round {combatTurn}</div>
-                  {damageNumber && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.5 }}
-                      animate={{ opacity: 1, y: -20, scale: 1.3 }}
-                      exit={{ opacity: 0 }}
-                      className={`font-black text-lg drop-shadow ${
-                        damageNumber.isCrit ? 'text-amber-300' : 'text-rose-400'
+                <button
+                  onClick={() => setAutoWalk(!autoWalk)}
+                  className={`px-2.5 py-0.5 rounded-lg font-black text-[11px] flex items-center gap-1 ${
+                    autoWalk ? 'bg-emerald-500 text-stone-950' : 'bg-stone-800 text-stone-300'
+                  }`}
+                >
+                  {autoWalk ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                  <span>{autoWalk ? 'AUTO' : 'MANUAL'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Middle Stage: 2D Animated World Canvas */}
+            <div className="absolute inset-0 z-0">
+              <canvas
+                ref={canvasRef}
+                width={720}
+                height={380}
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            {/* Combat Hit FX & Floating Numbers */}
+            {floatingDamage && (
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                animate={{ opacity: 1, y: -25, scale: 1.4 }}
+                exit={{ opacity: 0 }}
+                className={`absolute z-20 font-black text-xl drop-shadow-md ${
+                  floatingDamage.isHero ? 'left-[32%] top-[40%] text-rose-500' : 'right-[26%] top-[38%] text-yellow-300'
+                }`}
+              >
+                -{floatingDamage.val} {floatingDamage.isCrit && '⚡ CRIT!'}
+              </motion.div>
+            )}
+
+            {/* Bottom In-Run HUD: Stats, Event Text Box, Next Day Button */}
+            <div className="relative z-10 flex flex-col gap-2">
+              {/* Stats Bar */}
+              <div className="flex items-center justify-between bg-stone-900/90 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-1.5 text-xs font-bold">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-black text-[10px]">
+                    EXP Lv.{heroLevel}
+                  </span>
+                  <div className="flex items-center gap-1 text-rose-300">
+                    <Heart className="w-3.5 h-3.5 fill-rose-500" />
+                    <span>{heroHp}/{heroMaxHp}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-rose-300 flex items-center gap-1">⚔️ {baseAtk + learnedSkills.length * 15}</span>
+                  <span className="text-cyan-300 flex items-center gap-1">🛡️ {baseDef}</span>
+                  <span className="text-amber-300">✨ Blessings: {learnedSkills.length}</span>
+                </div>
+              </div>
+
+              {/* Event Text Dialogue Log (Capybara Go style yellow box) */}
+              <div className="bg-amber-100/95 text-stone-900 border-2 border-amber-400 rounded-2xl px-4 py-2 text-xs font-bold shadow-lg flex items-center justify-between">
+                <p className="leading-snug truncate pr-2">{eventText}</p>
+
+                {runStage !== 'battling' && runStage !== 'gameover' && (
+                  <button
+                    onClick={advanceDay}
+                    className="shrink-0 px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-stone-950 font-black text-xs shadow-md active:scale-95 transition-all"
+                  >
+                    NEXT DAY ➔
+                  </button>
+                )}
+
+                {runStage === 'battling' && (
+                  <span className="shrink-0 px-3 py-1 rounded-xl bg-rose-500 text-white font-black text-[11px] animate-pulse">
+                    BATTLING...
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 3-SKILL ROGUELIKE CHOICE MODAL (Exact Capybara Go Popup) */}
+            <AnimatePresence>
+              {showSkillSelect && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center"
+                >
+                  <div className="text-3xl mb-1">✨</div>
+                  <h3 className="text-xl font-black bg-gradient-to-r from-amber-200 to-yellow-400 bg-clip-text text-transparent">
+                    Choose a Holy Skill
+                  </h3>
+                  <p className="text-xs text-stone-300 mb-3">Level up! Select 1 divine blessing to empower Jesus on the road:</p>
+
+                  <div className="grid grid-cols-3 gap-2.5 w-full max-w-xl mb-3">
+                    {offeredSkills.map(skill => (
+                      <motion.div
+                        key={skill.id}
+                        whileHover={{ scale: 1.04, y: -4 }}
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => handleSelectSkill(skill)}
+                        className="bg-stone-900 border-2 border-amber-500/50 hover:border-amber-400 rounded-2xl p-3 flex flex-col justify-between text-left cursor-pointer shadow-xl transition-all"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-2xl">{skill.emoji}</span>
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                              {skill.rarity}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-black text-white">{skill.name}</h4>
+                          <p className="text-[10px] text-stone-300 mt-1 leading-snug">{skill.description}</p>
+                        </div>
+
+                        <button className="mt-2 w-full py-1 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-stone-950 font-black text-[10px] text-center">
+                          SELECT
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={refreshSkills}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-300 font-bold text-xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Refresh ({skillRefreshes > 0 ? `${skillRefreshes} Free` : '💎 5 Gems'})</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          /* VIEW 2: LOBBY & TABS (Adventure / Equip / Shop / Talents) */
+          <div className="relative w-full h-full flex flex-col justify-between p-4 overflow-y-auto">
+            {/* TAB 1: ADVENTURE WORLD HUB */}
+            {activeTab === 'adventure' && (
+              <div className="flex flex-col items-center justify-center flex-1 text-center py-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                    {currentWorld.name}
+                  </span>
+                </div>
+                <div className="text-[11px] text-stone-400 mb-3">Longest Survived: {longestSurvived} Days</div>
+
+                {/* Animated Character Preview */}
+                <div className="relative w-28 h-28 rounded-3xl bg-gradient-to-tr from-sky-800 to-amber-900 border-2 border-amber-500/40 flex items-center justify-center text-5xl shadow-2xl mb-4">
+                  <div className="absolute -top-3 px-2 py-0.5 rounded-full bg-amber-500 text-stone-950 font-black text-[10px] shadow">
+                    WALKING HERO
+                  </div>
+                  <span>🚶‍♂️</span>
+                  {equipped.mount && <span className="absolute -bottom-2 text-2xl">{equipped.mount.emoji}</span>}
+                </div>
+
+                {/* Big Chunky Capybara Go Start Button */}
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={startAdventure}
+                  className="px-10 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-stone-950 font-black text-base shadow-xl shadow-amber-500/40 flex flex-col items-center justify-center"
+                >
+                  <span className="text-sm font-black tracking-wider">START JOURNEY</span>
+                  <span className="text-[11px] font-bold flex items-center gap-1 opacity-90">
+                    <Zap className="w-3 h-3 fill-stone-950" /> 5 Energy
+                  </span>
+                </motion.button>
+              </div>
+            )}
+
+            {/* TAB 2: EQUIPMENT / ARMORY (Exact Capybara Go Layout) */}
+            {activeTab === 'equip' && (
+              <div className="flex flex-col flex-1 overflow-y-auto pr-1">
+                {/* Hero Equipped Character Center */}
+                <div className="grid grid-cols-3 gap-2 items-center bg-stone-900/80 p-3 rounded-2xl border border-white/10 mb-3">
+                  {/* Left Slots */}
+                  <div className="flex flex-col gap-2">
+                    <div className="p-2 rounded-xl bg-stone-950 border border-amber-500/30 flex items-center gap-2">
+                      <span className="text-xl">{equipped.weapon?.emoji || '⚔️'}</span>
+                      <div>
+                        <div className="text-[10px] text-stone-400 font-bold">Weapon</div>
+                        <div className="text-xs font-black text-white truncate">{equipped.weapon?.name || 'Empty'}</div>
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-stone-950 border border-amber-500/30 flex items-center gap-2">
+                      <span className="text-xl">{equipped.ring?.emoji || '💍'}</span>
+                      <div>
+                        <div className="text-[10px] text-stone-400 font-bold">Ring</div>
+                        <div className="text-xs font-black text-white truncate">{equipped.ring?.name || 'Empty'}</div>
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-stone-950 border border-amber-500/30 flex items-center gap-2">
+                      <span className="text-xl">{equipped.mount?.emoji || '🫏'}</span>
+                      <div>
+                        <div className="text-[10px] text-stone-400 font-bold">Mount</div>
+                        <div className="text-xs font-black text-white truncate">{equipped.mount?.name || 'Empty'}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Center Hero Avatar */}
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-4xl shadow-xl border-2 border-white">
+                      🚶‍♂️
+                    </div>
+                    <div className="mt-1 text-xs font-black text-amber-300">⚔️ {powerRating}</div>
+                  </div>
+
+                  {/* Right Slots */}
+                  <div className="flex flex-col gap-2">
+                    <div className="p-2 rounded-xl bg-stone-950 border border-amber-500/30 flex items-center gap-2">
+                      <span className="text-xl">{equipped.armor?.emoji || '🥋'}</span>
+                      <div>
+                        <div className="text-[10px] text-stone-400 font-bold">Armor</div>
+                        <div className="text-xs font-black text-white truncate">{equipped.armor?.name || 'Empty'}</div>
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-stone-950 border border-amber-500/30 flex items-center gap-2">
+                      <span className="text-xl">{equipped.amulet?.emoji || '🌱'}</span>
+                      <div>
+                        <div className="text-[10px] text-stone-400 font-bold">Amulet</div>
+                        <div className="text-xs font-black text-white truncate">{equipped.amulet?.name || 'Empty'}</div>
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-stone-950 border border-amber-500/30 flex items-center gap-2">
+                      <span className="text-xl">{equipped.pet?.emoji || '🕊️'}</span>
+                      <div>
+                        <div className="text-[10px] text-stone-400 font-bold">Pet</div>
+                        <div className="text-xs font-black text-white truncate">{equipped.pet?.name || 'Empty'}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Inventory Grid */}
+                <div className="text-xs font-black text-stone-300 mb-1">Inventory ({inventory.length} items)</div>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {inventory.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        sounds.playTap();
+                        setEquipped(prev => ({ ...prev, [item.slot]: item }));
+                      }}
+                      className={`p-2 rounded-xl border flex flex-col items-center justify-center transition-all ${
+                        equipped[item.slot]?.id === item.id
+                          ? 'bg-amber-500/20 border-amber-400 ring-2 ring-amber-400'
+                          : 'bg-stone-900 border-white/10 hover:border-white/30'
                       }`}
                     >
-                      -{damageNumber.val} {damageNumber.isCrit && '⚡ CRIT!'}
-                    </motion.div>
-                  )}
+                      <span className="text-2xl">{item.emoji}</span>
+                      <span className="text-[10px] font-bold text-stone-300 truncate w-full text-center mt-1">
+                        {item.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: HOLY SHOP (Buy Weapons, Armor & Mounts) */}
+            {activeTab === 'shop' && (
+              <div className="flex flex-col flex-1 overflow-y-auto pr-1">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-black text-amber-300 uppercase">Holy Armory & Weapon Shop</span>
+                  <span className="text-[10px] text-stone-400">Restocks with biblical artifacts</span>
                 </div>
 
-                {/* Enemy Avatar */}
-                <motion.div
-                  animate={{
-                    x: combatRoundEnemyHit ? [0, 12, -12, 0] : 0,
-                    scale: combatRoundEnemyHit ? [1, 0.9, 1] : 1
-                  }}
-                  className="flex flex-col items-center"
-                >
-                  <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-rose-600 to-red-800 flex items-center justify-center text-3xl shadow-xl shadow-rose-600/30 border-2 border-white/30">
-                    {currentEvent.enemy.emoji}
-                  </div>
-                  <span className="text-xs font-bold text-rose-300 mt-1">{currentEvent.enemy.name}</span>
-                  {/* Enemy HP */}
-                  <div className="w-24 h-1.5 rounded-full bg-stone-800 overflow-hidden mt-1 border border-white/10">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {SHOP_ITEMS.map((item) => (
                     <div
-                      className="h-full bg-rose-500 transition-all duration-200"
-                      style={{ width: `${Math.max(0, (currentEvent.enemy.hp / currentEvent.enemy.maxHp) * 100)}%` }}
-                    />
+                      key={item.id}
+                      className="p-3 rounded-2xl bg-stone-900 border border-white/10 flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-2xl">{item.emoji}</span>
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                            {item.rarity}
+                          </span>
+                        </div>
+                        <div className="text-xs font-black text-white">{item.name}</div>
+                        <div className="text-[10px] text-emerald-400 font-bold mt-0.5">+{item.atk} ATK • +{item.hp} HP</div>
+                        <div className="text-[10px] text-stone-400 italic">{item.specialTrait}</div>
+                      </div>
+
+                      <button
+                        onClick={() => handleBuyItem(item)}
+                        className="mt-2 w-full py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-stone-950 font-black text-xs flex items-center justify-center gap-1 active:scale-95 transition-all"
+                      >
+                        {item.priceGems ? `💎 ${item.priceGems} Gems` : `🪙 ${item.priceGold} Gold`}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: TALENTS & GRACE GIFTS */}
+            {activeTab === 'talents' && (
+              <div className="flex flex-col items-center justify-center flex-1 text-center py-2">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-2xl mb-2">
+                  ✨
+                </div>
+                <h4 className="text-sm font-black text-white">Temple Talents & Blessings</h4>
+                <p className="text-xs text-stone-400 max-w-sm mb-4">
+                  Permanent upgrades for your adventure runs:
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 w-full max-w-md">
+                  <div className="p-3 rounded-xl bg-stone-900 border border-white/10 text-left">
+                    <div className="text-xs font-black text-rose-300">⚔️ Holy Might (+15 ATK)</div>
+                    <div className="text-[10px] text-stone-400 mt-0.5">Increases base attack damage</div>
+                    <button
+                      onClick={() => {
+                        if (gold >= 300) {
+                          setGold(g => g - 300);
+                          sounds.playCoinSound();
+                        }
+                      }}
+                      className="mt-2 px-3 py-1 rounded-lg bg-amber-500 text-stone-950 font-black text-[10px]"
+                    >
+                      Upgrade (🪙 300)
+                    </button>
                   </div>
-                </motion.div>
-              </div>
 
-              {/* Combat Log Text */}
-              <div className="mt-2 text-xs text-stone-300 bg-black/60 px-4 py-1.5 rounded-xl border border-white/10 max-w-md truncate">
-                {combatLog[0] || 'Trading holy strikes...'}
-              </div>
-            </div>
-          )}
-
-          {/* 2. Parable / Story Choices */}
-          {currentEvent.type === 'parable' && (
-            <div className="max-w-md bg-stone-900/90 backdrop-blur-md border border-amber-500/30 rounded-3xl p-5 shadow-2xl">
-              <div className="text-3xl mb-1">📜</div>
-              <h3 className="text-base sm:text-lg font-black text-amber-200 mb-1">{currentEvent.title}</h3>
-              <p className="text-xs text-stone-300 mb-4 leading-relaxed">{currentEvent.description}</p>
-
-              <div className="flex flex-col gap-2">
-                {currentEvent.choices?.map((c, i) => (
-                  <button
-                    key={i}
-                    onClick={c.action}
-                    className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-stone-950 font-black text-xs shadow-lg active:scale-95 transition-all text-left"
-                  >
-                    {c.text}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 3. Treasure & Campfire View */}
-          {(currentEvent.type === 'treasure' || currentEvent.type === 'campfire') && (
-            <div className="max-w-md bg-stone-900/90 backdrop-blur-md border border-amber-500/30 rounded-3xl p-5 shadow-2xl">
-              <div className="text-3xl mb-1">{currentEvent.type === 'treasure' ? '🎁' : '⛺'}</div>
-              <h3 className="text-base sm:text-lg font-black text-amber-200 mb-1">{currentEvent.title}</h3>
-              <p className="text-xs text-stone-300 mb-4 leading-relaxed">{currentEvent.description}</p>
-
-              <div className="flex flex-col gap-2">
-                {currentEvent.choices?.map((c, i) => (
-                  <button
-                    key={i}
-                    onClick={c.action}
-                    className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-stone-950 font-black text-xs shadow-lg active:scale-95 transition-all text-center"
-                  >
-                    {c.text}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 4. Idle Walk View */}
-          {currentEvent.type === 'idle_walk' && (
-            <div className="flex flex-col items-center">
-              <motion.div
-                animate={{ y: [0, -6, 0] }}
-                transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
-                className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-3xl shadow-xl shadow-amber-500/30 border-2 border-white/30 mb-2"
-              >
-                🚶‍♂️
-              </motion.div>
-              <h3 className="text-lg font-black text-white">{currentEvent.title}</h3>
-              <p className="text-xs text-stone-300 max-w-sm mt-0.5">{currentEvent.description}</p>
-
-              <button
-                onClick={() => {
-                  sounds.playTap();
-                  advanceDay();
-                }}
-                className="mt-4 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-stone-950 font-black text-xs shadow-xl shadow-amber-500/40 flex items-center gap-1.5 active:scale-95 transition-all"
-              >
-                <Play className="w-3.5 h-3.5 fill-stone-950" />
-                <span>STEP FORWARD TO DAY {day + 1}</span>
-              </button>
-            </div>
-          )}
-
-          {/* 5. Game Over View */}
-          {currentEvent.type === 'game_over' && (
-            <div className="max-w-md bg-black/85 backdrop-blur-md border border-rose-500/30 rounded-3xl p-6 shadow-2xl">
-              <div className="text-4xl mb-1">🕊️</div>
-              <h3 className="text-xl font-black text-white mb-1">Pilgrimage Concluded</h3>
-              <p className="text-xs text-stone-300 mb-3">{currentEvent.description}</p>
-
-              <div className="bg-white/10 rounded-2xl p-3 mb-4 text-xs space-y-1 text-left">
-                <div className="flex justify-between">
-                  <span className="text-stone-300">Days Traveled:</span>
-                  <span className="font-bold text-amber-300">Day {day}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-300">Hero Level:</span>
-                  <span className="font-bold text-white">Level {hero.level}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-300">Grace Tokens Earned:</span>
-                  <span className="font-bold text-yellow-300">+{Math.floor(hero.coins / 5) + day} Tokens</span>
+                  <div className="p-3 rounded-xl bg-stone-900 border border-white/10 text-left">
+                    <div className="text-xs font-black text-emerald-300">❤️ Divine Health (+80 HP)</div>
+                    <div className="text-[10px] text-stone-400 mt-0.5">Boosts maximum health pool</div>
+                    <button
+                      onClick={() => {
+                        if (gold >= 300) {
+                          setGold(g => g - 300);
+                          sounds.playCoinSound();
+                        }
+                      }}
+                      className="mt-2 px-3 py-1 rounded-lg bg-amber-500 text-stone-950 font-black text-[10px]"
+                    >
+                      Upgrade (🪙 300)
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <button
-                onClick={restartRun}
-                className="w-full px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-stone-950 font-black text-xs shadow-xl shadow-amber-500/40 flex items-center justify-center gap-2 active:scale-95 transition-all"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>START NEW PILGRIMAGE</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Gear & Skills Bar */}
-        <div className="relative z-10 flex items-center justify-between gap-3 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-2 sm:p-2.5 overflow-x-auto">
-          {/* Equipped Gear Slots */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase font-bold text-stone-400">Gear:</span>
-            <div className="w-7 h-7 rounded-lg bg-stone-900 border border-white/10 flex items-center justify-center text-sm" title={equippedGear.weapon?.name || 'Weapon slot'}>
-              {equippedGear.weapon ? equippedGear.weapon.emoji : '⚔️'}
-            </div>
-            <div className="w-7 h-7 rounded-lg bg-stone-900 border border-white/10 flex items-center justify-center text-sm" title={equippedGear.armor?.name || 'Armor slot'}>
-              {equippedGear.armor ? equippedGear.armor.emoji : '🥋'}
-            </div>
-            <div className="w-7 h-7 rounded-lg bg-stone-900 border border-white/10 flex items-center justify-center text-sm" title={equippedGear.helmet?.name || 'Helmet slot'}>
-              {equippedGear.helmet ? equippedGear.helmet.emoji : '🪖'}
-            </div>
-            <div className="w-7 h-7 rounded-lg bg-stone-900 border border-white/10 flex items-center justify-center text-sm" title={equippedGear.relic?.name || 'Relic slot'}>
-              {equippedGear.relic ? equippedGear.relic.emoji : '🏺'}
-            </div>
-          </div>
-
-          {/* Active Holy Skills */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase font-bold text-stone-400">Blessings ({activeSkills.length}):</span>
-            {activeSkills.length === 0 ? (
-              <span className="text-[10px] text-stone-500 italic">None yet</span>
-            ) : (
-              activeSkills.map((s, idx) => (
-                <span
-                  key={idx}
-                  className="px-2 py-0.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-200 text-xs font-bold"
-                  title={`${s.name}: ${s.description}`}
-                >
-                  {s.emoji} {s.name.split(' ')[0]}
-                </span>
-              ))
             )}
           </div>
-        </div>
+        )}
 
-        {/* 3-Skill Choice Roguelike Modal Overlay */}
-        <AnimatePresence>
-          {skillChoices && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white"
+        {/* Bottom Capybara-Go Style Tab Bar (Hidden in Active Combat Run) */}
+        {!inRun && (
+          <div className="relative z-10 grid grid-cols-4 bg-stone-900 border-t border-stone-800 p-1.5 text-xs font-black">
+            <button
+              onClick={() => { sounds.playTap(); setActiveTab('adventure'); }}
+              className={`flex flex-col items-center py-1 rounded-xl transition-all ${
+                activeTab === 'adventure' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
+              }`}
             >
-              <div className="text-3xl mb-1 animate-bounce">✨</div>
-              <h2 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-amber-200 via-white to-amber-300 bg-clip-text text-transparent">
-                Choose a Holy Blessing
-              </h2>
-              <p className="text-xs text-stone-300 max-w-sm mb-4">
-                Level up! Select 1 divine blessing to empower your pilgrim on the journey:
-              </p>
+              <span className="text-base">⚔️</span>
+              <span className="text-[10px]">Adventure</span>
+            </button>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-2xl">
-                {skillChoices.map((skill) => (
-                  <motion.div
-                    key={skill.id}
-                    whileHover={{ scale: 1.04, y: -4 }}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => handleChooseSkill(skill)}
-                    className="p-4 rounded-2xl bg-gradient-to-b from-stone-900 to-stone-950 border border-amber-500/40 hover:border-amber-400 flex flex-col justify-between text-left cursor-pointer shadow-xl transition-all"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-2xl">{skill.emoji}</span>
-                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                          {skill.rarity}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-black text-white">{skill.name}</h4>
-                      <p className="text-[11px] text-stone-300 mt-1 leading-snug">{skill.description}</p>
-                    </div>
+            <button
+              onClick={() => { sounds.playTap(); setActiveTab('equip'); }}
+              className={`flex flex-col items-center py-1 rounded-xl transition-all ${
+                activeTab === 'equip' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <span className="text-base">🪖</span>
+              <span className="text-[10px]">Equip</span>
+            </button>
 
-                    <button className="mt-3 w-full py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-stone-950 font-black text-xs text-center">
-                      SELECT BLESSING
-                    </button>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            <button
+              onClick={() => { sounds.playTap(); setActiveTab('shop'); }}
+              className={`flex flex-col items-center py-1 rounded-xl transition-all ${
+                activeTab === 'shop' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <span className="text-base">🏪</span>
+              <span className="text-[10px]">Shop</span>
+            </button>
+
+            <button
+              onClick={() => { sounds.playTap(); setActiveTab('talents'); }}
+              className={`flex flex-col items-center py-1 rounded-xl transition-all ${
+                activeTab === 'talents' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <span className="text-base">✨</span>
+              <span className="text-[10px]">Talents</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <p className="text-[11px] text-stone-400 mt-2 text-center">
-        🛡️ Capybara-Go style biblical roguelike: Equip holy armor, level up blessings, and journey toward Jerusalem!
+        👑 Capybara-Go gameplay: Animated Jesus walking across biblical worlds, buyable armor & weapons, 3-skill roguelike choices!
       </p>
     </div>
   );
