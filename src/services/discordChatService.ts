@@ -232,6 +232,27 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
       author: 'Fellowship Sanctuary',
       footer: 'Grace and Peace be with you all',
     }
+  },
+  {
+    id: 'msg_welcome_fellowship_photo',
+    channelId: 'general',
+    serverId: 'server_fellowship',
+    text: '“Your word is a lamp to my feet and a light to my path.” — **Psalm 119:105** 📖✨',
+    senderId: 'sarah_jenkins_demo',
+    senderName: 'Sarah Jenkins',
+    senderRole: 'Worship Leader',
+    senderRoleColor: '#EC4899',
+    isGoogleUser: false,
+    createdAt: Date.now() - 3600000,
+    reactions: { '❤️': ['Anthony Williams', 'Sarah Jenkins'], '🙏': ['Anthony Williams'] },
+    attachment: {
+      type: 'image',
+      title: 'Holy Scripture & Warm Light',
+      content: 'Morning quiet time with the Word. Praying blessings over everyone in the sanctuary today! 🕯️',
+      reference: 'Psalm 119:105',
+      verse: '“Your word is a lamp to my feet and a light to my path.” — Psalm 119:105',
+      url: 'https://images.unsplash.com/photo-1507434965515-61970f2bd7c6?auto=format&fit=crop&w=1200&q=80',
+    },
   }
 ];
 

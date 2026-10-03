@@ -88,6 +88,8 @@ export interface ChatMessage {
     content: string;
     reference?: string;
     url?: string;
+    caption?: string;
+    verse?: string;
   };
 }
 

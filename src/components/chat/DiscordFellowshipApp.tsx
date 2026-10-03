@@ -26,7 +26,8 @@ import {
   Crown,
   PlusCircle,
   AtSign,
-  LayoutDashboard
+  LayoutDashboard,
+  Image as ImageIcon
 } from 'lucide-react';
 import {
   discordChatService,
@@ -45,6 +46,9 @@ import {
 import { googleDriveService } from '../../services/googleDriveService';
 import { sounds } from '../../services/soundEffects';
 import { AdminDashboardView } from './AdminDashboardView';
+import { FellowshipImageModal } from './FellowshipImageModal';
+import { ImageLightboxModal } from './ImageLightboxModal';
+import { ChatMessageMedia } from './ChatMessageMedia';
 
 interface DiscordFellowshipAppProps {
   onClose?: () => void;
@@ -77,11 +81,25 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   // Modals
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [showVerseModal, setShowVerseModal] = useState<boolean>(false);
+  const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [showCreateServerModal, setShowCreateServerModal] = useState<boolean>(false);
   const [showCreateChannelModal, setShowCreateChannelModal] = useState<boolean>(false);
   const [showRoleModal, setShowRoleModal] = useState<boolean>(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [selectedMember, setSelectedMember] = useState<ActiveChatMember | null>(null);
+
+  // Lightbox State
+  const [lightboxData, setLightboxData] = useState<{
+    isOpen: boolean;
+    imageUrl: string;
+    title?: string;
+    caption?: string;
+    verse?: string;
+    senderName?: string;
+  }>({
+    isOpen: false,
+    imageUrl: '',
+  });
 
   // Chat & Data State
   const [servers, setServers] = useState<DiscordServer[]>(discordChatService.serversCache);
@@ -395,6 +413,30 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     });
 
     setShowVerseModal(false);
+  };
+
+  // Share Image Attachment (from Gallery, URL, or upload)
+  const handleSendImageAttachment = async (imageData: {
+    url: string;
+    title: string;
+    caption?: string;
+    verse?: string;
+  }) => {
+    sounds.playTap();
+    await discordChatService.sendMessage({
+      channelId: activeChannelId,
+      serverId: isDMView ? undefined : activeServerId,
+      recipientId: isDMView ? activeDMRecipient?.id : undefined,
+      text: imageData.caption || (imageData.title ? `🖼️ **${imageData.title}**` : '🖼️ Shared an image'),
+      attachment: {
+        type: 'image',
+        title: imageData.title,
+        content: imageData.caption || '',
+        url: imageData.url,
+        caption: imageData.caption,
+        verse: imageData.verse,
+      },
+    });
   };
 
   // Quick Emoji Reaction
@@ -1191,6 +1233,12 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                       </div>
                     )}
 
+                    {/* Media / Shared Images (Gallery, URL, or Uploaded) */}
+                    <ChatMessageMedia
+                      message={msg}
+                      onOpenLightbox={(data) => setLightboxData({ isOpen: true, ...data })}
+                    />
+
                     {/* Reactions */}
                     {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                       <div className="flex items-center gap-1 mt-1.5 flex-wrap">
@@ -1258,6 +1306,15 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                   title="Share Scripture"
                 >
                   <Plus className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowImageModal(true)}
+                  className="p-1.5 rounded-full bg-[#4e5058] hover:bg-[#5865F2] text-[#dbdee1] hover:text-white transition-colors shrink-0"
+                  title="Share Image / Fellowship Gallery"
+                >
+                  <ImageIcon className="w-4 h-4 text-emerald-400" />
                 </button>
 
                 <input
@@ -2146,6 +2203,29 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* 12. FELLOWSHIP IMAGE GALLERY & URL PICKER MODAL                           */}
+      {/* ========================================================================= */}
+      <FellowshipImageModal
+        channelName={activeChannel.name}
+        isOpen={showImageModal}
+        onClose={() => setShowImageModal(false)}
+        onSendImage={handleSendImageAttachment}
+      />
+
+      {/* ========================================================================= */}
+      {/* 13. IMAGE LIGHTBOX VIEWER MODAL                                           */}
+      {/* ========================================================================= */}
+      <ImageLightboxModal
+        isOpen={lightboxData.isOpen}
+        onClose={() => setLightboxData((prev) => ({ ...prev, isOpen: false }))}
+        imageUrl={lightboxData.imageUrl}
+        title={lightboxData.title}
+        caption={lightboxData.caption}
+        verse={lightboxData.verse}
+        senderName={lightboxData.senderName}
+      />
     </div>
   );
 };
