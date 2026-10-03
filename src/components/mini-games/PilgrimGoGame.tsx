@@ -219,9 +219,11 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
   const [inRun, setInRun] = useState(false);
   const [worldIndex, setWorldIndex] = useState(0);
   const [day, setDay] = useState(1);
-  const [autoWalk, setAutoWalk] = useState(true);
-  const [speedMultiplier, setSpeedMultiplier] = useState<1 | 2>(1);
+  const [autoWalk, setAutoWalk] = useState(false);
+  const [speedMultiplier, setSpeedMultiplier] = useState<0.5 | 1 | 2>(1);
   const [soundMuted, setSoundMuted] = useState(false);
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [storyLogs, setStoryLogs] = useState<Array<{ day: number; text: string; type: 'story' | 'battle' | 'victory' | 'skill' }>>([]);
 
   // In-Run Hero Stats
   const [heroLevel, setHeroLevel] = useState(1);
@@ -285,7 +287,9 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
     setHeroShield(0);
     setLearnedSkills([]);
     setRunStage('walking');
-    setEventText(`Day 1: Jesus and His disciples step out on the ${currentWorld.name}.`);
+    const initialText = `Day 1: Jesus and His disciples step out on the ${currentWorld.name}.`;
+    setEventText(initialText);
+    setStoryLogs([{ day: 1, text: initialText, type: 'story' }]);
     setInRun(true);
   };
 
@@ -501,7 +505,9 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       });
       setBattleRound(1);
       setRunStage('battling');
-      setEventText(`Day ${nextDay}: A ${chosen.name} ${chosen.emoji} appeared singing battle cries!`);
+      const bText = `Day ${nextDay}: A ${chosen.name} ${chosen.emoji} appeared singing battle cries!`;
+      setEventText(bText);
+      setStoryLogs(prev => [{ day: nextDay, text: bText, type: 'battle' }, ...prev]);
       if (!soundMuted) sounds.playWhoosh();
     } else {
       // Story Parable / Treasure / Small Fortune
@@ -521,9 +527,13 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       const events = [
         `Day ${nextDay}: You met a weary Samaritan on the road and shared blessed bread (+${rewardsGold} Gold, +${rewardsExp} EXP).`,
         `Day ${nextDay}: Resting by Jacob's well restored your spirit and filled your waterskins (+${rewardsGold} Gold).`,
-        `Day ${nextDay}: A fisherman brought fresh catch from the Sea of Galilee (+${rewardsExp} EXP).`
+        `Day ${nextDay}: A fisherman brought fresh catch from the Sea of Galilee (+${rewardsExp} EXP).`,
+        `Day ${nextDay}: Meditating upon the Mount of Beatitudes brought deep peace and heavenly favor (+${rewardsGold} Gold).`,
+        `Day ${nextDay}: A shepherd shared olive oil and dates with your company under the shade of palm trees (+${rewardsExp} EXP).`
       ];
-      setEventText(events[Math.floor(Math.random() * events.length)]);
+      const chosenEvent = events[Math.floor(Math.random() * events.length)];
+      setEventText(chosenEvent);
+      setStoryLogs(prev => [{ day: nextDay, text: chosenEvent, type: 'story' }, ...prev]);
     }
   }, [day, longestSurvived, currentWorld, heroMaxExp, soundMuted]);
 
@@ -543,6 +553,7 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
   const handleSelectSkill = (skill: SkillChoice) => {
     sounds.playTap();
     setLearnedSkills(prev => [...prev, skill]);
+    setStoryLogs(prev => [{ day, text: `Learned Holy Skill: ${skill.emoji} ${skill.name} (${skill.description})`, type: 'skill' }, ...prev]);
     setShowSkillSelect(false);
   };
 
@@ -558,7 +569,7 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
     sounds.playTap();
   };
 
-  // Turn-based Combat Auto-Resolution Loop
+  // Turn-based Combat Auto-Resolution Loop (Comfortable Pacing)
   useEffect(() => {
     if (runStage !== 'battling' || !activeEnemy || showSkillSelect) return;
 
@@ -572,7 +583,7 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       setFloatingDamage({ val: heroDmg, isCrit, isHero: false });
       setHitsCount(h => h + 1);
 
-      setTimeout(() => setHeroAttacking(false), 300);
+      setTimeout(() => setHeroAttacking(false), 400);
 
       // Lifesteal check
       if (learnedSkills.some(s => s.buffType === 'lifesteal')) {
@@ -586,7 +597,9 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         const earnedExp = 45 + day * 8;
         setGold(g => g + earnedGold);
         setRunStage('victory');
-        setEventText(`Victory! Defeated ${activeEnemy.name}! Gained +${earnedGold} Gold & +${earnedExp} EXP.`);
+        const vText = `Victory! Defeated ${activeEnemy.name}! Gained +${earnedGold} Gold & +${earnedExp} EXP.`;
+        setEventText(vText);
+        setStoryLogs(prev => [{ day, text: vText, type: 'victory' }, ...prev]);
 
         setHeroExp(e => {
           const nExp = e + earnedExp;
@@ -611,14 +624,16 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         setTimeout(() => {
           setEnemyAttacking(false);
           setFloatingDamage(null);
-        }, 300);
+        }, 400);
 
         if (nextHeroHp <= 0) {
           // Defeat
           if (!soundMuted) sounds.playIncorrect();
           setHeroHp(0);
           setRunStage('gameover');
-          setEventText(`Pilgrimage ended on Day ${day}. Longest survived: ${Math.max(day, longestSurvived)} days.`);
+          const defeatText = `Pilgrimage ended on Day ${day}. Longest survived: ${Math.max(day, longestSurvived)} days.`;
+          setEventText(defeatText);
+          setStoryLogs(prev => [{ day, text: defeatText, type: 'story' }, ...prev]);
           if (onGameOver) onGameOver(day, Math.floor(gold / 10));
           return;
         }
@@ -626,20 +641,20 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         setHeroHp(nextHeroHp);
         setActiveEnemy({ ...activeEnemy, hp: nextEnemyHp });
         setBattleRound(r => r + 1);
-      }, 400 / speedMultiplier);
+      }, 700 / speedMultiplier);
 
-    }, 900 / speedMultiplier);
+    }, 1600 / speedMultiplier);
 
     return () => clearTimeout(timer);
   }, [runStage, activeEnemy, heroHp, baseAtk, baseDef, heroMaxHp, day, speedMultiplier, showSkillSelect, soundMuted]);
 
-  // Auto-advance loop when walking
+  // Auto-advance loop when walking (Comfortable 5.0 seconds per event on 1x, 10s on 0.5x)
   useEffect(() => {
     if (!inRun || !autoWalk || runStage === 'battling' || runStage === 'gameover' || showSkillSelect) return;
 
     const timer = setTimeout(() => {
       advanceDay();
-    }, 1800 / speedMultiplier);
+    }, 5000 / speedMultiplier);
 
     return () => clearTimeout(timer);
   }, [inRun, autoWalk, runStage, showSkillSelect, speedMultiplier, advanceDay]);
@@ -719,29 +734,42 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         {inRun ? (
           <div className="relative w-full h-full flex flex-col justify-between p-3 sm:p-4">
             {/* Top In-Run Day Progress Tracker */}
-            <div className="relative z-10 flex items-center justify-between bg-black/60 backdrop-blur-md rounded-2xl px-4 py-2 border border-white/10 text-xs font-bold">
+            <div className="relative z-10 flex items-center justify-between bg-black/70 backdrop-blur-md rounded-2xl px-4 py-2 border border-white/10 text-xs font-bold shadow-lg">
               <div className="flex items-center gap-2">
                 <span className="text-amber-400 font-black text-sm">DAY {day}</span>
                 <span className="text-stone-400 text-[11px]">• {currentWorld.name}</span>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {/* Story Log History Button */}
                 <button
-                  onClick={() => setSpeedMultiplier(s => (s === 1 ? 2 : 1))}
-                  className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 font-black text-[11px] flex items-center gap-1"
+                  onClick={() => setShowLogModal(true)}
+                  className="px-2.5 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 font-black text-[11px] flex items-center gap-1 active:scale-95 transition-all"
+                  title="View full story and adventure log history"
                 >
-                  <FastForward className="w-3 h-3" />
-                  <span>{speedMultiplier}x</span>
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Story Log ({storyLogs.length})</span>
                 </button>
 
+                {/* Speed Multiplier (0.5x, 1x, 2x) */}
+                <button
+                  onClick={() => setSpeedMultiplier(s => (s === 0.5 ? 1 : s === 1 ? 2 : 0.5))}
+                  className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 font-black text-[11px] flex items-center gap-1"
+                  title="Cycle Game Speed: 0.5x (Story Read), 1x (Normal), 2x (Fast)"
+                >
+                  <FastForward className="w-3.5 h-3.5" />
+                  <span>{speedMultiplier === 0.5 ? '0.5x (Story)' : `${speedMultiplier}x`}</span>
+                </button>
+
+                {/* Auto Walk Toggle */}
                 <button
                   onClick={() => setAutoWalk(!autoWalk)}
-                  className={`px-2.5 py-0.5 rounded-lg font-black text-[11px] flex items-center gap-1 ${
-                    autoWalk ? 'bg-emerald-500 text-stone-950' : 'bg-stone-800 text-stone-300'
+                  className={`px-3 py-1 rounded-xl font-black text-[11px] flex items-center gap-1.5 transition-all active:scale-95 ${
+                    autoWalk ? 'bg-emerald-500 text-stone-950 shadow-md shadow-emerald-500/30' : 'bg-stone-800 text-stone-300 hover:text-white'
                   }`}
                 >
-                  {autoWalk ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                  <span>{autoWalk ? 'AUTO' : 'MANUAL'}</span>
+                  {autoWalk ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  <span>{autoWalk ? 'AUTO ON' : 'MANUAL'}</span>
                 </button>
               </div>
             </div>
@@ -861,6 +889,58 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Refresh ({skillRefreshes > 0 ? `${skillRefreshes} Free` : '💎 5 Gems'})</span>
                   </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* STORY & ADVENTURE LOG HISTORY MODAL */}
+            <AnimatePresence>
+              {showLogModal && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute inset-0 z-30 bg-black/90 backdrop-blur-md flex flex-col p-4 text-white"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-amber-400" />
+                      <h3 className="text-sm font-black text-amber-300 uppercase">Pilgrimage Story & Battle Log</h3>
+                    </div>
+                    <button
+                      onClick={() => setShowLogModal(false)}
+                      className="px-3 py-1 rounded-xl bg-stone-800 hover:bg-stone-700 text-xs font-bold"
+                    >
+                      Close ✕
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+                    {storyLogs.length === 0 ? (
+                      <div className="text-stone-400 italic text-center py-8">No logs recorded yet.</div>
+                    ) : (
+                      storyLogs.map((log, index) => (
+                        <div
+                          key={index}
+                          className={`p-2.5 rounded-xl border ${
+                            log.type === 'battle'
+                              ? 'bg-rose-950/40 border-rose-500/30 text-rose-200'
+                              : log.type === 'victory'
+                              ? 'bg-amber-950/40 border-amber-500/30 text-amber-200'
+                              : log.type === 'skill'
+                              ? 'bg-purple-950/40 border-purple-500/30 text-purple-200'
+                              : 'bg-stone-900 border-white/10 text-stone-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-black text-[10px] text-amber-400">DAY {log.day}</span>
+                            <span className="text-[9px] uppercase font-bold text-stone-400">{log.type}</span>
+                          </div>
+                          <p className="leading-snug">{log.text}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
