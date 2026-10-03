@@ -9,8 +9,7 @@ import { LessonModal } from './LessonModal';
 import { MascotGrace } from './MascotGrace';
 
 export const StudyPathView: React.FC = () => {
-  const { userStats } = useApp();
-  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const { userStats, activeLesson, setActiveLesson } = useApp();
 
   const isLessonCompleted = (lessonId: string) => userStats.completedLessonIds.includes(lessonId);
 
@@ -32,6 +31,10 @@ export const StudyPathView: React.FC = () => {
     if (!unlocked) return;
     setActiveLesson(lesson);
   };
+
+  if (activeLesson) {
+    return <LessonModal lesson={activeLesson} onClose={() => setActiveLesson(null)} />;
+  }
 
   // Node horizontal offset sequence to create the signature Duolingo winding path
   const getOffsetClass = (index: number) => {
@@ -161,11 +164,6 @@ export const StudyPathView: React.FC = () => {
           );
         })}
       </div>
-
-      {/* Lesson Modal View if a lesson is clicked */}
-      {activeLesson && (
-        <LessonModal lesson={activeLesson} onClose={() => setActiveLesson(null)} />
-      )}
     </div>
   );
 };

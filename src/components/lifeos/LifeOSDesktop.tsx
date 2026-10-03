@@ -16,6 +16,7 @@ import { AiPrayerCompanion } from '../AiPrayerCompanion';
 import { LeaderboardView } from '../LeaderboardView';
 import { ShopModal } from '../ShopModal';
 import { DailyWidget } from '../DailyWidget';
+import { LessonModal } from '../LessonModal';
 import { LifeOSDesktopWidgets } from './LifeOSDesktopWidgets';
 import { AddWidgetModal } from './AddWidgetModal';
 import { FellowshipChatApp } from '../chat/FellowshipChatApp';
@@ -30,7 +31,7 @@ import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 
 // Renders the full flagship FaithLingo app inside its LifeOS window
 const FaithLingoWindowContent: React.FC = () => {
-  const { currentTab, fontSize } = useApp();
+  const { currentTab, fontSize, activeLesson, setActiveLesson } = useApp();
 
   const fontMultiplierClass = 
     fontSize === 'xlarge' ? 'text-lg' :
@@ -39,16 +40,20 @@ const FaithLingoWindowContent: React.FC = () => {
   return (
     <div className={`flex flex-col flex-1 h-full overflow-y-auto ${fontMultiplierClass} transition-colors duration-200 pb-20 md:pb-0`}>
       <HeaderStats />
-      <div className="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full">
-        <Navigation />
-        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-100px)]">
-          {currentTab === 'learn' && <StudyPathView />}
-          {currentTab === 'bible' && <BibleReader />}
-          {currentTab === 'plans' && <ReadingPlansView />}
-          {currentTab === 'prayer' && <AiPrayerCompanion />}
-          {currentTab === 'leaderboard' && <LeaderboardView />}
-        </main>
-      </div>
+      {activeLesson ? (
+        <LessonModal lesson={activeLesson} onClose={() => setActiveLesson(null)} />
+      ) : (
+        <div className="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full">
+          <Navigation />
+          <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-100px)]">
+            {currentTab === 'learn' && <StudyPathView />}
+            {currentTab === 'bible' && <BibleReader />}
+            {currentTab === 'plans' && <ReadingPlansView />}
+            {currentTab === 'prayer' && <AiPrayerCompanion />}
+            {currentTab === 'leaderboard' && <LeaderboardView />}
+          </main>
+        </div>
+      )}
       <ShopModal />
       <DailyWidget isModal={true} />
     </div>

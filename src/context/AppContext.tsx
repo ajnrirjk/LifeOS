@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserStats, ReadingPlan, PrayerJournalItem, TranslationId } from '../types';
+import { UserStats, ReadingPlan, PrayerJournalItem, TranslationId, Lesson } from '../types';
 import { READING_PLANS } from '../data/readingPlansData';
 import { DAILY_HIGHLIGHTS, DailyVerseHighlight } from '../data/bibleData';
 import { sounds } from '../services/soundEffects';
@@ -12,6 +12,8 @@ interface AppContextType {
   setIsShopOpen: (open: boolean) => void;
   isWidgetModalOpen: boolean;
   setIsWidgetModalOpen: (open: boolean) => void;
+  activeLesson: Lesson | null;
+  setActiveLesson: (lesson: Lesson | null) => void;
 
   // Stats
   userStats: UserStats;
@@ -94,6 +96,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentTab, setCurrentTab] = useState<'learn' | 'bible' | 'plans' | 'prayer' | 'leaderboard'>('learn');
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
 
   // Stats with localStorage persistence
   const [userStats, setUserStats] = useState<UserStats>(() => {
@@ -358,6 +361,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsShopOpen,
         isWidgetModalOpen,
         setIsWidgetModalOpen,
+        activeLesson,
+        setActiveLesson,
         userStats,
         completeLesson,
         loseHeart,
