@@ -144,27 +144,48 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
 
         {/* Active App Indicator & Mobile Quick Return */}
         {!isDesktopView && activeApp && (
-          <div className="flex items-center gap-1.5">
+          <div className="sm:hidden flex items-center gap-1.5">
             <button
               onClick={() => {
                 sounds.playTap();
                 showDesktop();
               }}
-              className="sm:hidden flex items-center gap-1 text-emerald-400 font-black text-[11px] px-2 py-0.5 rounded-md bg-emerald-950/70 border border-emerald-500/40"
+              className="flex items-center gap-1 text-emerald-400 font-black text-[11px] px-2 py-0.5 rounded-md bg-emerald-950/70 border border-emerald-500/40"
               title="Return to Desktop"
             >
               <span>◀</span>
               <span>Home</span>
             </button>
-            <button
-              onClick={() => launchApp(activeApp.id)}
-              className="hidden sm:flex items-center gap-1.5 font-bold text-stone-300 hover:text-white px-2 py-0.5 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <span>{activeApp.emoji}</span>
-              <span>{activeApp.title}</span>
-            </button>
           </div>
         )}
+
+        {/* Quick App Switcher Tabs directly in Top Bar - Never blocks app content */}
+        <div className="hidden md:flex items-center gap-1 border-l border-white/10 pl-2">
+          {apps
+            .filter(a => settings.appVisibility[a.id] !== false && (a.id === 'faithlingo' || a.id === 'bible_journal' || a.isPinned))
+            .map((app) => {
+              const isActive = !isDesktopView && activeAppId === app.id;
+              return (
+                <button
+                  key={app.id}
+                  onClick={() => {
+                    sounds.playTap();
+                    launchApp(app.id);
+                  }}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${
+                    isActive
+                      ? 'bg-white/20 text-white shadow-sm border border-white/25'
+                      : 'text-stone-300 hover:text-white hover:bg-white/10'
+                  }`}
+                  title={`${app.title} — ${app.description}`}
+                >
+                  <span className="text-xs">{app.emoji}</span>
+                  <span className="hidden lg:inline">{app.title}</span>
+                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                </button>
+              );
+            })}
+        </div>
       </div>
 
       {/* Center/Right: Google Auth, Admin & Settings shortcut, Privacy link & Live System Date/Time */}

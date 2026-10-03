@@ -9,6 +9,8 @@ export const LifeOSDock: React.FC = () => {
   const { apps, activeAppId, openWindows, launchApp, isDesktopView, showDesktop, minimizeApp } = useLifeOS();
   const { settings, updateSettings } = useSettings();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
   const [isAppDrawerOpen, setIsAppDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -33,6 +35,10 @@ export const LifeOSDock: React.FC = () => {
     right: 'bottom-2.5 right-6',
   }[currentDockPosition];
 
+  // In app mode, auto-tuck unless hovered or explicitly pinned
+  const isDockExpanded = isDesktopView || isPinned || isHovered || !isCollapsed;
+  const isTuckedInApp = !isDesktopView && !isPinned && !isHovered;
+
   const filteredApps = apps.filter(app => {
     const isVisible = settings.appVisibility[app.id] !== false;
     return isVisible && (
@@ -45,13 +51,18 @@ export const LifeOSDock: React.FC = () => {
   return (
     <>
       {/* DESKTOP DOCK (Tablets & Desktops >= 768px) */}
-      {!isCollapsed && (
+      {!isTuckedInApp && !isCollapsed && (
         <motion.div
           layout
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           className={`hidden md:block fixed ${positionClasses} z-40 select-none`}
         >
-          <div className="px-2.5 py-1.5 rounded-3xl bg-black/65 dark:bg-black/80 backdrop-blur-2xl border border-white/20 shadow-2xl flex items-center gap-1.5">
+          <div className="px-2.5 py-1.5 rounded-3xl bg-black/75 dark:bg-black/85 backdrop-blur-2xl border border-white/20 shadow-2xl flex items-center gap-1.5 ring-1 ring-black/50">
             {/* Desktop Home / Widgets Button */}
             <motion.button
               whileHover={{ scale: 1.06, y: -2 }}
@@ -171,6 +182,22 @@ export const LifeOSDock: React.FC = () => {
               <MoveHorizontal className="w-3.5 h-3.5" />
             </motion.button>
 
+            {/* Pin / Unpin Dock */}
+            <motion.button
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                sounds.playTap();
+                setIsPinned(!isPinned);
+              }}
+              className={`p-1.5 rounded-xl transition-colors shrink-0 ${
+                isPinned ? 'bg-amber-500/30 text-amber-300' : 'hover:bg-white/15 text-white/70 hover:text-white'
+              }`}
+              title={isPinned ? "Unpin Dock (Auto-Hide in Apps)" : "Pin Dock (Always Visible)"}
+            >
+              <span className="text-xs">📌</span>
+            </motion.button>
+
             {/* Minimize / Hide Dock button */}
             <motion.button
               whileHover={{ scale: 1.15 }}
@@ -180,7 +207,7 @@ export const LifeOSDock: React.FC = () => {
                 setIsCollapsed(true);
               }}
               className="p-1.5 rounded-xl hover:bg-white/15 text-white/70 hover:text-white transition-colors shrink-0"
-              title="Minimize Dock out of the way"
+              title="Minimize Dock completely"
             >
               <ChevronDown className="w-3.5 h-3.5" />
             </motion.button>
@@ -188,7 +215,32 @@ export const LifeOSDock: React.FC = () => {
         </motion.div>
       )}
 
-      {/* When collapsed on desktop: tiny discreet pill */}
+      {/* When tucked in app: sleek, unobtrusive floating trigger pill that expands on hover */}
+      {isTuckedInApp && !isCollapsed && (
+        <div
+          onMouseEnter={() => setIsHovered(true)}
+          className={`hidden md:block fixed ${positionClasses} z-40 select-none`}
+        >
+          <motion.button
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 0.75, y: 0, scale: 1 }}
+            whileHover={{ opacity: 1, scale: 1.05, y: -2 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 350 }}
+            onClick={() => {
+              sounds.playTap();
+              setIsHovered(true);
+            }}
+            className="px-3 py-1 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-xl border border-white/20 text-white/80 hover:text-white text-[11px] font-extrabold flex items-center gap-1.5 shadow-2xl transition-all"
+            title="Hover or click to show Dock"
+          >
+            <span>🌿</span>
+            <span>LifeOS Dock</span>
+            <ChevronUp className="w-3 h-3 text-emerald-400" />
+          </motion.button>
+        </div>
+      )}
+
+      {/* When manually collapsed on desktop: compact discreet pill */}
       {isCollapsed && (
         <div className={`hidden md:block fixed ${positionClasses} z-40 select-none`}>
           <motion.button
@@ -200,6 +252,7 @@ export const LifeOSDock: React.FC = () => {
             onClick={() => {
               sounds.playTap();
               setIsCollapsed(false);
+              setIsHovered(true);
             }}
             className="px-3 py-1.5 rounded-full bg-black/75 hover:bg-black/90 backdrop-blur-xl border border-white/20 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xl transition-all"
             title="Show LifeOS Dock"
