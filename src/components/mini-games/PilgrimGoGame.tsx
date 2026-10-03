@@ -959,8 +959,8 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         </div>
       </div>
 
-      {/* Main Game Screen (16:9 Landscape Layout) */}
-      <div className="relative w-full aspect-[16/9] max-h-[66vh] rounded-3xl overflow-hidden shadow-2xl border-4 border-amber-500/40 bg-stone-950 flex flex-col justify-between">
+      {/* Main Game Screen (Vertical 9:16 on mobile, 16:9 on desktop) */}
+      <div className="relative w-full max-w-sm sm:max-w-xl md:max-w-4xl mx-auto min-h-[540px] sm:min-h-0 aspect-[9/16] sm:aspect-[4/3] md:aspect-[16/9] max-h-[82vh] sm:max-h-[66vh] rounded-3xl overflow-hidden shadow-2xl border-4 border-amber-500/40 bg-stone-950 flex flex-col justify-between">
         {/* VIEW 1: ACTIVE IN-RUN GAMEPLAY (Exact Capybara Go Screen) */}
         {inRun ? (
           <div className="relative w-full h-full flex flex-col justify-between p-2.5 sm:p-3 bg-stone-950 gap-2">

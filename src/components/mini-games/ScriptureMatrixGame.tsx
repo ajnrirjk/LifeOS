@@ -143,10 +143,10 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
         </div>
       </div>
 
-      <div className="relative w-full aspect-[16/9] max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-indigo-500/30 bg-stone-950 p-6 flex flex-col items-center justify-center">
+      <div className="relative w-full max-w-sm sm:max-w-xl md:max-w-4xl mx-auto aspect-[9/16] sm:aspect-[4/3] md:aspect-[16/9] min-h-[480px] sm:min-h-0 max-h-[80vh] sm:max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-indigo-500/30 bg-stone-950 p-4 sm:p-6 flex flex-col items-center justify-center">
         {/* Live HUD */}
         {gameState !== 'idle' && (
-          <div className="absolute top-4 left-0 right-0 flex justify-between px-8 pointer-events-none z-10">
+          <div className="absolute top-4 left-0 right-0 flex justify-between px-6 sm:px-8 pointer-events-none z-10">
             <div className="px-3.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white font-black text-lg shadow-lg">
               Round: {sequence.length}
             </div>
@@ -156,8 +156,8 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
           </div>
         )}
 
-        {/* 4 Glowing Landscape Crystal Sound Pads */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full max-w-2xl h-44 sm:h-52 z-0">
+        {/* 4 Glowing Crystal Sound Pads (2x2 on mobile, 4 in a row on desktop) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full max-w-sm sm:max-w-2xl h-64 sm:h-52 z-0">
           {PADS.map((pad) => {
             const isLit = activePad === pad.id;
             return (

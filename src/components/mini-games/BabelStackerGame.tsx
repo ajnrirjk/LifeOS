@@ -394,7 +394,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         onClick={() => {
           if (gameState === 'playing') dropBlock();
         }}
-        className="relative w-full aspect-[16/9] max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-violet-500/30 bg-stone-950 cursor-pointer touch-none"
+        className="relative w-full max-w-sm sm:max-w-xl md:max-w-4xl mx-auto aspect-[9/16] sm:aspect-[4/3] md:aspect-[16/9] min-h-[500px] sm:min-h-0 max-h-[80vh] sm:max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-violet-500/30 bg-stone-950 cursor-pointer touch-none"
       >
         <canvas
           ref={canvasRef}
