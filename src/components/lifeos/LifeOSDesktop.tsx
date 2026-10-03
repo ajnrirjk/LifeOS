@@ -72,7 +72,20 @@ export const LifeOSDesktop: React.FC = () => {
   } = useLifeOS();
 
   const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
-  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(true);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const isDirectPrivacyRoute =
+      window.location.hash.toLowerCase().includes('privacy') ||
+      window.location.pathname.toLowerCase().includes('privacy');
+    if (isDirectPrivacyRoute) return true;
+
+    // Only show if user hasn't agreed yet
+    try {
+      return localStorage.getItem('lifeos_privacy_agreed') !== 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Check URL hash or path for direct privacy link (e.g. /#privacy or /privacy)
   React.useEffect(() => {

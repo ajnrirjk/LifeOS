@@ -23,6 +23,14 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
     onClose();
   };
 
+  const handleClose = () => {
+    sounds.playTap();
+    try {
+      localStorage.setItem('lifeos_privacy_agreed', 'true');
+    } catch {}
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
       <div 
@@ -41,10 +49,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
             </div>
           </div>
           <button
-            onClick={() => {
-              sounds.playTap();
-              onClose();
-            }}
+            onClick={handleClose}
             className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
             aria-label="Close"
           >
@@ -134,10 +139,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button
-              onClick={() => {
-                sounds.playTap();
-                onClose();
-              }}
+              onClick={handleClose}
               className="px-3 py-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition-colors font-medium text-xs"
             >
               Close
