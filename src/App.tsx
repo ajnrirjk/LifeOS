@@ -6,7 +6,9 @@
 import React, { useState, useEffect } from 'react';
 import { AppProvider } from './context/AppContext';
 import { LifeOSProvider } from './context/LifeOSContext';
+import { SettingsProvider } from './context/SettingsContext';
 import { LifeOSDesktop } from './components/lifeos/LifeOSDesktop';
+import { SystemSettingsModal } from './components/settings/SystemSettingsModal';
 import { TermsOfServicePage } from './components/TermsOfServicePage';
 
 export default function App() {
@@ -33,7 +35,10 @@ export default function App() {
   return (
     <AppProvider>
       <LifeOSProvider>
-        <LifeOSDesktop />
+        <SettingsProvider>
+          <LifeOSDesktop />
+          <SystemSettingsModal />
+        </SettingsProvider>
       </LifeOSProvider>
     </AppProvider>
   );

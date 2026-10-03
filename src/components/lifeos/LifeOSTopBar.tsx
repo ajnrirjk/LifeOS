@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import { ChevronDown } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
+import { ChevronDown, Settings, Shield, Crown } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 
 interface LifeOSTopBarProps {
@@ -9,6 +10,7 @@ interface LifeOSTopBarProps {
 
 export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => {
   const { activeAppId, apps, wallpaper, setWallpaper, isDesktopView, showDesktop, launchApp } = useLifeOS();
+  const { setIsSettingsOpen, settings } = useSettings();
 
   const [timeStr, setTimeStr] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -28,6 +30,7 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
   }, []);
 
   const activeApp = apps.find(a => a.id === activeAppId);
+  const isAdmin = settings.profile.role === 'admin' || settings.profile.role === 'superadmin';
 
   const wallpapers: Array<{ id: any; label: string }> = [
     { id: 'mountain', label: 'Mountain Dawn' },
@@ -53,7 +56,24 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
           </button>
 
           {isMenuOpen && (
-            <div className="absolute top-7 left-0 w-48 bg-stone-900/95 backdrop-blur-xl border border-white/15 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 z-50 text-stone-200 text-xs">
+            <div className="absolute top-7 left-0 w-52 bg-stone-900/95 backdrop-blur-xl border border-white/15 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 z-50 text-stone-200 text-xs">
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setIsMenuOpen(false);
+                  setIsSettingsOpen(true);
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-left text-xs bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold transition-colors flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Control Center & Admin</span>
+                </div>
+                <span className="text-[9px] px-1 rounded bg-amber-500/30 text-amber-200 font-mono">GOD</span>
+              </button>
+
+              <div className="h-px bg-white/10 my-1" />
+
               <div className="px-2.5 py-1 text-[10px] font-black uppercase text-stone-400">
                 Desktop Wallpaper
               </div>
@@ -66,7 +86,7 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                     setIsMenuOpen(false);
                   }}
                   className={`px-2.5 py-1 rounded-lg text-left text-xs transition-colors flex items-center justify-between ${
-                    wallpaper === wp.id ? 'bg-emerald-600 text-white' : 'hover:bg-white/10'
+                    wallpaper === wp.id ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
                   }`}
                 >
                   <span>{wp.label}</span>
@@ -146,22 +166,41 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
         )}
       </div>
 
-      {/* Center/Right: Privacy link & Live System Date/Time */}
-      <div className="flex items-center gap-2">
+      {/* Center/Right: Admin & Settings shortcut, Privacy link & Live System Date/Time */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Settings & Admin Quick Trigger */}
+        <button
+          onClick={() => {
+            sounds.playTap();
+            setIsSettingsOpen(true);
+          }}
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-stone-200 hover:text-white font-bold text-[11px] transition-all"
+          title="Open User Settings & Admin Control Center"
+        >
+          <Settings className="w-3.5 h-3.5 text-amber-400" />
+          <span className="hidden sm:inline">Settings</span>
+          {isAdmin && (
+            <span className="px-1 py-0.2 rounded bg-amber-500/30 text-amber-300 text-[9px] font-mono">
+              ADMIN
+            </span>
+          )}
+        </button>
+
         {onOpenPrivacy && (
           <button
             onClick={() => {
               sounds.playTap();
               onOpenPrivacy();
             }}
-            className="text-[11px] font-semibold text-stone-300 hover:text-white px-1.5 sm:px-2 py-0.5 rounded-md hover:bg-white/10 transition-colors flex items-center gap-1"
+            className="text-[11px] font-semibold text-stone-300 hover:text-white px-1.5 sm:px-2 py-0.5 rounded-md hover:bg-white/10 transition-colors hidden md:flex items-center gap-1"
             title="View Life OS Privacy Policy"
           >
             <span>🛡️</span>
-            <span className="hidden md:inline">Privacy Policy</span>
+            <span>Privacy</span>
           </button>
         )}
-        <div className="font-bold text-stone-200 tracking-tight text-[11px] whitespace-nowrap">
+
+        <div className="font-bold text-stone-300 tracking-tight text-[11px] whitespace-nowrap hidden sm:block">
           {timeStr}
         </div>
       </div>

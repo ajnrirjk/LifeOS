@@ -25,7 +25,8 @@ import { CatFighterApp } from '../cat-fighter/CatFighterApp';
 import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
 import { useApp } from '../../context/AppContext';
-import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
+import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft, Megaphone } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 
@@ -133,6 +134,7 @@ export const LifeOSDesktop: React.FC = () => {
 
   const activeApp = apps.find(a => a.id === activeAppId);
   const activeWindowState = openWindows[activeAppId];
+  const { announcement, setAnnouncement } = useSettings();
 
   return (
     <div className={`h-[100dvh] w-full flex flex-col overflow-hidden relative select-none ${wallpaperClasses}`}>
@@ -140,6 +142,26 @@ export const LifeOSDesktop: React.FC = () => {
       <div className={!isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? 'hidden md:block' : 'block'}>
         <LifeOSTopBar onOpenPrivacy={() => setIsPrivacyModalOpen(true)} />
       </div>
+
+      {/* Global Broadcast Announcement Ribbon (If active) */}
+      {announcement && (
+        <div className="bg-gradient-to-r from-purple-900/95 via-indigo-900/95 to-purple-900/95 border-b border-purple-500/30 px-3 py-1.5 flex items-center justify-between text-xs text-white z-40 shrink-0 shadow-lg backdrop-blur-md">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span className="p-1 rounded-md bg-purple-500/30 text-purple-200 shrink-0">
+              <Megaphone className="w-3.5 h-3.5 animate-pulse" />
+            </span>
+            <span className="font-black text-amber-300 shrink-0">{announcement.title}:</span>
+            <span className="truncate text-stone-200">{announcement.message}</span>
+          </div>
+          <button
+            onClick={() => setAnnouncement(null)}
+            className="p-1 rounded hover:bg-white/10 text-stone-400 hover:text-white shrink-0 ml-2"
+            title="Dismiss Alert"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Desktop Workspace / Active App Window / Desktop Widgets */}
       <div className={`flex-1 relative overflow-hidden flex flex-col ${
