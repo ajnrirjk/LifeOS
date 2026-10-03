@@ -143,7 +143,7 @@ export const LifeOSDock: React.FC = () => {
                         : app.id === 'fellowship_chat'
                         ? 'Group Chat'
                         : app.id === 'mini_cats'
-                        ? 'Mini Kitties'
+                        ? 'Cat Fighter Turbo'
                         : app.id === 'mini_games'
                         ? 'Retro Arcade'
                         : app.id === 'youtube'
@@ -274,7 +274,7 @@ export const LifeOSDock: React.FC = () => {
                     : app.id === 'mini_games'
                     ? 'Arcade'
                     : app.id === 'mini_cats'
-                    ? 'Paws'
+                    ? 'Fighter'
                     : app.id === 'youtube'
                     ? 'Videos'
                     : app.title}

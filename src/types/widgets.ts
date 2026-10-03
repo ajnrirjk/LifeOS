@@ -33,12 +33,12 @@ export const ALL_DESKTOP_WIDGETS: DesktopWidgetConfig[] = [
   },
   {
     id: 'mini_cats',
-    title: 'Pocket Paws Sanctuary',
-    subtitle: 'Miniature cats live playground, feeding & silly costumes',
-    emoji: '🐱',
+    title: 'Cat Fighter Turbo',
+    subtitle: '16-bit retro street fighting cats with special moves & combos',
+    emoji: '🥊',
     category: 'System',
     span: 'medium',
-    color: 'from-amber-500/20 to-rose-600/20 border-amber-500/30'
+    color: 'from-red-600/20 to-amber-600/20 border-red-500/30'
   },
   {
     id: 'mini_games',

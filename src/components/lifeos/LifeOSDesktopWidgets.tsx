@@ -641,6 +641,30 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
+                  {/* Cat Fighter Turbo Widget */}
+                  {widgetId === 'mini_cats' && (
+                    <div className="flex flex-col gap-2.5">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center">
+                          <div className="text-xl mb-0.5">🥋</div>
+                          <div className="text-[10px] font-bold text-white truncate">Ryu-Paw</div>
+                        </div>
+                        <div className="p-2.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-center">
+                          <div className="text-xl mb-0.5">🎀</div>
+                          <div className="text-[10px] font-bold text-white truncate">Chun-Meow</div>
+                        </div>
+                        <div className="p-2.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
+                          <div className="text-xl mb-0.5">👹</div>
+                          <div className="text-[10px] font-bold text-white truncate">Akuma-Cat</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 text-xs text-stone-300">
+                        <span>🥊 16-Bit Street Fighter Engine</span>
+                        <span className="text-amber-400 font-black">Hadou-Paw & Custom Keys</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Mini Games Arcade Widget */}
                   {widgetId === 'mini_games' && (
                     <div className="flex flex-col gap-2.5">
@@ -696,6 +720,8 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         launchApp('fellowship_chat');
                       } else if (widgetId === 'mini_games') {
                         launchApp('mini_games');
+                      } else if (widgetId === 'mini_cats') {
+                        launchApp('mini_cats');
                       } else if (widgetId === 'app_studio') {
                         launchApp('app_studio');
                       } else {

@@ -20,7 +20,7 @@ import { LifeOSDesktopWidgets } from './LifeOSDesktopWidgets';
 import { AddWidgetModal } from './AddWidgetModal';
 import { FellowshipChatApp } from '../chat/FellowshipChatApp';
 import { DiscordFellowshipApp } from '../chat/DiscordFellowshipApp';
-import { MiniCatsApp } from '../mini-cats/MiniCatsApp';
+import { CatFighterApp } from '../cat-fighter/CatFighterApp';
 import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
 import { useApp } from '../../context/AppContext';
@@ -276,7 +276,7 @@ export const LifeOSDesktop: React.FC = () => {
                 {activeApp.id === 'faithlingo' && <FaithLingoWindowContent />}
                 {activeApp.id === 'bible_journal' && <BibleJournalApp />}
                 {activeApp.id === 'fellowship_chat' && <DiscordFellowshipApp />}
-                {activeApp.id === 'mini_cats' && <MiniCatsApp />}
+                {activeApp.id === 'mini_cats' && <CatFighterApp />}
                 {activeApp.id === 'mini_games' && <ArcadeVaultApp />}
                 {activeApp.id === 'youtube' && <YouTubeApp />}
                 {activeApp.id === 'app_studio' && <AppStudio />}

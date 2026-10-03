@@ -39,13 +39,13 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
   },
   {
     id: 'mini_cats',
-    title: 'Pocket Paws',
-    emoji: '🐱',
-    iconName: 'Cat',
+    title: 'Cat Fighter Turbo',
+    emoji: '🥊',
+    iconName: 'Swords',
     category: 'Productivity',
     type: 'mini_cats',
-    color: 'from-amber-500 via-orange-500 to-rose-600',
-    description: 'Miniature cat breeds playground. Drag & drop, silly costumes, feed, drink, dance & sleep!',
+    color: 'from-red-600 via-orange-500 to-amber-500',
+    description: 'Retro 16-bit Cat Street Fighter arcade! Hadou-Paw fireballs, lightning kicks, super combos & custom controls.',
     isPinned: true,
     isSystem: true
   },
