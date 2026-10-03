@@ -34,5 +34,15 @@
     "createdAt": 1790990602871,
     "lastMessage": "",
     "lastMessageTime": 1790990602871
+  },
+  {
+    "id": "chan_1790990727634_lk",
+    "name": "lk",
+    "topic": "Community Group Chat",
+    "emoji": "🕊️",
+    "creatorId": "fGiu23XslRYBnajNwJDDlSmxQYp1",
+    "createdAt": 1790990727634,
+    "lastMessage": "Group chat created! Start the conversation.",
+    "lastMessageTime": 1790990727634
   }
 ]

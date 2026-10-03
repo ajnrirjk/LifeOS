@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, ChatChannel, ChatUser, ActiveChatMember } from '../../types/chat';
-import { chatService } from '../../services/chatService';
+import { chatService, DEFAULT_CHANNELS, DEFAULT_SEED_MESSAGES } from '../../services/chatService';
 import { googleDriveService, getFriendlyAuthErrorMessage } from '../../services/googleDriveService';
 import { useApp } from '../../context/AppContext';
 import { sounds } from '../../services/soundEffects';
@@ -28,10 +28,33 @@ import {
 export const FellowshipChatApp: React.FC = () => {
   const { todayHighlight } = useApp();
 
-  // Active channel
-  const [channels, setChannels] = useState<ChatChannel[]>([]);
+  // Active channel & messages with robust fallback for Vercel & offline
+  const [channels, setChannels] = useState<ChatChannel[]>(() => {
+    try {
+      const saved = localStorage.getItem('lifeos_fellowship_channels_cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_CHANNELS;
+  });
+
   const [activeChannelId, setActiveChannelId] = useState<string>('general');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('lifeos_fellowship_messages_cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((m: ChatMessage) => m.channelId === 'general');
+        }
+      }
+    } catch {}
+    return DEFAULT_SEED_MESSAGES.filter(m => m.channelId === 'general');
+  });
+
   const [inputText, setInputText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -253,7 +276,7 @@ export const FellowshipChatApp: React.FC = () => {
     chatService.sendTyping(activeChannelId, currentUser.name, false);
 
     try {
-      await chatService.sendMessage({
+      const newMsg = await chatService.sendMessage({
         channelId: activeChannelId,
         text: textToSend,
         senderId: currentUser.id,
@@ -261,6 +284,11 @@ export const FellowshipChatApp: React.FC = () => {
         senderPhoto: currentUser.photoURL,
         senderEmail: currentUser.email,
         isGoogleUser: currentUser.isGoogleUser,
+      });
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
       });
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -271,7 +299,7 @@ export const FellowshipChatApp: React.FC = () => {
   const handleShareVerse = async () => {
     sounds.playVictory();
     try {
-      await chatService.sendMessage({
+      const newMsg = await chatService.sendMessage({
         channelId: activeChannelId,
         text: `“${todayHighlight.text}” — ${todayHighlight.reference}`,
         senderId: currentUser.id,
@@ -285,6 +313,11 @@ export const FellowshipChatApp: React.FC = () => {
           content: todayHighlight.reflection,
           reference: todayHighlight.reference,
         },
+      });
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
       });
     } catch (err) {
       console.error('Error sharing verse:', err);
@@ -300,7 +333,7 @@ export const FellowshipChatApp: React.FC = () => {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const note = parsed[0];
-          await chatService.sendMessage({
+          const newMsg = await chatService.sendMessage({
             channelId: activeChannelId,
             text: `Sharing notes from today's sermon: "${note.title || 'Sunday Sermon'}" (${note.passage || 'Scripture'})`,
             senderId: currentUser.id,
@@ -315,6 +348,11 @@ export const FellowshipChatApp: React.FC = () => {
               reference: note.passage || '',
             },
           });
+
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
         }
       }
     } catch (err) {
@@ -325,6 +363,22 @@ export const FellowshipChatApp: React.FC = () => {
   // Toggle emoji reaction
   const handleReaction = (messageId: string, emoji: string) => {
     sounds.playTap();
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== messageId) return msg;
+        const currentReactions = { ...(msg.reactions || {}) };
+        const userList = currentReactions[emoji] || [];
+        if (userList.includes(currentUser.name)) {
+          currentReactions[emoji] = userList.filter((u) => u !== currentUser.name);
+          if (currentReactions[emoji].length === 0) {
+            delete currentReactions[emoji];
+          }
+        } else {
+          currentReactions[emoji] = [...userList, currentUser.name];
+        }
+        return { ...msg, reactions: currentReactions };
+      })
+    );
     chatService.toggleReaction(messageId, emoji, currentUser.name);
   };
 
@@ -353,6 +407,10 @@ export const FellowshipChatApp: React.FC = () => {
       setNewChannelName('');
       setNewChannelTopic('');
       setIsNewChannelModalOpen(false);
+      setChannels((prev) => {
+        if (prev.some((c) => c.id === chan.id)) return prev;
+        return [...prev, chan];
+      });
       setActiveChannelId(chan.id);
     } catch (err) {
       console.error('Failed to create channel:', err);
