@@ -38,6 +38,18 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     isSystem: true
   },
   {
+    id: 'faith_meet',
+    title: 'LifeMeet',
+    emoji: '📹',
+    iconName: 'Video',
+    category: 'Spiritual',
+    type: 'faith_meet',
+    color: 'from-blue-600 via-indigo-600 to-sky-500',
+    description: 'Google Meet-style group video calling, live screen sharing & prayer fellowship between all devices.',
+    isPinned: true,
+    isSystem: true
+  },
+  {
     id: 'mini_cats',
     title: 'Cat Fighter Turbo',
     emoji: '🥊',

@@ -155,6 +155,8 @@ export const LifeOSDock: React.FC = () => {
                         ? 'Sermon Notes'
                         : app.id === 'fellowship_chat'
                         ? 'Group Chat'
+                        : app.id === 'faith_meet'
+                        ? 'Group Calls'
                         : app.id === 'mini_cats'
                         ? 'Cat Fighter Turbo'
                         : app.id === 'mini_games'

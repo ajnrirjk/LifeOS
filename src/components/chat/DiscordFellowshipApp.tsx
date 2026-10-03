@@ -27,8 +27,10 @@ import {
   PlusCircle,
   AtSign,
   LayoutDashboard,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Video
 } from 'lucide-react';
+import { useLifeOS } from '../../context/LifeOSContext';
 import {
   discordChatService,
   DEFAULT_SERVERS,
@@ -55,6 +57,7 @@ interface DiscordFellowshipAppProps {
 }
 
 export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onClose }) => {
+  const { launchApp } = useLifeOS();
   // Navigation State
   const [activeServerId, setActiveServerId] = useState<string>('server_fellowship');
   const [activeChannelId, setActiveChannelId] = useState<string>('general');
@@ -1038,6 +1041,19 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                   <span className="hidden sm:inline">Admin Portal</span>
                 </button>
               )}
+
+              {/* Start Video Meet button */}
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  launchApp('faith_meet');
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 text-[11px] sm:text-xs font-bold transition-all shadow-sm"
+                title="Start or Join Google Meet Group Call"
+              >
+                <Video className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Group Call</span>
+              </button>
 
               <button
                 onClick={() => setShowVerseModal(true)}

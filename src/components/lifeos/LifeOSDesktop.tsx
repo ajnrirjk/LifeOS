@@ -24,6 +24,7 @@ import { DiscordFellowshipApp } from '../chat/DiscordFellowshipApp';
 import { CatFighterApp } from '../cat-fighter/CatFighterApp';
 import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
+import { LifeMeetApp } from '../meet/LifeMeetApp';
 import { useApp } from '../../context/AppContext';
 import { useSettings } from '../../context/SettingsContext';
 import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft, Megaphone } from 'lucide-react';
@@ -355,11 +356,12 @@ export const LifeOSDesktop: React.FC = () => {
                     {activeApp.id === 'faithlingo' && <FaithLingoWindowContent />}
                     {activeApp.id === 'bible_journal' && <BibleJournalApp />}
                     {activeApp.id === 'fellowship_chat' && <DiscordFellowshipApp />}
+                    {activeApp.id === 'faith_meet' && <LifeMeetApp />}
                     {activeApp.id === 'mini_cats' && <CatFighterApp />}
                     {activeApp.id === 'mini_games' && <ArcadeVaultApp />}
                     {activeApp.id === 'youtube' && <YouTubeApp />}
                     {activeApp.id === 'app_studio' && <AppStudio />}
-                    {activeApp.id !== 'faithlingo' && activeApp.id !== 'bible_journal' && activeApp.id !== 'fellowship_chat' && activeApp.id !== 'mini_cats' && activeApp.id !== 'mini_games' && activeApp.id !== 'youtube' && activeApp.id !== 'app_studio' && (
+                    {activeApp.id !== 'faithlingo' && activeApp.id !== 'bible_journal' && activeApp.id !== 'fellowship_chat' && activeApp.id !== 'faith_meet' && activeApp.id !== 'mini_cats' && activeApp.id !== 'mini_games' && activeApp.id !== 'youtube' && activeApp.id !== 'app_studio' && (
                       <CustomAppRunner app={activeApp} />
                     )}
                   </>

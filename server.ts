@@ -929,6 +929,410 @@ app.get('/api/chat/presence', (_req: Request, res: Response) => {
 });
 
 // ==========================================
+// ==========================================
+// REAL-TIME GROUP VIDEO MEET SYSTEM (Google Meet Style)
+// ==========================================
+
+interface MeetingParticipant {
+  id: string;
+  name: string;
+  photoURL?: string;
+  isGoogleUser: boolean;
+  isAudioMuted: boolean;
+  isVideoMuted: boolean;
+  isScreenSharing: boolean;
+  isHandRaised: boolean;
+  role: 'host' | 'participant';
+  joinedAt: number;
+  lastSeen: number;
+}
+
+interface MeetingChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderPhoto?: string;
+  text: string;
+  createdAt: number;
+}
+
+interface ServerMeetingRoom {
+  id: string;
+  title: string;
+  hostId: string;
+  createdAt: number;
+  isPublic?: boolean;
+  prayerFocus?: string;
+  participants: Record<string, MeetingParticipant>;
+  messages: MeetingChatMessage[];
+}
+
+// In-memory meeting rooms with default active public lounges
+const meetingRooms: Map<string, ServerMeetingRoom> = new Map([
+  [
+    'fellowship-prayer-room',
+    {
+      id: 'fellowship-prayer-room',
+      title: 'Global Prayer & Worship Room',
+      hostId: 'system',
+      createdAt: Date.now(),
+      isPublic: true,
+      prayerFocus: 'Praying for global revival, peace, and church unity',
+      participants: {},
+      messages: []
+    }
+  ],
+  [
+    'sunday-sermon-lounge',
+    {
+      id: 'sunday-sermon-lounge',
+      title: 'Sunday Sermon Discussion Call',
+      hostId: 'system',
+      createdAt: Date.now(),
+      isPublic: true,
+      prayerFocus: 'Reviewing sermon notes and scripture application',
+      participants: {},
+      messages: []
+    }
+  ],
+  [
+    'bible-study-meet',
+    {
+      id: 'bible-study-meet',
+      title: 'Scripture Deep Dive Lounge',
+      hostId: 'system',
+      createdAt: Date.now(),
+      isPublic: true,
+      prayerFocus: 'Book of Romans verse-by-verse discussion',
+      participants: {},
+      messages: []
+    }
+  ]
+]);
+
+const meetingClients: Map<string, { res: Response; roomId: string; userId: string }> = new Map();
+
+function broadcastToMeetingRoom(roomId: string, eventType: string, data: any, excludeClientId?: string) {
+  const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  meetingClients.forEach((client, clientId) => {
+    if (client.roomId === roomId && (!excludeClientId || clientId !== excludeClientId)) {
+      try {
+        client.res.write(payload);
+      } catch {
+        // Handled on close
+      }
+    }
+  });
+}
+
+// Periodic cleanup of inactive participants (every 30 seconds)
+setInterval(() => {
+  const now = Date.now();
+  meetingRooms.forEach((room) => {
+    let changed = false;
+    Object.entries(room.participants).forEach(([pid, p]) => {
+      // If inactive for more than 40 seconds and no active SSE stream
+      const hasActiveStream = Array.from(meetingClients.values()).some(
+        c => c.roomId === room.id && c.userId === pid
+      );
+      if (!hasActiveStream && now - p.lastSeen > 45000) {
+        delete room.participants[pid];
+        changed = true;
+        broadcastToMeetingRoom(room.id, 'peer_left', { peerId: pid, participants: Object.values(room.participants) });
+      }
+    });
+    if (changed && Object.keys(room.participants).length === 0 && !room.isPublic) {
+      // Clean up empty private rooms older than 1 hour
+      if (now - room.createdAt > 3600000) {
+        meetingRooms.delete(room.id);
+      }
+    }
+  });
+}, 30000);
+
+// 1. List active/public meeting rooms
+app.get('/api/meet/rooms', (_req: Request, res: Response) => {
+  const list = Array.from(meetingRooms.values()).map(r => ({
+    id: r.id,
+    title: r.title,
+    hostId: r.hostId,
+    createdAt: r.createdAt,
+    isPublic: !!r.isPublic,
+    prayerFocus: r.prayerFocus,
+    participantCount: Object.keys(r.participants).length,
+    participants: Object.values(r.participants).map(p => ({
+      id: p.id,
+      name: p.name,
+      photoURL: p.photoURL,
+      role: p.role,
+      isVideoMuted: p.isVideoMuted,
+      isAudioMuted: p.isAudioMuted
+    }))
+  }));
+  return res.json(list);
+});
+
+// 2. Get details for a specific meeting room
+app.get('/api/meet/rooms/:roomId', (req: Request, res: Response) => {
+  const { roomId } = req.params;
+  const room = meetingRooms.get(roomId);
+  if (!room) {
+    return res.status(404).json({ error: 'Meeting room not found' });
+  }
+  return res.json({
+    id: room.id,
+    title: room.title,
+    hostId: room.hostId,
+    createdAt: room.createdAt,
+    isPublic: room.isPublic,
+    prayerFocus: room.prayerFocus,
+    participants: Object.values(room.participants),
+    messages: room.messages.slice(-50)
+  });
+});
+
+// 3. Create a new meeting room
+app.post('/api/meet/rooms', (req: Request, res: Response) => {
+  const { title, hostId, isPublic, prayerFocus, customCode } = req.body;
+  
+  // Format clean room code (Google Meet style e.g. "praise-room-777" or "abc-defg-hij")
+  const defaultCode = `meet-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
+  const cleanCode = (customCode || defaultCode)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/^-+|-+$/g, '') || defaultCode;
+
+  const room: ServerMeetingRoom = {
+    id: cleanCode,
+    title: title || `Fellowship Call ${cleanCode.slice(-4).toUpperCase()}`,
+    hostId: hostId || 'anonymous_host',
+    createdAt: Date.now(),
+    isPublic: !!isPublic,
+    prayerFocus: prayerFocus || '',
+    participants: {},
+    messages: []
+  };
+
+  meetingRooms.set(cleanCode, room);
+  return res.json(room);
+});
+
+// 4. Join a meeting room
+app.post('/api/meet/join', (req: Request, res: Response) => {
+  const { roomId, user, isAudioMuted = false, isVideoMuted = false } = req.body;
+  if (!roomId || !user || !user.id) {
+    return res.status(400).json({ error: 'roomId and user (with id, name) are required' });
+  }
+
+  let room = meetingRooms.get(roomId);
+  if (!room) {
+    // Auto-create room on the fly if joining with code
+    room = {
+      id: roomId,
+      title: `Fellowship Room ${roomId}`,
+      hostId: user.id,
+      createdAt: Date.now(),
+      isPublic: false,
+      participants: {},
+      messages: []
+    };
+    meetingRooms.set(roomId, room);
+  }
+
+  const isHost = room.hostId === user.id || Object.keys(room.participants).length === 0;
+
+  const participant: MeetingParticipant = {
+    id: user.id,
+    name: user.name || 'Believer in Christ',
+    photoURL: user.photoURL,
+    isGoogleUser: !!user.isGoogleUser,
+    isAudioMuted: !!isAudioMuted,
+    isVideoMuted: !!isVideoMuted,
+    isScreenSharing: false,
+    isHandRaised: false,
+    role: isHost ? 'host' : 'participant',
+    joinedAt: Date.now(),
+    lastSeen: Date.now()
+  };
+
+  room.participants[user.id] = participant;
+
+  // Broadcast to other participants in this room
+  broadcastToMeetingRoom(roomId, 'peer_joined', {
+    peer: participant,
+    participants: Object.values(room.participants)
+  });
+
+  return res.json({
+    room: {
+      id: room.id,
+      title: room.title,
+      hostId: room.hostId,
+      prayerFocus: room.prayerFocus,
+      createdAt: room.createdAt,
+    },
+    participant,
+    allParticipants: Object.values(room.participants),
+    messages: room.messages.slice(-50)
+  });
+});
+
+// 5. Relay WebRTC Signal (Offer, Answer, ICE Candidate) between peers
+app.post('/api/meet/signal', (req: Request, res: Response) => {
+  const { roomId, senderId, targetId, signalData, type } = req.body;
+  if (!roomId || !senderId || !targetId || !signalData) {
+    return res.status(400).json({ error: 'Missing roomId, senderId, targetId, or signalData' });
+  }
+
+  const room = meetingRooms.get(roomId);
+  if (room && room.participants[senderId]) {
+    room.participants[senderId].lastSeen = Date.now();
+  }
+
+  // Find target's SSE stream and deliver WebRTC signal directly
+  let delivered = false;
+  meetingClients.forEach((client) => {
+    if (client.roomId === roomId && client.userId === targetId) {
+      try {
+        client.res.write(`event: signal\ndata: ${JSON.stringify({ senderId, targetId, signalData, type })}\n\n`);
+        delivered = true;
+      } catch {}
+    }
+  });
+
+  return res.json({ success: true, delivered });
+});
+
+// 6. Update Participant State (Mute mic, camera off, screen share, raise hand)
+app.post('/api/meet/state', (req: Request, res: Response) => {
+  const { roomId, userId, updates } = req.body;
+  if (!roomId || !userId || !updates) {
+    return res.status(400).json({ error: 'roomId, userId, and updates are required' });
+  }
+
+  const room = meetingRooms.get(roomId);
+  if (!room || !room.participants[userId]) {
+    return res.status(404).json({ error: 'Participant not in room' });
+  }
+
+  room.participants[userId] = {
+    ...room.participants[userId],
+    ...updates,
+    lastSeen: Date.now()
+  };
+
+  broadcastToMeetingRoom(roomId, 'peer_state_changed', {
+    userId,
+    updates,
+    participant: room.participants[userId],
+    participants: Object.values(room.participants)
+  });
+
+  return res.json({ success: true, participant: room.participants[userId] });
+});
+
+// 7. Send In-Call Chat Message
+app.post('/api/meet/chat', (req: Request, res: Response) => {
+  const { roomId, senderId, senderName, senderPhoto, text } = req.body;
+  if (!roomId || !text || !text.trim()) {
+    return res.status(400).json({ error: 'roomId and text are required' });
+  }
+
+  const room = meetingRooms.get(roomId);
+  if (!room) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+
+  const msg: MeetingChatMessage = {
+    id: `callmsg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    senderId: senderId || 'guest',
+    senderName: senderName || 'Anonymous',
+    senderPhoto,
+    text: text.trim(),
+    createdAt: Date.now()
+  };
+
+  room.messages.push(msg);
+  if (room.messages.length > 200) {
+    room.messages.splice(0, room.messages.length - 200);
+  }
+
+  broadcastToMeetingRoom(roomId, 'chat_message', msg);
+  return res.json(msg);
+});
+
+// 8. Leave Meeting Room
+app.post('/api/meet/leave', (req: Request, res: Response) => {
+  const { roomId, userId } = req.body;
+  if (!roomId || !userId) {
+    return res.status(400).json({ error: 'roomId and userId required' });
+  }
+
+  const room = meetingRooms.get(roomId);
+  if (room && room.participants[userId]) {
+    delete room.participants[userId];
+    broadcastToMeetingRoom(roomId, 'peer_left', {
+      peerId: userId,
+      participants: Object.values(room.participants)
+    });
+  }
+
+  return res.json({ success: true });
+});
+
+// 9. Real-Time SSE Stream for Meeting Room Signaling
+app.get('/api/meet/stream', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  const clientId = `meetclient_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const roomId = String(req.query.roomId || '');
+  const userId = String(req.query.userId || clientId);
+
+  if (!roomId) {
+    res.write(`event: error\ndata: ${JSON.stringify({ message: 'roomId required' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  meetingClients.set(clientId, { res, roomId, userId });
+
+  const room = meetingRooms.get(roomId);
+  const participantList = room ? Object.values(room.participants) : [];
+
+  res.write(`event: connected\ndata: ${JSON.stringify({ clientId, roomId, userId, participants: participantList })}\n\n`);
+
+  const keepAliveInterval = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch {
+      clearInterval(keepAliveInterval);
+    }
+  }, 12000);
+
+  req.on('close', () => {
+    clearInterval(keepAliveInterval);
+    meetingClients.delete(clientId);
+
+    // If no other stream for this user in this room, mark as left
+    const hasOtherStream = Array.from(meetingClients.values()).some(
+      c => c.roomId === roomId && c.userId === userId
+    );
+
+    if (!hasOtherStream && room && room.participants[userId]) {
+      delete room.participants[userId];
+      broadcastToMeetingRoom(roomId, 'peer_left', {
+        peerId: userId,
+        participants: Object.values(room.participants)
+      });
+    }
+  });
+});
+
+// ==========================================
 // GLOBAL CONFIG & BROADCAST SYSTEM
 // ==========================================
 

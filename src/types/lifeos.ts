@@ -2,6 +2,7 @@ export type AppType =
   | 'flagship_faithlingo' 
   | 'bible_journal'
   | 'fellowship_chat'
+  | 'faith_meet'
   | 'mini_cats'
   | 'mini_games'
   | 'youtube'
