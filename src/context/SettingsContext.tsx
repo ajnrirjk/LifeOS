@@ -527,21 +527,21 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const toggleAppVisibility = async (appId: string) => {
-    let nextAppVisibility: Record<string, boolean> = {};
-    setSettings(prev => {
-      const current = prev.appVisibility[appId] !== false;
-      nextAppVisibility = {
-        ...prev.appVisibility,
-        [appId]: !current
-      };
-      return {
-        ...prev,
-        appVisibility: nextAppVisibility
-      };
-    });
-    logAuditEvent('App Feature Flag Toggled', `App: ${appId}`, 'admin');
+    const currentStatus = settings.appVisibility[appId] !== false;
+    const nextStatus = !currentStatus;
+    const nextAppVisibility: Record<string, boolean> = {
+      ...settings.appVisibility,
+      [appId]: nextStatus
+    };
 
-    // Transmit feature flag update to all devices via Firestore, MQTT, and API
+    setSettings(prev => ({
+      ...prev,
+      appVisibility: nextAppVisibility
+    }));
+
+    logAuditEvent('App Feature Flag Toggled', `App: ${appId} -> ${nextStatus ? 'ENABLED' : 'DISABLED'}`, 'admin');
+
+    // Transmit feature flag update to all devices via Cloud & WebSocket
     await firebaseGlobalService.updateAppVisibility(nextAppVisibility);
   };
 

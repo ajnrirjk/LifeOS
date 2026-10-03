@@ -244,8 +244,8 @@ export const LifeOSDock: React.FC = () => {
             <span className="text-[10px] tracking-tight font-bold">Desktop</span>
           </button>
 
-          {/* All Registered Apps listed dynamically */}
-          {apps.map((app) => {
+          {/* All Registered Apps listed dynamically (filtered by feature flag) */}
+          {apps.filter(app => settings.appVisibility[app.id] !== false).map((app) => {
             const isActive = !isDesktopView && activeAppId === app.id && openWindows[app.id] && !openWindows[app.id].isMinimized;
 
             return (

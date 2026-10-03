@@ -1306,6 +1306,7 @@ export const SystemSettingsModal: React.FC = () => {
                           onClick={() => {
                             sounds.playTap();
                             toggleAppVisibility(app.id);
+                            showFeedback(`${app.title} ${isVisible ? 'Disabled' : 'Enabled'} globally!`);
                           }}
                           className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                             isVisible

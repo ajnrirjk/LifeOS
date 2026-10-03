@@ -336,15 +336,35 @@ export const LifeOSDesktop: React.FC = () => {
 
               {/* Window Body: Specific App Rendering */}
               <div className="flex-1 overflow-y-auto">
-                {activeApp.id === 'faithlingo' && <FaithLingoWindowContent />}
-                {activeApp.id === 'bible_journal' && <BibleJournalApp />}
-                {activeApp.id === 'fellowship_chat' && <DiscordFellowshipApp />}
-                {activeApp.id === 'mini_cats' && <CatFighterApp />}
-                {activeApp.id === 'mini_games' && <ArcadeVaultApp />}
-                {activeApp.id === 'youtube' && <YouTubeApp />}
-                {activeApp.id === 'app_studio' && <AppStudio />}
-                {activeApp.id !== 'faithlingo' && activeApp.id !== 'bible_journal' && activeApp.id !== 'fellowship_chat' && activeApp.id !== 'mini_cats' && activeApp.id !== 'mini_games' && activeApp.id !== 'youtube' && activeApp.id !== 'app_studio' && (
-                  <CustomAppRunner app={activeApp} />
+                {settings.appVisibility[activeApp.id] === false ? (
+                  <div className="h-full min-h-[300px] flex flex-col items-center justify-center p-8 text-center bg-stone-950/95 text-white">
+                    <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border-2 border-rose-500/30 flex items-center justify-center text-3xl mb-4">
+                      🔒
+                    </div>
+                    <h3 className="text-lg font-black text-white mb-2">{activeApp.title} Disabled</h3>
+                    <p className="text-xs text-stone-400 max-w-sm mb-6 leading-relaxed">
+                      This application has been temporarily disabled across LifeOS by the system administrator.
+                    </p>
+                    <button
+                      onClick={() => showDesktop()}
+                      className="px-5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-xs font-black uppercase tracking-wider text-white transition-all shadow-md active:scale-95"
+                    >
+                      Return to Desktop
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {activeApp.id === 'faithlingo' && <FaithLingoWindowContent />}
+                    {activeApp.id === 'bible_journal' && <BibleJournalApp />}
+                    {activeApp.id === 'fellowship_chat' && <DiscordFellowshipApp />}
+                    {activeApp.id === 'mini_cats' && <CatFighterApp />}
+                    {activeApp.id === 'mini_games' && <ArcadeVaultApp />}
+                    {activeApp.id === 'youtube' && <YouTubeApp />}
+                    {activeApp.id === 'app_studio' && <AppStudio />}
+                    {activeApp.id !== 'faithlingo' && activeApp.id !== 'bible_journal' && activeApp.id !== 'fellowship_chat' && activeApp.id !== 'mini_cats' && activeApp.id !== 'mini_games' && activeApp.id !== 'youtube' && activeApp.id !== 'app_studio' && (
+                      <CustomAppRunner app={activeApp} />
+                    )}
+                  </>
                 )}
               </div>
             </motion.div>
