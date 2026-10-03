@@ -227,7 +227,7 @@ export const LifeOSDesktop: React.FC = () => {
               </div>
 
               {/* Mobile Native App Bar */}
-              <div className="flex md:hidden h-11 px-3 bg-stone-900/95 dark:bg-black/95 border-b border-white/10 items-center justify-between select-none shrink-0 text-white z-20">
+              <div className="flex md:hidden pt-[max(env(safe-area-inset-top,0px),48px)] pb-2.5 px-3 bg-stone-900/98 dark:bg-black/98 border-b border-white/10 items-center justify-between select-none shrink-0 text-white z-20 shadow-md">
                 <button
                   onClick={() => {
                     sounds.playTap();
@@ -242,7 +242,7 @@ export const LifeOSDesktop: React.FC = () => {
 
                 <div className="flex items-center gap-1.5 font-black text-xs text-white">
                   <span className="text-sm">{activeApp.emoji}</span>
-                  <span className="truncate max-w-[130px]">{activeApp.title}</span>
+                  <span className="truncate max-w-[140px]">{activeApp.title}</span>
                 </div>
 
                 <button
