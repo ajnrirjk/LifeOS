@@ -407,33 +407,34 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       }
 
       // 4. Foreground Walking Path
+      const groundY = height - 75;
       ctx.fillStyle = currentWorld.groundColor;
-      ctx.fillRect(0, height - 60, width, 60);
+      ctx.fillRect(0, groundY, width, 75);
 
       // Road dirt track
       ctx.fillStyle = '#fef08a33';
-      ctx.fillRect(0, height - 48, width, 28);
+      ctx.fillRect(0, groundY + 12, width, 36);
 
-      // Dynamic Character Positions
-      let baseCharX = runStage === 'battling' ? width * 0.30 : width * 0.45;
+      // Dynamic Character Positions (Unobstructed in Arena)
+      let baseCharX = runStage === 'battling' ? width * 0.28 : width * 0.45;
       if (heroLungeRef.current > 0) {
-        baseCharX += Math.sin(heroLungeRef.current * Math.PI) * 75;
+        baseCharX += Math.sin(heroLungeRef.current * Math.PI) * 90;
       }
-      const charY = height - 55 + (runStage === 'walking' ? Math.abs(walk) * -5 : (heroLungeRef.current > 0 ? -10 : 0));
+      const charY = groundY + 10 + (runStage === 'walking' ? Math.abs(walk) * -6 : (heroLungeRef.current > 0 ? -15 : 0));
 
-      let baseEnemyX = width * 0.72;
+      let baseEnemyX = width * 0.74;
       if (enemyLungeRef.current > 0) {
-        baseEnemyX -= Math.sin(enemyLungeRef.current * Math.PI) * 65;
+        baseEnemyX -= Math.sin(enemyLungeRef.current * Math.PI) * 80;
       } else if (enemyHitFlashRef.current > 0) {
-        baseEnemyX += Math.sin(localFrame * 0.8) * 8 + 15;
+        baseEnemyX += Math.sin(localFrame * 0.8) * 10 + 18;
       }
-      const enemyY = height - 55;
+      const enemyY = groundY + 10;
 
-      // 5. Draw Jesus & Mount Character
+      // 5. Draw Jesus & Mount Character (Scaled Up for High Visibility)
       if (equipped.mount) {
         ctx.save();
-        ctx.translate(baseCharX, charY + 12);
-        ctx.font = '34px sans-serif';
+        ctx.translate(baseCharX, charY + 14);
+        ctx.font = '40px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.mount.emoji, 0, 0);
@@ -442,17 +443,18 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
 
       // Draw Jesus (Capybara-Go Chibi Art Style)
       ctx.save();
-      ctx.translate(baseCharX, equipped.mount ? charY - 14 : charY);
+      ctx.translate(baseCharX, equipped.mount ? charY - 18 : charY);
+      ctx.scale(1.25, 1.25); // Scale up Jesus for high visibility!
 
       if (heroHitFlashRef.current > 0) {
-        ctx.filter = 'brightness(1.8) drop-shadow(0 0 10px #ef4444)';
+        ctx.filter = 'brightness(1.8) drop-shadow(0 0 12px #ef4444)';
       }
 
       // Golden Radiant Halo (Glowing pulsing)
       ctx.strokeStyle = '#facc15';
       ctx.lineWidth = 3.5;
       ctx.shadowColor = '#facc15';
-      ctx.shadowBlur = 14 + Math.sin(localFrame * 0.1) * 6;
+      ctx.shadowBlur = 16 + Math.sin(localFrame * 0.1) * 6;
       ctx.beginPath();
       ctx.arc(0, -26, 12, 0, Math.PI * 2);
       ctx.stroke();
@@ -501,7 +503,7 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         ctx.translate(14, 0);
         const weaponAngle = heroLungeRef.current > 0 ? (heroLungeRef.current * 1.8 - 0.5) : -0.4;
         ctx.rotate(weaponAngle);
-        ctx.font = '26px sans-serif';
+        ctx.font = '28px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.weapon.emoji, 0, 0);
@@ -513,8 +515,8 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       // Draw Pet trailing behind
       if (equipped.pet) {
         ctx.save();
-        ctx.translate(baseCharX - 35, charY + 8 + Math.sin(localFrame * 0.1) * 3);
-        ctx.font = '22px sans-serif';
+        ctx.translate(baseCharX - 42, charY + 10 + Math.sin(localFrame * 0.1) * 3);
+        ctx.font = '26px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(equipped.pet.emoji, 0, 0);
@@ -527,25 +529,25 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
         ctx.translate(baseEnemyX, enemyY);
 
         if (enemyHitFlashRef.current > 0) {
-          ctx.filter = 'brightness(2.2) drop-shadow(0 0 14px #ef4444)';
-          ctx.scale(1.2, 0.85); // squash on hit
+          ctx.filter = 'brightness(2.2) drop-shadow(0 0 16px #ef4444)';
+          ctx.scale(1.25, 0.82); // squash on hit
         }
 
-        ctx.font = '44px sans-serif';
+        ctx.font = '52px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(activeEnemy.emoji, 0, 0);
 
         // Enemy HP Bar in 2D space
         ctx.filter = 'none';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(-28, -36, 56, 8);
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(-34, -42, 68, 9);
         ctx.fillStyle = '#ef4444';
         const hpPercent = Math.max(0, activeEnemy.hp / activeEnemy.maxHp);
-        ctx.fillRect(-28, -36, 56 * hpPercent, 8);
+        ctx.fillRect(-34, -42, 68 * hpPercent, 9);
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(-28, -36, 56, 8);
+        ctx.strokeRect(-34, -42, 68, 9);
         ctx.restore();
       }
 
@@ -961,12 +963,12 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
       <div className="relative w-full aspect-[16/9] max-h-[66vh] rounded-3xl overflow-hidden shadow-2xl border-4 border-amber-500/40 bg-stone-950 flex flex-col justify-between">
         {/* VIEW 1: ACTIVE IN-RUN GAMEPLAY (Exact Capybara Go Screen) */}
         {inRun ? (
-          <div className="relative w-full h-full flex flex-col justify-between p-3 sm:p-4">
-            {/* Top In-Run Day Progress Tracker */}
-            <div className="relative z-10 flex items-center justify-between bg-black/70 backdrop-blur-md rounded-2xl px-4 py-2 border border-white/10 text-xs font-bold shadow-lg">
+          <div className="relative w-full h-full flex flex-col justify-between p-2.5 sm:p-3 bg-stone-950 gap-2">
+            {/* 1. Top In-Run Day Progress Tracker */}
+            <div className="shrink-0 flex items-center justify-between bg-black/75 backdrop-blur-md rounded-2xl px-3.5 py-1.5 border border-white/10 text-xs font-bold shadow-lg">
               <div className="flex items-center gap-2">
                 <span className="text-amber-400 font-black text-sm">DAY {day}</span>
-                <span className="text-stone-400 text-[11px]">• {currentWorld.name}</span>
+                <span className="text-stone-400 text-[11px] truncate max-w-[140px] sm:max-w-none">• {currentWorld.name}</span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -977,7 +979,8 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
                   title="View full story and adventure log history"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  <span>Story Log ({storyLogs.length})</span>
+                  <span className="hidden sm:inline">Story Log</span>
+                  <span>({storyLogs.length})</span>
                 </button>
 
                 {/* Speed Multiplier (0.5x, 1x, 2x) */}
@@ -987,7 +990,7 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
                   title="Cycle Game Speed: 0.5x (Story Read), 1x (Normal), 2x (Fast)"
                 >
                   <FastForward className="w-3.5 h-3.5" />
-                  <span>{speedMultiplier === 0.5 ? '0.5x (Story)' : `${speedMultiplier}x`}</span>
+                  <span>{speedMultiplier === 0.5 ? '0.5x' : `${speedMultiplier}x`}</span>
                 </button>
 
                 {/* Auto Walk Toggle */}
@@ -998,56 +1001,56 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
                   }`}
                 >
                   {autoWalk ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                  <span>{autoWalk ? 'AUTO ON' : 'MANUAL'}</span>
+                  <span>{autoWalk ? 'AUTO' : 'MANUAL'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Middle Stage: 2D Animated World Canvas */}
-            <div className="absolute inset-0 z-0">
+            {/* 2. Middle Dedicated Battle Stage Arena (100% Unobstructed Viewport) */}
+            <div className="relative w-full flex-1 min-h-[200px] sm:min-h-[250px] rounded-2xl overflow-hidden border border-white/10 shadow-inner bg-sky-950">
               <canvas
                 ref={canvasRef}
-                width={720}
-                height={380}
+                width={800}
+                height={320}
                 className="w-full h-full object-cover"
               />
+
+              {/* In-Battle Overhead Badges (Round & Hits Counter like Capybara Go) */}
+              {runStage === 'battling' && (
+                <div className="absolute top-2 left-0 right-0 z-10 flex items-center justify-between px-4 pointer-events-none">
+                  <div className="px-3 py-1 rounded-xl bg-black/80 border border-amber-400 text-amber-300 font-black text-xs shadow-xl flex items-center gap-1.5 animate-pulse">
+                    <span>⚔️</span>
+                    <span>Round {battleRound}/30</span>
+                  </div>
+
+                  <div className="px-3 py-1 rounded-xl bg-black/80 border border-rose-500 text-rose-300 font-black text-xs shadow-xl flex items-center gap-1.5">
+                    <span>💥</span>
+                    <span>Hits: {hitsCount}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Combat Hit FX & Floating Numbers */}
+              {floatingDamage && (
+                <motion.div
+                  initial={{ opacity: 0, y: 15, scale: 0.8 }}
+                  animate={{ opacity: 1, y: -20, scale: 1.5 }}
+                  exit={{ opacity: 0 }}
+                  className={`absolute z-20 font-black text-2xl drop-shadow-[0_4px_10px_rgba(0,0,0,1)] pointer-events-none ${
+                    floatingDamage.isHero
+                      ? 'left-[26%] top-[30%] text-rose-400'
+                      : 'right-[22%] top-[25%] text-yellow-300'
+                  }`}
+                >
+                  -{floatingDamage.val} {floatingDamage.isCrit && '⚡ CRITICAL!'}
+                </motion.div>
+              )}
             </div>
 
-            {/* In-Battle Overhead Badges (Round & Hits Counter like Capybara Go) */}
-            {runStage === 'battling' && (
-              <div className="absolute top-16 left-0 right-0 z-10 flex items-center justify-between px-6 pointer-events-none">
-                <div className="px-3 py-1 rounded-xl bg-black/75 border border-amber-400 text-amber-300 font-black text-xs shadow-xl flex items-center gap-1.5 animate-pulse">
-                  <span>⚔️</span>
-                  <span>Round {battleRound}/30</span>
-                </div>
-
-                <div className="px-3 py-1 rounded-xl bg-black/75 border border-rose-500 text-rose-300 font-black text-xs shadow-xl flex items-center gap-1.5">
-                  <span>💥</span>
-                  <span>Hits: {hitsCount}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Combat Hit FX & Floating Numbers */}
-            {floatingDamage && (
-              <motion.div
-                initial={{ opacity: 0, y: 20, scale: 0.8 }}
-                animate={{ opacity: 1, y: -25, scale: 1.5 }}
-                exit={{ opacity: 0 }}
-                className={`absolute z-20 font-black text-2xl drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)] ${
-                  floatingDamage.isHero
-                    ? 'left-[28%] top-[38%] text-rose-400'
-                    : 'right-[24%] top-[34%] text-yellow-300'
-                }`}
-              >
-                -{floatingDamage.val} {floatingDamage.isCrit && '⚡ CRITICAL!'}
-              </motion.div>
-            )}
-
-            {/* Bottom In-Run HUD: Stats, Event Text Box, Next Day Button */}
-            <div className="relative z-10 flex flex-col gap-2">
+            {/* 3. Bottom In-Run Controls & Dialogue (Placed OUTSIDE the Arena Canvas) */}
+            <div className="shrink-0 flex flex-col gap-1.5">
               {/* Stats Bar */}
-              <div className="flex items-center justify-between bg-stone-900/90 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-1.5 text-xs font-bold">
+              <div className="flex items-center justify-between bg-stone-900/95 border border-white/10 rounded-xl px-3.5 py-1 text-xs font-bold shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-black text-[10px]">
                     EXP Lv.{heroLevel}
@@ -1066,7 +1069,7 @@ export const PilgrimGoGame: React.FC<PilgrimGoGameProps> = ({ onGameOver, onBack
               </div>
 
               {/* Event Text Dialogue Log (Capybara Go style yellow box) */}
-              <div className="bg-amber-100/95 text-stone-900 border-2 border-amber-400 rounded-2xl px-4 py-2 text-xs font-bold shadow-lg flex items-center justify-between">
+              <div className="bg-amber-100 text-stone-900 border-2 border-amber-400 rounded-xl px-3.5 py-2 text-xs font-bold shadow-lg flex items-center justify-between">
                 <p className="leading-snug truncate pr-2">{eventText}</p>
 
                 {runStage !== 'battling' && runStage !== 'gameover' && (
