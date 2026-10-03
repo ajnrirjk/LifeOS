@@ -173,7 +173,7 @@ class ChatService {
   public async fetchHistoryFromCloudRelay() {
     if (typeof window === 'undefined') return;
     try {
-      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1`);
+      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1&since=all`);
       if (!res.ok) return;
       const text = await res.text();
       const lines = text.trim().split('\n').filter(Boolean);
@@ -202,6 +202,12 @@ class ChatService {
                   if (!this.messagesCache.some(m => m.id === msg.id)) {
                     this.messagesCache.push(msg);
                     hasNew = true;
+                    // Update channel last message
+                    const chan = this.channelsCache.find(c => c.id === msg.channelId);
+                    if (chan && (!chan.lastMessageTime || msg.createdAt > chan.lastMessageTime)) {
+                      chan.lastMessage = msg.text;
+                      chan.lastMessageTime = msg.createdAt;
+                    }
                   }
                 }
               } else if (payload.type === 'reaction') {
