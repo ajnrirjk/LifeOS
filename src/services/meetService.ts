@@ -87,7 +87,7 @@ class MeetService {
   }
 
   // Create a new meeting room
-  public async createRoom(params: { title?: string; customCode?: string; isPublic?: boolean; prayerFocus?: string; hostId?: string }): Promise<MeetRoomInfo | null> {
+  public async createRoom(params: { title?: string; customCode?: string; isPublic?: boolean; prayerFocus?: string; hostId?: string }): Promise<MeetRoomInfo> {
     try {
       const res = await fetch('/api/meet/rooms', {
         method: 'POST',
@@ -98,9 +98,22 @@ class MeetService {
         return await res.json();
       }
     } catch (err) {
-      console.error('Error creating meet room:', err);
+      console.warn('Error creating meet room on server, generating local room:', err);
     }
-    return null;
+
+    const defaultCode = `meet-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
+    const cleanCode = (params.customCode || defaultCode)
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/^-+|-+$/g, '') || defaultCode;
+
+    return {
+      id: cleanCode,
+      title: params.title || `Fellowship Call ${cleanCode.slice(-4).toUpperCase()}`,
+      hostId: params.hostId || 'host',
+      createdAt: Date.now(),
+      prayerFocus: params.prayerFocus || ''
+    };
   }
 
   // Initialize local media (Camera + Mic preview)
