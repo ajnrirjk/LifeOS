@@ -1149,6 +1149,10 @@ class DiscordChatService {
       timestamp: Date.now(),
     };
 
+    try {
+      this.broadcastChannel?.postMessage({ type: 'typing', data: payload });
+    } catch {}
+
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,

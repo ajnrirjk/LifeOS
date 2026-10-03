@@ -1252,6 +1252,29 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                 </button>
               </form>
             )}
+
+            {/* Who is Typing Indicator Bar */}
+            <div className="h-5 px-1 pt-1 flex items-center text-[11px] text-[#dbdee1] select-none min-w-0">
+              {typingUsers.length > 0 && (
+                <div className="flex items-center gap-1.5 animate-fadeIn truncate">
+                  <span className="flex items-center gap-0.5 bg-[#4e5058]/50 px-1.5 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 bg-[#dbdee1] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-[#dbdee1] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-[#dbdee1] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </span>
+                  <span className="truncate text-stone-300">
+                    <strong className="font-bold text-white">
+                      {typingUsers.length === 1
+                        ? typingUsers[0]
+                        : typingUsers.length === 2
+                        ? `${typingUsers[0]} and ${typingUsers[1]}`
+                        : `${typingUsers.slice(0, 2).join(', ')} and ${typingUsers.length - 2} others`}
+                    </strong>
+                    {typingUsers.length === 1 ? ' is typing...' : ' are typing...'}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </main>
       )}
