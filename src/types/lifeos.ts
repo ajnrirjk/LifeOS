@@ -3,6 +3,7 @@ export type AppType =
   | 'bible_journal'
   | 'fellowship_chat'
   | 'mini_cats'
+  | 'mini_games'
   | 'youtube'
   | 'app_studio' 
   | 'tracker' 

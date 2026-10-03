@@ -641,6 +641,30 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
+                  {/* Mini Games Arcade Widget */}
+                  {widgetId === 'mini_games' && (
+                    <div className="flex flex-col gap-2.5">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-center">
+                          <div className="text-xl mb-0.5">🕊️</div>
+                          <div className="text-[10px] font-bold text-white truncate">Flappy Dove</div>
+                        </div>
+                        <div className="p-2.5 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-center">
+                          <div className="text-xl mb-0.5">🧱</div>
+                          <div className="text-[10px] font-bold text-white truncate">Babel Stacker</div>
+                        </div>
+                        <div className="p-2.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-center">
+                          <div className="text-xl mb-0.5">⚔️</div>
+                          <div className="text-[10px] font-bold text-white truncate">Demon Buster</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 text-xs text-stone-300">
+                        <span>🕹️ 6 Mini Games Installed</span>
+                        <span className="text-amber-400 font-black">Tokens & Best Scores</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 7. App Studio Widget */}
                   {widgetId === 'app_studio' && (
                     <div className="flex flex-col gap-2.5">
@@ -670,6 +694,8 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         launchApp('bible_journal');
                       } else if (widgetId === 'fellowship_chat') {
                         launchApp('fellowship_chat');
+                      } else if (widgetId === 'mini_games') {
+                        launchApp('mini_games');
                       } else if (widgetId === 'app_studio') {
                         launchApp('app_studio');
                       } else {
@@ -683,6 +709,8 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         ? 'Open ChurchNotes'
                         : widgetId === 'fellowship_chat'
                         ? 'Open Fellowship Chat'
+                        : widgetId === 'mini_games'
+                        ? 'Play Arcade Vault'
                         : widgetId === 'quick_listen'
                         ? 'Record Sermon'
                         : widgetId === 'app_studio'

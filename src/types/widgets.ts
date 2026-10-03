@@ -1,6 +1,7 @@
 export type WidgetId = 
   | 'youtube'
   | 'mini_cats'
+  | 'mini_games'
   | 'church_notes'
   | 'faithlingo_stats'
   | 'verse_of_day'
@@ -38,6 +39,15 @@ export const ALL_DESKTOP_WIDGETS: DesktopWidgetConfig[] = [
     category: 'System',
     span: 'medium',
     color: 'from-amber-500/20 to-rose-600/20 border-amber-500/30'
+  },
+  {
+    id: 'mini_games',
+    title: 'Arcade Vault',
+    subtitle: '6 retro mini games, physics flappy dove & high score challenges',
+    emoji: '🕹️',
+    category: 'System',
+    span: 'medium',
+    color: 'from-violet-500/20 to-fuchsia-600/20 border-violet-500/30'
   },
   {
     id: 'church_notes',

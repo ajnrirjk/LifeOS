@@ -50,6 +50,18 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     isSystem: true
   },
   {
+    id: 'mini_games',
+    title: 'Arcade Vault',
+    emoji: '🕹️',
+    iconName: 'Gamepad2',
+    category: 'Productivity',
+    type: 'mini_games',
+    color: 'from-violet-600 via-purple-600 to-fuchsia-600',
+    description: 'Retro arcade & mini games! Faith Flappy Dove, Babel Stacker, Demon Buster, Eden Snake & Slingshot.',
+    isPinned: true,
+    isSystem: true
+  },
+  {
     id: 'youtube',
     title: 'YouTube',
     emoji: '▶️',
