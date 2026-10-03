@@ -88,8 +88,8 @@ export const Navigation: React.FC = () => {
         </div>
       </aside>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-stone-200 dark:border-slate-800 px-2 py-1.5 flex items-center justify-around">
+      {/* Mobile Top Sub-Tab Navigation Bar (Clean, scrollable pills, eliminates double bottom bars) */}
+      <nav className="md:hidden sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-stone-200 dark:border-slate-800 px-2 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar select-none shadow-sm">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
@@ -100,19 +100,19 @@ export const Navigation: React.FC = () => {
                 sounds.playTap();
                 setCurrentTab(item.id);
               }}
-              className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+              className={`flex items-center gap-1.5 py-1.5 px-3 rounded-xl text-xs font-black shrink-0 transition-all active:scale-95 ${
                 isActive
-                  ? 'text-emerald-600 dark:text-emerald-400 font-black'
-                  : 'text-stone-500 dark:text-stone-400 font-semibold'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 ring-1 ring-emerald-500'
+                  : 'bg-stone-100 dark:bg-slate-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-slate-700'
               }`}
             >
-              <div className="relative">
-                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : ''}`} />
-                {item.badge && (
-                  <span className="absolute -top-1 -right-2 w-2 h-2 rounded-full bg-emerald-500" />
-                )}
-              </div>
-              <span className="text-[10px] tracking-tight">{item.label}</span>
+              <Icon className="w-3.5 h-3.5" />
+              <span>{item.label}</span>
+              {item.badge && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${isActive ? 'bg-white/25 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400'}`}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           );
         })}

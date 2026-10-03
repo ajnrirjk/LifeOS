@@ -26,12 +26,12 @@ export const HeaderStats: React.FC = () => {
   return (
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-stone-200 dark:border-slate-800 transition-colors">
       <div className="max-w-6xl mx-auto px-2.5 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-2">
-        {/* Left: App Logo & Brand */}
-        <div className="flex items-center gap-2">
+        {/* Left: App Logo & Brand (Shown on Desktop only) */}
+        <div className="hidden sm:flex items-center gap-2">
           <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-sm flex items-center justify-center text-white shrink-0">
             <span className="text-base sm:text-xl select-none">🕊️</span>
           </div>
-          <div className="hidden sm:block">
+          <div>
             <h1 className="text-lg font-black tracking-tight text-emerald-800 dark:text-emerald-400 leading-none">
               FaithLingo
             </h1>

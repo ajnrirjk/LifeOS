@@ -185,9 +185,9 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   const textSizeClass = fontSize === 'xlarge' ? 'text-xl' : fontSize === 'large' ? 'text-lg' : 'text-base';
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-amber-50/30 dark:bg-slate-950 text-stone-900 dark:text-stone-100 overflow-hidden select-none">
-      {/* Top Header: Close, Progress bar, Hearts */}
-      <header className="px-4 py-3 flex items-center justify-between gap-4 max-w-3xl mx-auto w-full">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-amber-50/40 dark:bg-slate-950 text-stone-900 dark:text-stone-100 overflow-hidden select-none">
+      {/* Top Header: Close, Progress bar, Hearts with mobile notch insets */}
+      <header className="pt-[max(env(safe-area-inset-top,0px),16px)] pb-3 px-4 flex items-center justify-between gap-4 max-w-3xl mx-auto w-full border-b border-stone-200/60 dark:border-slate-800/60 shrink-0">
         <button
           onClick={() => {
             sounds.playTap();
@@ -226,9 +226,9 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-3 flex flex-col justify-between overflow-y-auto">
+      <main className="flex-1 max-w-2xl mx-auto w-full px-3 sm:px-4 py-3 flex flex-col justify-between overflow-y-auto overscroll-contain">
         {!isFinished ? (
-          <div className="flex flex-col gap-5 my-auto pb-24">
+          <div className="flex flex-col gap-4 sm:gap-5 my-auto pb-32 sm:pb-24">
             {/* Scripture Anchor / Mascot dialogue */}
             <div className="flex items-start gap-4">
               <MascotGrace pose={mascotPose} size="md" message={currentQuestion.mascotTip} />
@@ -503,11 +503,11 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       {/* Bottom Sticky Action Bar (Duolingo Style Check / Feedback) */}
       {!isFinished && (
         <footer
-          className={`p-4 border-t transition-colors ${
+          className={`p-3.5 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t transition-colors shrink-0 z-30 ${
             status === 'correct'
-              ? 'bg-emerald-100 dark:bg-emerald-950/90 border-emerald-300 dark:border-emerald-800'
+              ? 'bg-emerald-100 dark:bg-emerald-950/95 border-emerald-300 dark:border-emerald-800 shadow-[0_-4px_20px_rgba(16,185,129,0.2)]'
               : status === 'incorrect'
-              ? 'bg-rose-100 dark:bg-rose-950/90 border-rose-300 dark:border-rose-800'
+              ? 'bg-rose-100 dark:bg-rose-950/95 border-rose-300 dark:border-rose-800 shadow-[0_-4px_20px_rgba(244,63,94,0.2)]'
               : 'bg-white dark:bg-slate-900 border-stone-200 dark:border-slate-800'
           }`}
         >

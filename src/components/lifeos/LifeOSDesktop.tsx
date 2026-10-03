@@ -37,9 +37,9 @@ const FaithLingoWindowContent: React.FC = () => {
     fontSize === 'large' ? 'text-base' : 'text-sm';
 
   return (
-    <div className={`flex flex-col flex-1 h-full overflow-y-auto ${fontMultiplierClass} transition-colors duration-200`}>
+    <div className={`flex flex-col flex-1 h-full overflow-y-auto ${fontMultiplierClass} transition-colors duration-200 pb-20 md:pb-0`}>
       <HeaderStats />
-      <div className="flex-1 flex max-w-7xl mx-auto w-full">
+      <div className="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full">
         <Navigation />
         <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-100px)]">
           {currentTab === 'learn' && <StudyPathView />}
