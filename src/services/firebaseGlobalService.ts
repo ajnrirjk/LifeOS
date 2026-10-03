@@ -1,7 +1,7 @@
 import { SystemAnnouncement, FellowshipMember, UserRole, MASTER_ADMIN_EMAIL } from '../types/settings';
 import mqtt, { MqttClient } from 'mqtt';
 
-// Cloud Persistence Endpoints (Global REST Store with zero API key constraints)
+// Cloud REST & MQTT Endpoints
 const CLOUD_SETTINGS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a10342596a6e98';
 const CLOUD_MEMBERS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1034264616e99';
 
@@ -86,21 +86,19 @@ class FirebaseGlobalService {
           }
         } catch {}
       });
-    } catch {
-      // Fallback to HTTP polling if WebSocket is blocked
-    }
+    } catch {}
   }
 
-  // 2. High-Frequency Cloud Polling Loop (ensures sync even if WebSockets reconnect)
+  // 2. High-Frequency Cloud Polling Loop
   private startPolling() {
     if (this.isPollingActive || typeof window === 'undefined') return;
     this.isPollingActive = true;
 
-    // Initial fetch
+    // Initial fetch immediately
     this.fetchCloudSettings();
     this.fetchCloudMembers();
 
-    // Poll cloud every 2.5 seconds
+    // Redundant poll every 2.5 seconds
     setInterval(() => {
       this.fetchCloudSettings();
       this.fetchCloudMembers();
@@ -268,7 +266,11 @@ class FirebaseGlobalService {
   // 6. Subscribe to Real Fellowship Members Roster across all devices
   subscribeToFellowshipMembers(callback: (members: FellowshipMember[]) => void): () => void {
     this.membersListeners.push(callback);
-    callback(this.cachedMembers);
+    // If we already have members loaded, pass them immediately
+    if (this.cachedMembers.length > 0) {
+      callback(this.cachedMembers);
+    }
+    // Fetch from cloud and notify
     this.fetchCloudMembers().then(() => callback(this.cachedMembers));
 
     return () => {
@@ -276,22 +278,19 @@ class FirebaseGlobalService {
     };
   }
 
-  // 7. Register or update a real user - PERMANENTLY MERGES INTO CLOUD
+  // 7. Register or update a real user - NEVER OVERWRITES OTHER DEVICES
   async registerMember(member: FellowshipMember) {
     const cleanHandle = (member.handle || '').toLowerCase().trim();
     const cleanEmail = (member.email || '').toLowerCase().trim();
     const isMaster = (cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase()) ||
                      cleanHandle.includes('aw03102008');
 
-    // Give each distinct handle its own unique ID so devices never collide
     const handleSlug = cleanHandle.replace(/[^a-z0-9]/g, '') || `user_${Math.random().toString(36).substring(2, 7)}`;
-    const stableId = isMaster
-      ? 'usr_master_admin_aw'
-      : `usr_handle_${handleSlug}`;
+    const docId = isMaster ? 'usr_master_admin_aw' : `usr_handle_${handleSlug}`;
 
     const safeMember: FellowshipMember = {
       ...member,
-      id: stableId,
+      id: docId,
       handle: member.handle || `@user_${Math.floor(1000 + Math.random() * 9000)}`,
       role: isMaster ? 'superadmin' : (member.role || 'user'),
       avatar: isMaster ? '👑' : (member.avatar || '🕊️'),
@@ -299,7 +298,7 @@ class FirebaseGlobalService {
       lastActive: 'Just now'
     };
 
-    // 1. Fetch latest cloud members first so we NEVER overwrite or drop other users
+    // 1. MUST fetch the latest cloud members first so we NEVER drop other devices
     let cloudList: FellowshipMember[] = [...this.cachedMembers];
     try {
       const res = await fetch(CLOUD_MEMBERS_URL, { cache: 'no-store' });
@@ -311,28 +310,26 @@ class FirebaseGlobalService {
       }
     } catch {}
 
-    // 2. Filter out ONLY the exact same handle or master admin email
+    // 2. Filter out ONLY the same person (by handle or master admin email)
     const targetHandle = safeMember.handle.toLowerCase().trim();
-    const updatedList = cloudList.filter(m => {
+    const filteredList = cloudList.filter(m => {
       if (isMaster && m.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) return false;
       if (!isMaster && m.handle?.toLowerCase().trim() === targetHandle) return false;
       return true;
     });
 
-    updatedList.unshift(safeMember);
-
-    const nextMembers = this.cleanAndDeduplicateMembers(updatedList);
+    const nextMembers = this.cleanAndDeduplicateMembers([safeMember, ...filteredList]);
     this.cachedMembers = nextMembers;
     this.notifyMembersListeners();
 
-    // 3. Push over instant WebSocket
+    // 3. Broadcast to all other devices over WebSocket
     try {
       if (this.mqttClient && this.mqttClient.connected) {
         this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(nextMembers));
       }
     } catch {}
 
-    // 4. Persist to Global Cloud REST Store permanently
+    // 4. Save to persistent cloud store
     try {
       await fetch(CLOUD_MEMBERS_URL, {
         method: 'PUT',
@@ -382,14 +379,14 @@ class FirebaseGlobalService {
     this.cachedMembers = nextMembers;
     this.notifyMembersListeners();
 
-    // 2. Push over instant WebSocket
+    // 2. Broadcast over WebSocket
     try {
       if (this.mqttClient && this.mqttClient.connected) {
         this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(nextMembers));
       }
     } catch {}
 
-    // 3. Persist to Global Cloud REST Store permanently
+    // 3. Persist to Global Cloud REST Store
     try {
       await fetch(CLOUD_MEMBERS_URL, {
         method: 'PUT',

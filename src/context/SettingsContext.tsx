@@ -444,35 +444,6 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // Sync registered user to global cloud roster on startup & profile changes
-  useEffect(() => {
-    const isRegistered = typeof window !== 'undefined' ? localStorage.getItem('lifeos_user_registered_v2') === 'true' : false;
-    const isCustomName = settings.profile.name && 
-                         settings.profile.name !== 'Believer in Christ' && 
-                         settings.profile.name !== 'Believer (Faith Explorer)';
-
-    if (isRegistered && isCustomName) {
-      const handleSlug = settings.profile.handle ? settings.profile.handle.toLowerCase().replace(/[^a-z0-9]/g, '') : 'user';
-      const isMaster = (googleUser?.email?.toLowerCase().trim() === 'aw03102008@gmail.com') ||
-                       (settings.profile.email?.toLowerCase().trim() === 'aw03102008@gmail.com');
-      const memberData: FellowshipMember = {
-        id: isMaster ? 'usr_master_admin_aw' : `usr_handle_${handleSlug}`,
-        name: settings.profile.name,
-        handle: settings.profile.handle,
-        avatar: settings.profile.avatar,
-        role: settings.profile.role,
-        status: 'active',
-        email: googleUser?.email || settings.profile.email,
-        photoURL: googleUser?.photoURL || settings.profile.photoURL,
-        lastActive: 'Just now',
-        xp: 100,
-        streak: 1,
-        warningsCount: 0
-      };
-      firebaseGlobalService.registerMember(memberData);
-    }
-  }, [settings.profile.name, settings.profile.handle, settings.profile.avatar, googleUser]);
-
   const updateSettings = (updates: Partial<UserSettings>) => {
     setSettings(prev => {
       const next = { ...prev, ...updates };
@@ -484,6 +455,29 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateProfile = (updates: Partial<UserProfile>) => {
     setSettings(prev => {
       const updatedProfile = { ...prev.profile, ...updates };
+
+      // Sync updated profile to global cloud roster
+      if (updates.name || updates.handle || updates.avatar) {
+        const handleSlug = (updatedProfile.handle || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
+        const isMaster = (googleUser?.email?.toLowerCase().trim() === 'aw03102008@gmail.com') ||
+                         (updatedProfile.email?.toLowerCase().trim() === 'aw03102008@gmail.com');
+        const memberData: FellowshipMember = {
+          id: isMaster ? 'usr_master_admin_aw' : `usr_handle_${handleSlug}`,
+          name: updatedProfile.name,
+          handle: updatedProfile.handle,
+          avatar: updatedProfile.avatar,
+          role: updatedProfile.role,
+          status: 'active',
+          email: googleUser?.email || updatedProfile.email,
+          photoURL: googleUser?.photoURL || updatedProfile.photoURL,
+          lastActive: 'Just now',
+          xp: 100,
+          streak: 1,
+          warningsCount: 0
+        };
+        firebaseGlobalService.registerMember(memberData);
+      }
+
       return {
         ...prev,
         profile: updatedProfile
