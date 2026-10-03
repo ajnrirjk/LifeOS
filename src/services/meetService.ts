@@ -267,11 +267,12 @@ class MeetService {
       this.initSignalStream(roomId, user.id);
     } catch {}
 
-    // Create PeerConnections to all existing participants
+    // Create PeerConnections to all existing participants using deterministic initiator
     if (Array.isArray(data.allParticipants)) {
       data.allParticipants.forEach((p: MeetParticipant) => {
         if (p.id !== user.id) {
-          this.createPeerConnection(p.id, true); // true = initiate offer
+          const isInit = user.id.localeCompare(p.id) < 0;
+          this.createPeerConnection(p.id, isInit);
         }
       });
     }
@@ -279,7 +280,7 @@ class MeetService {
     return data;
   }
 
-  // Initialize SSE Signal Stream
+  // Initialize SSE Signal Stream & Robust Dual-Polling Loop
   private initSignalStream(roomId: string, userId: string) {
     if (this.eventSource) {
       this.eventSource.close();
@@ -300,8 +301,8 @@ class MeetService {
         const payload = JSON.parse(e.data);
         const { peer } = payload;
         if (peer && peer.id !== this.currentUser?.id) {
-          // Existing peer creates offer to new peer
-          this.createPeerConnection(peer.id, true);
+          const isInit = (this.currentUser?.id || '').localeCompare(peer.id) < 0;
+          this.createPeerConnection(peer.id, isInit);
           this.emit('peer_joined', payload);
         }
       } catch {}
@@ -343,7 +344,9 @@ class MeetService {
 
         let pc = this.peerConnections.get(senderId);
         if (!pc) {
-          pc = this.createPeerConnection(senderId, false);
+          const isInit = (this.currentUser?.id || '').localeCompare(senderId) < 0;
+          pc = this.createPeerConnection(senderId, isInit);
+          this.emit('peer_joined', { peer: { id: senderId }, participants: [] });
         }
 
         if (type === 'offer') {
@@ -364,21 +367,28 @@ class MeetService {
     });
 
     this.eventSource.onerror = () => {
-      console.warn('Meet SSE stream disconnected, relying on HTTP polling signals...');
+      console.warn('Meet SSE stream disconnected, relying on HTTP polling signals & room sync...');
     };
 
-    // HTTP Polling backup interval for robust cross-device signaling (every 1.5 seconds)
+    // Robust Dual-Polling Interval (Signals + Room Participants Sync every 1.2 seconds)
     const pollInterval = setInterval(async () => {
-      if (!this.currentRoomId || !this.currentUser || !this.eventSource) {
+      if (!this.currentRoomId || !this.currentUser) {
         clearInterval(pollInterval);
         return;
       }
       try {
-        const res = await fetch(`/api/meet/signals?roomId=${encodeURIComponent(this.currentRoomId)}&userId=${encodeURIComponent(this.currentUser.id)}`);
-        if (res.ok) {
-          const { signals, participants } = await res.json();
+        // 1. Poll signals & participants
+        const sigRes = await fetch(`/api/meet/signals?roomId=${encodeURIComponent(this.currentRoomId)}&userId=${encodeURIComponent(this.currentUser.id)}`);
+        if (sigRes.ok) {
+          const { signals, participants } = await sigRes.json();
           if (Array.isArray(participants) && participants.length > 0) {
             this.emit('participants_updated', { participants });
+            participants.forEach((p: MeetParticipant) => {
+              if (p.id !== this.currentUser?.id && !this.peerConnections.has(p.id)) {
+                const isInit = (this.currentUser?.id || '').localeCompare(p.id) < 0;
+                this.createPeerConnection(p.id, isInit);
+              }
+            });
           }
           if (Array.isArray(signals)) {
             for (const sig of signals) {
@@ -386,8 +396,23 @@ class MeetService {
             }
           }
         }
+
+        // 2. Poll room room details for redundancy
+        const roomRes = await fetch(`/api/meet/rooms/${encodeURIComponent(this.currentRoomId)}`);
+        if (roomRes.ok) {
+          const roomData = await roomRes.json();
+          if (Array.isArray(roomData.participants)) {
+            this.emit('participants_updated', { participants: roomData.participants });
+            roomData.participants.forEach((p: MeetParticipant) => {
+              if (p.id !== this.currentUser?.id && !this.peerConnections.has(p.id)) {
+                const isInit = (this.currentUser?.id || '').localeCompare(p.id) < 0;
+                this.createPeerConnection(p.id, isInit);
+              }
+            });
+          }
+        }
       } catch {}
-    }, 1500);
+    }, 1200);
   }
 
   private async handleIncomingSignal(sig: { senderId: string; signalData: any; type: string }) {
