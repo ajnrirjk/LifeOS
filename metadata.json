@@ -1,6 +1,6 @@
 {
-  "name": "FaithLingo: Scripture & Teachings of Jesus",
-  "description": "Gamified Bible study app featuring interactive scripture lessons, daily streaks, social leaderboards, AI prayer companion, multi-translation offline Bible, and audio narrations.",
+  "name": "LifeOS",
+  "description": "An all-in-one Christian operating system featuring real-time Fellowship Chat, Scripture study, daily devotionals, prayers, church notes, and productivity tools.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
