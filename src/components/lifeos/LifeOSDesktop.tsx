@@ -139,7 +139,7 @@ export const LifeOSDesktop: React.FC = () => {
       {/* Desktop Workspace / Active App Window / Desktop Widgets */}
       <div className={`flex-1 relative overflow-hidden flex flex-col ${
         !isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized
-          ? 'p-0 md:p-3 pb-0 md:pb-24'
+          ? 'p-0 md:p-3 pb-16 md:pb-24'
           : 'p-2 sm:p-3 pb-20 md:pb-24'
       }`}>
         <AnimatePresence mode="wait">
