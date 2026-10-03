@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Lesson, StudyQuestion } from '../types';
 import { useApp } from '../context/AppContext';
 import { X, Heart, Sparkles, Volume2, CheckCircle2, XCircle, ArrowRight, RotateCcw } from 'lucide-react';
@@ -182,17 +183,28 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
 
         {/* Progress bar */}
         <div className="flex-1 h-3.5 bg-stone-200 dark:bg-slate-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-emerald-500 rounded-full transition-all duration-300 ease-out"
-            style={{ width: `${progressPercent}%` }}
+          <motion.div
+            className="h-full bg-emerald-500 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${progressPercent}%` }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
           />
         </div>
 
         {/* Hearts counter */}
-        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 font-black text-rose-500 ${heartShake ? 'animate-bounce' : ''}`}>
-          <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
+        <motion.div 
+          animate={{ x: heartShake ? [-10, 10, -8, 8, -4, 4, 0] : 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 font-black text-rose-500"
+        >
+          <motion.div
+            animate={{ scale: heartShake ? [1, 1.4, 1] : 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
+          </motion.div>
           <span className="text-sm">{userStats.hearts}</span>
-        </div>
+        </motion.div>
       </header>
 
       {/* Main Content Area */}
@@ -233,14 +245,17 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                 {currentQuestion.options.map((option) => {
                   const isSelected = selectedOptionId === option.id;
                   return (
-                    <button
+                    <motion.button
                       key={option.id}
+                      whileHover={{ scale: 1.015 }}
+                      whileTap={{ scale: 0.985 }}
+                      transition={{ type: 'spring', damping: 20, stiffness: 400 }}
                       onClick={() => {
                         if (status !== 'idle') return;
                         sounds.playTap();
                         setSelectedOptionId(option.id);
                       }}
-                      className={`w-full p-4 rounded-2xl font-bold text-left text-sm sm:text-base border-2 transition-all select-none shadow-sm active:translate-y-0.5 ${
+                      className={`w-full p-4 rounded-2xl font-bold text-left text-sm sm:text-base border-2 transition-colors select-none shadow-sm ${
                         isSelected
                           ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 shadow-emerald-200/50'
                           : 'border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-stone-800 dark:text-stone-200 hover:bg-stone-50 dark:hover:bg-slate-800'
@@ -254,7 +269,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                         </span>
                         <span>{option.text}</span>
                       </div>
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
@@ -381,7 +396,12 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           </div>
         ) : (
           /* Victory Celebration Screen */
-          <div className="my-auto flex flex-col items-center text-center p-6 max-w-md mx-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 350 }}
+            className="my-auto flex flex-col items-center text-center p-6 max-w-md mx-auto"
+          >
             <MascotGrace pose="cheering" size="lg" />
             <h2 className="text-2xl sm:text-3xl font-black text-stone-900 dark:text-white mt-4 mb-1">
               Lesson Complete!
@@ -392,15 +412,25 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
 
             {/* Reward Summary Cards */}
             <div className="grid grid-cols-3 gap-3 w-full mb-8">
-              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-center">
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1, type: 'spring' }}
+                className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-center"
+              >
                 <span className="block text-xs font-black text-amber-600 dark:text-amber-400 uppercase">
                   XP Earned
                 </span>
                 <span className="text-xl font-black text-amber-700 dark:text-amber-300">
                   +{lesson.xpReward}
                 </span>
-              </div>
-              <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-center">
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, type: 'spring' }}
+                className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-center"
+              >
                 <span className="block text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase">
                   Manna
                 </span>
@@ -408,27 +438,34 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                   <Sparkles className="w-4 h-4" />
                   +15
                 </span>
-              </div>
-              <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-center">
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, type: 'spring' }}
+                className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-center"
+              >
                 <span className="block text-xs font-black text-rose-600 dark:text-rose-400 uppercase">
                   Streak
                 </span>
                 <span className="text-xl font-black text-rose-600 dark:text-rose-300">
                   {userStats.streak} Days
                 </span>
-              </div>
+              </motion.div>
             </div>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => {
                 sounds.playTap();
                 onClose();
               }}
-              className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg tracking-wide uppercase shadow-lg shadow-emerald-600/30 active:translate-y-1 transition-all"
+              className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg tracking-wide uppercase shadow-lg shadow-emerald-600/30 transition-all"
             >
               Continue to Path
-            </button>
-          </div>
+            </motion.button>
+          </motion.div>
         )}
       </main>
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { WidgetId, ALL_DESKTOP_WIDGETS } from '../../types/widgets';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { useApp } from '../../context/AppContext';
@@ -263,17 +264,24 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-          {activeWidgets.map((widgetId) => {
+          {activeWidgets.map((widgetId, index) => {
             const config = ALL_DESKTOP_WIDGETS.find(w => w.id === widgetId);
             if (!config) return null;
 
             return (
-              <div
+              <motion.div
                 key={widgetId}
-                className="group relative rounded-2xl sm:rounded-3xl bg-stone-900/60 hover:bg-stone-900/75 backdrop-blur-2xl border border-white/15 p-3.5 sm:p-5 shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden"
+                initial={{ opacity: 0, scale: 0.94, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: 10 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 350, delay: index * 0.04 }}
+                whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                className="group relative rounded-2xl sm:rounded-3xl bg-stone-900/60 hover:bg-stone-900/80 backdrop-blur-2xl border border-white/15 p-3.5 sm:p-5 shadow-2xl transition-colors duration-200 flex flex-col justify-between overflow-hidden"
               >
                 {/* Delete Widget Button */}
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.15 }}
+                  whileTap={{ scale: 0.85 }}
                   onClick={() => {
                     sounds.playTap();
                     onRemoveWidget(widgetId);
@@ -282,13 +290,17 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                   title="Remove widget from desktop"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                </motion.button>
 
                 {/* Widget Header */}
                 <div className="flex items-center gap-2.5 mb-3 select-none">
-                  <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-lg shadow-sm">
+                  <motion.div 
+                    whileHover={{ scale: 1.15, rotate: 5 }}
+                    transition={{ type: 'spring', stiffness: 400 }}
+                    className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-lg shadow-sm"
+                  >
                     {config.emoji}
-                  </div>
+                  </motion.div>
                   <div>
                     <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
                       {config.title}
@@ -505,20 +517,36 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                       </div>
 
                       <div className="flex items-center justify-end gap-2 pt-1">
-                        <button
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                           onClick={handleAudioNarration}
-                          className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-stone-200 text-xs font-bold flex items-center gap-1 transition-all"
+                          className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                            isPlayingAudio 
+                              ? 'bg-blue-600 text-white shadow-md' 
+                              : 'bg-white/10 hover:bg-white/20 text-stone-200'
+                          }`}
                         >
-                          <Volume2 className="w-3.5 h-3.5 text-blue-400" />
-                          <span>{isPlayingAudio ? 'Playing...' : 'Audio'}</span>
-                        </button>
-                        <button
+                          {isPlayingAudio ? (
+                            <div className="flex items-center gap-0.5 h-3">
+                              <motion.div animate={{ scaleY: [0.3, 1, 0.4] }} transition={{ repeat: Infinity, duration: 0.6 }} className="w-0.5 h-3 bg-white rounded-full" />
+                              <motion.div animate={{ scaleY: [0.8, 0.2, 0.9] }} transition={{ repeat: Infinity, duration: 0.5 }} className="w-0.5 h-3 bg-white rounded-full" />
+                              <motion.div animate={{ scaleY: [0.4, 0.9, 0.3] }} transition={{ repeat: Infinity, duration: 0.7 }} className="w-0.5 h-3 bg-white rounded-full" />
+                            </div>
+                          ) : (
+                            <Volume2 className="w-3.5 h-3.5 text-blue-400" />
+                          )}
+                          <span>{isPlayingAudio ? 'Listening' : 'Audio'}</span>
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                           onClick={handleCopyVerse}
                           className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-stone-200 text-xs font-bold flex items-center gap-1 transition-all"
                         >
                           {copiedVerse ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                           <span>{copiedVerse ? 'Copied' : 'Copy'}</span>
-                        </button>
+                        </motion.button>
                       </div>
                     </div>
                   )}
@@ -664,7 +692,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>

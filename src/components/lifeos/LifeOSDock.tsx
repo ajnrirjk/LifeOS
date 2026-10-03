@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { sounds } from '../../services/soundEffects';
 import { ChevronDown, ChevronUp, MoveHorizontal } from 'lucide-react';
@@ -34,20 +35,25 @@ export const LifeOSDock: React.FC = () => {
   // When collapsed on desktop: tiny discreet pill that doesn't block any screen content
   if (isCollapsed) {
     return (
-      <div className={`hidden md:block fixed ${positionClasses} z-40 select-none animate-in fade-in duration-200`}>
-        <button
+      <div className={`hidden md:block fixed ${positionClasses} z-40 select-none`}>
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 350 }}
           onClick={() => {
             sounds.playTap();
             setIsCollapsed(false);
           }}
-          className="px-3 py-1.5 rounded-full bg-black/75 hover:bg-black/90 backdrop-blur-xl border border-white/20 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xl transition-all hover:scale-105 active:scale-95"
+          className="px-3 py-1.5 rounded-full bg-black/75 hover:bg-black/90 backdrop-blur-xl border border-white/20 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xl transition-all"
           title="Show LifeOS Dock"
         >
           <span>🌿</span>
           <span>🕊️</span>
           <span>📖</span>
           <ChevronUp className="w-3.5 h-3.5 opacity-80" />
-        </button>
+        </motion.button>
       </div>
     );
   }
@@ -55,15 +61,22 @@ export const LifeOSDock: React.FC = () => {
   return (
     <>
       {/* DESKTOP DOCK (Tablets & Desktops >= 768px) */}
-      <div className={`hidden md:block fixed ${positionClasses} z-40 select-none transition-all duration-300`}>
+      <motion.div
+        layout
+        transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+        className={`hidden md:block fixed ${positionClasses} z-40 select-none`}
+      >
         <div className="px-2.5 py-1.5 rounded-3xl bg-black/65 dark:bg-black/80 backdrop-blur-2xl border border-white/20 shadow-2xl flex items-center gap-1.5">
           {/* Desktop Home / Widgets Button */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.06, y: -2 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             onClick={() => {
               sounds.playTap();
               showDesktop();
             }}
-            className={`flex items-center gap-2 px-2.5 py-1 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95 ${
+            className={`flex items-center gap-2 px-2.5 py-1 rounded-2xl transition-colors duration-200 ${
               isDesktopView
                 ? 'bg-emerald-500/30 text-white shadow-inner ring-1 ring-emerald-400/40'
                 : 'hover:bg-white/10 text-stone-200'
@@ -81,7 +94,7 @@ export const LifeOSDock: React.FC = () => {
                 App Widgets
               </span>
             </div>
-          </button>
+          </motion.button>
 
           <div className="h-5 w-px bg-white/20 mx-0.5 shrink-0" />
 
@@ -91,8 +104,11 @@ export const LifeOSDock: React.FC = () => {
             const isMinimized = !!openWindows[app.id]?.isMinimized;
 
             return (
-              <button
+              <motion.button
                 key={app.id}
+                whileHover={{ scale: 1.06, y: -2 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
                 onClick={() => {
                   sounds.playTap();
                   if (isActive) {
@@ -101,7 +117,7 @@ export const LifeOSDock: React.FC = () => {
                     launchApp(app.id);
                   }
                 }}
-                className={`flex items-center gap-2 px-2.5 py-1 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95 ${
+                className={`flex items-center gap-2 px-2.5 py-1 rounded-2xl transition-colors duration-200 ${
                   isActive
                     ? 'bg-white/20 text-white shadow-inner ring-1 ring-white/30'
                     : isMinimized
@@ -126,7 +142,12 @@ export const LifeOSDock: React.FC = () => {
                   <span className="font-black text-xs text-white tracking-wide flex items-center gap-1.5 whitespace-nowrap">
                     {app.title}
                     {isActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="Active Window" />
+                      <motion.span
+                        animate={{ scale: [1, 1.3, 1] }}
+                        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                        className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+                        title="Active Window"
+                      />
                     )}
                     {isMinimized && (
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Minimized Window" />
@@ -146,7 +167,7 @@ export const LifeOSDock: React.FC = () => {
                       : 'App'}
                   </span>
                 </div>
-              </button>
+              </motion.button>
             );
           })}
 
@@ -154,16 +175,20 @@ export const LifeOSDock: React.FC = () => {
           <div className="h-5 w-px bg-white/20 mx-0.5 shrink-0" />
 
           {/* Move Position: Toggle Center vs Corner */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
             onClick={handlePositionToggle}
             className="p-1.5 rounded-xl hover:bg-white/15 text-white/70 hover:text-white transition-colors shrink-0"
             title={dockPosition === 'center' ? 'Move Dock to Bottom Right Corner' : 'Move Dock to Bottom Center'}
           >
             <MoveHorizontal className="w-3.5 h-3.5" />
-          </button>
+          </motion.button>
 
           {/* Minimize / Hide Dock button so it never blocks anything */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
             onClick={() => {
               sounds.playTap();
               setIsCollapsed(true);
@@ -172,9 +197,9 @@ export const LifeOSDock: React.FC = () => {
             title="Minimize Dock out of the way"
           >
             <ChevronDown className="w-3.5 h-3.5" />
-          </button>
+          </motion.button>
         </div>
-      </div>
+      </motion.div>
 
       {/* MOBILE BOTTOM NAVIGATION BAR (< 768px) */}
       {isDesktopView && (

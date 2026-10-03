@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { BookOpen, Trophy, Sparkles, BookMarked, Home, HeartHandshake } from 'lucide-react';
 import { sounds } from '../services/soundEffects';
@@ -23,42 +24,53 @@ export const Navigation: React.FC = () => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
-              <button
+              <motion.button
                 key={item.id}
+                whileHover={{ x: 3 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => {
                   sounds.playTap();
                   setCurrentTab(item.id);
                 }}
-                className={`flex items-center gap-3.5 px-4 py-3 rounded-2xl font-black text-sm tracking-wide uppercase transition-all select-none ${
+                className={`relative flex items-center gap-3.5 px-4 py-3 rounded-2xl font-black text-sm tracking-wide uppercase transition-colors select-none ${
                   isActive
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-500 shadow-sm'
-                    : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-slate-800/80 border-2 border-transparent'
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-slate-800/80'
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : ''}`} />
-                <span className="flex-1 text-left">{item.label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeNavBackground"
+                    className="absolute inset-0 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border-2 border-emerald-500 shadow-sm"
+                    transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  />
+                )}
+                <Icon className={`w-5 h-5 relative z-10 ${isActive ? 'stroke-[2.5]' : ''}`} />
+                <span className="flex-1 text-left relative z-10">{item.label}</span>
                 {item.badge && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 relative z-10">
                     {item.badge}
                   </span>
                 )}
-              </button>
+              </motion.button>
             );
           })}
 
           <div className="my-2 border-t border-stone-200 dark:border-slate-800" />
 
           {/* Manna Store button */}
-          <button
+          <motion.button
+            whileHover={{ x: 3, scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => {
               sounds.playTap();
               setIsShopOpen(true);
             }}
-            className="flex items-center gap-3.5 px-4 py-3 rounded-2xl font-black text-sm tracking-wide uppercase text-stone-600 dark:text-stone-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 hover:text-cyan-600 dark:hover:text-cyan-400 border-2 border-transparent transition-all select-none"
+            className="flex items-center gap-3.5 px-4 py-3 rounded-2xl font-black text-sm tracking-wide uppercase text-stone-600 dark:text-stone-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 hover:text-cyan-600 dark:hover:text-cyan-400 border-2 border-transparent transition-colors select-none"
           >
             <Sparkles className="w-5 h-5 text-cyan-500" />
             <span className="flex-1 text-left">Grace Store</span>
-          </button>
+          </motion.button>
         </nav>
 
         {/* Spiritual Quote on bottom of sidebar */}

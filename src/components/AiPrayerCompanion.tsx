@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { 
   HeartHandshake, 
@@ -190,10 +191,12 @@ export const AiPrayerCompanion: React.FC = () => {
               {moodChips.map((chip) => {
                 const isSelected = selectedMood === chip.id;
                 return (
-                  <button
+                  <motion.button
                     key={chip.id}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
                     onClick={() => handleSelectMood(chip.id, chip.prompt)}
-                    className={`px-3.5 py-2 rounded-2xl text-xs font-bold border-2 transition-all flex items-center gap-1.5 select-none ${
+                    className={`px-3.5 py-2 rounded-2xl text-xs font-bold border-2 transition-colors flex items-center gap-1.5 select-none ${
                       isSelected
                         ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-500 text-emerald-800 dark:text-emerald-200 shadow-sm'
                         : 'border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800 text-stone-700 dark:text-stone-300 hover:bg-stone-100'
@@ -201,7 +204,7 @@ export const AiPrayerCompanion: React.FC = () => {
                   >
                     <span>{chip.emoji}</span>
                     <span>{chip.label}</span>
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -229,10 +232,12 @@ export const AiPrayerCompanion: React.FC = () => {
             </div>
 
             {/* Generate Prayer Button */}
-            <button
+            <motion.button
+              whileHover={{ scale: isLoading ? 1 : 1.02 }}
+              whileTap={{ scale: isLoading ? 1 : 0.98 }}
               onClick={handleGeneratePrayer}
               disabled={isLoading}
-              className={`w-full py-4 rounded-2xl font-black text-base uppercase tracking-wider text-white shadow-md flex items-center justify-center gap-2 transition-all active:translate-y-1 ${
+              className={`w-full py-4 rounded-2xl font-black text-base uppercase tracking-wider text-white shadow-md flex items-center justify-center gap-2 transition-all ${
                 isLoading
                   ? 'bg-stone-400 cursor-not-allowed'
                   : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30'
@@ -249,12 +254,19 @@ export const AiPrayerCompanion: React.FC = () => {
                   <span>Receive Prayer & Verse Reflection</span>
                 </>
               )}
-            </button>
+            </motion.button>
           </div>
 
           {/* Generated Prayer & Reflection Display */}
-          {currentResponse && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border-2 border-emerald-300 dark:border-emerald-800/80 shadow-lg flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <AnimatePresence>
+            {currentResponse && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border-2 border-emerald-300 dark:border-emerald-800/80 shadow-lg flex flex-col gap-6"
+              >
               {/* Card Action Controls */}
               <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-slate-800">
                 <span className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
@@ -333,9 +345,10 @@ export const AiPrayerCompanion: React.FC = () => {
                   💡 <strong>Practice Today:</strong> {currentResponse.actionStep}
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
+      </div>
       ) : (
         /* Prayer Journal View */
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border-2 border-stone-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
