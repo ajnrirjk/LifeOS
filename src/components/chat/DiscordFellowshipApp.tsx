@@ -116,6 +116,26 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const [customNameInput, setCustomNameInput] = useState(currentUser.name);
   const [customStatusInput, setCustomStatusInput] = useState(currentUser.customStatus || '');
 
+  // Enforce mandatory Name entry before using fellowship chat
+  const [showNameRequiredModal, setShowNameRequiredModal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const isGoogle = !!localStorage.getItem('lifeos_persistent_google_user');
+    const isSaved = localStorage.getItem('lifeos_discord_name_set_v6') === 'true';
+    const savedUser = localStorage.getItem('lifeos_discord_user_v6');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u.name && u.name !== 'Believer in Christ' && u.name.trim().length > 1) {
+          return false;
+        }
+      } catch {}
+    }
+    return !isSaved && !isGoogle;
+  });
+  const [onboardingName, setOnboardingName] = useState('');
+  const [onboardingStatus, setOnboardingStatus] = useState('');
+  const [onboardingError, setOnboardingError] = useState('');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<any>(null);
 
@@ -401,6 +421,37 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     }
   };
 
+  // Complete mandatory Name onboarding
+  const handleCompleteNameOnboarding = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = onboardingName.trim();
+    if (!cleanName || cleanName.length < 2) {
+      setOnboardingError('Please enter your name (at least 2 characters) to join.');
+      return;
+    }
+
+    const isOwner = currentUser.email === SUPER_ADMIN_EMAIL;
+    const updatedUser = {
+      ...currentUser,
+      name: cleanName,
+      customStatus: onboardingStatus.trim() || currentUser.customStatus || 'Walking in faith 🕊️',
+      role: isOwner ? 'Super Admin' : (currentUser.role || 'Believer'),
+      roleColor: isOwner ? '#F59E0B' : (currentUser.roleColor || '#10B981'),
+    };
+
+    discordChatService.setCurrentUser(updatedUser);
+    setCurrentUser(discordChatService.currentUser);
+    setCustomNameInput(cleanName);
+    setCustomStatusInput(updatedUser.customStatus);
+    try {
+      localStorage.setItem('lifeos_discord_name_set_v6', 'true');
+    } catch {}
+
+    setShowNameRequiredModal(false);
+    setOnboardingError('');
+    sounds.playTap();
+  };
+
   // Google Sign-In
   const handleGoogleSignIn = async () => {
     sounds.playTap();
@@ -420,7 +471,11 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       };
       discordChatService.setCurrentUser(updatedUser);
       setCurrentUser(discordChatService.currentUser);
+      try {
+        localStorage.setItem('lifeos_discord_name_set_v6', 'true');
+      } catch {}
       setShowSettingsModal(false);
+      setShowNameRequiredModal(false);
     } catch (err) {
       console.error('Google Sign-in failed', err);
     }
@@ -1969,6 +2024,125 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                   </div>
                 ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 11. MANDATORY NAME ONBOARDING MODAL (UNSKIPPABLE)                         */}
+      {/* ========================================================================= */}
+      {showNameRequiredModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-[#313338] border border-amber-500/40 rounded-2xl shadow-2xl p-5 sm:p-6 space-y-5 relative overflow-hidden">
+            {/* Top decorative glow */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-emerald-500 to-indigo-500" />
+
+            <div className="text-center space-y-2 pt-1">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
+                🕊️
+              </div>
+              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                Welcome to Fellowship Chat
+              </h2>
+              <p className="text-xs text-stone-300 leading-relaxed max-w-sm mx-auto">
+                Connect with believers across all phones and computers in real-time. Please enter your name to join the server.
+              </p>
+            </div>
+
+            <form onSubmit={handleCompleteNameOnboarding} className="space-y-4">
+              {onboardingError && (
+                <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs font-bold text-center animate-shake">
+                  {onboardingError}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1">
+                  <span>Your Display Name</span>
+                  <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={onboardingName}
+                  onChange={(e) => {
+                    setOnboardingName(e.target.value);
+                    if (onboardingError) setOnboardingError('');
+                  }}
+                  placeholder="e.g. Sarah Jenkins, Marcus, or Brother John"
+                  className="w-full px-3.5 py-2.5 bg-[#1e1f22] border border-[#3f4147] focus:border-amber-400 rounded-xl text-white text-sm font-semibold focus:outline-none transition-all placeholder:text-stone-500 shadow-inner"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-[#949ba4] flex items-center justify-between">
+                  <span>Custom Status Message (Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={onboardingStatus}
+                  onChange={(e) => setOnboardingStatus(e.target.value)}
+                  placeholder="e.g. Walking with Christ ✝️"
+                  className="w-full px-3.5 py-2 bg-[#1e1f22] border border-[#3f4147] focus:border-emerald-400 rounded-xl text-white text-xs font-medium focus:outline-none transition-all placeholder:text-stone-500"
+                />
+
+                {/* Status Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['Walking in faith 🕊️', 'In prayer 🙏', 'Reading Bible 📖', 'Rejoicing ✨'].map((statusChip) => (
+                    <button
+                      key={statusChip}
+                      type="button"
+                      onClick={() => setOnboardingStatus(statusChip)}
+                      className="px-2 py-0.5 rounded-full bg-[#2b2d31] hover:bg-[#35373c] text-[10px] text-stone-300 font-medium border border-[#3f4147] transition-all"
+                    >
+                      {statusChip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={!onboardingName.trim() || onboardingName.trim().length < 2}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-stone-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Enter Fellowship Chat ✨</span>
+              </button>
+            </form>
+
+            <div className="relative flex items-center justify-center my-2">
+              <div className="border-t border-[#3f4147] w-full" />
+              <span className="bg-[#313338] px-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest absolute">
+                or
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full py-2.5 rounded-xl bg-[#2b2d31] hover:bg-[#35373c] border border-[#3f4147] text-white text-xs font-bold transition-all flex items-center justify-center gap-2.5 shadow-sm"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span>Sign in with Google Account</span>
+            </button>
           </div>
         </div>
       )}
