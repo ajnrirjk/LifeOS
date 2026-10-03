@@ -624,6 +624,69 @@ class SoundEffectsService {
       });
     } catch {}
   }
+
+  // Coin / reward collect clink
+  playCoin() {
+    if (!this.enabled) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(987.77, now); // B5
+      osc.frequency.setValueAtTime(1318.51, now + 0.07); // E6
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } catch {}
+  }
+
+  // Cozy Lo-Fi Cat Sanctuary BGM loop (Web Audio synthesized kalimba & soft bells)
+  private catBgmTimer: any = null;
+  public isCatBgmActive: boolean = false;
+
+  startCatBgm() {
+    if (this.isCatBgmActive || !this.enabled) return;
+    this.initCtx();
+    this.isCatBgmActive = true;
+    const notes = [
+      523.25, 659.25, 783.99, 659.25, // C5, E5, G5, E5
+      587.33, 698.46, 880.0, 698.46,  // D5, F5, A5, F5
+      659.25, 783.99, 987.77, 783.99, // E5, G5, B5, G5
+      523.25, 783.99, 1046.5, 783.99  // C5, G5, C6, G5
+    ];
+    let noteIdx = 0;
+    this.catBgmTimer = setInterval(() => {
+      if (!this.isCatBgmActive || !this.enabled || !this.ctx) return;
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(notes[noteIdx % notes.length], now);
+        gain.gain.setValueAtTime(0.03, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.36);
+        noteIdx++;
+      } catch {}
+    }, 420);
+  }
+
+  stopCatBgm() {
+    this.isCatBgmActive = false;
+    if (this.catBgmTimer) {
+      clearInterval(this.catBgmTimer);
+      this.catBgmTimer = null;
+    }
+  }
 }
 
 export const sounds = new SoundEffectsService();

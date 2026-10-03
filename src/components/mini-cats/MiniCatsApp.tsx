@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MiniCat, CatAction, SanctuaryBackground, CatBreed, NekoShopGoodie } from '../../types/miniCats';
+import { motion, AnimatePresence } from 'motion/react';
+import { MiniCat, CatAction, SanctuaryBackground, CatBreed, NekoShopGoodie, CatQuest, MiniCatGameTab } from '../../types/miniCats';
 import { CAT_BREEDS, INITIAL_CATS, NEKO_SHOP_GOODIES } from '../../data/catBreedsData';
 import { CAT_COSTUMES } from '../../data/catCostumesData';
 import { MiniatureCatRenderer } from './MiniatureCatRenderer';
+import { LaserFrenzyMiniGame } from './LaserFrenzyMiniGame';
+import { SnackCatcherMiniGame } from './SnackCatcherMiniGame';
+import { SanctuaryQuestsView } from './SanctuaryQuestsView';
 import { sounds } from '../../services/soundEffects';
+import confetti from 'canvas-confetti';
 import {
   Sparkles,
   Utensils,
@@ -26,13 +31,93 @@ import {
   ShoppingBag,
   Volume1,
   Coins,
+  Gamepad2,
+  Home,
+  CheckSquare,
+  Award,
+  Zap,
+  Star,
+  Info
 } from 'lucide-react';
 
+const LEVEL_TITLES = [
+  'Kitten Helper',
+  'Cat Cafe Host',
+  'Sanctuary Guardian',
+  'Feline Whisperer',
+  'Master Caretaker',
+  'Legendary Cat Saint'
+];
+
+const DEFAULT_QUESTS: CatQuest[] = [
+  {
+    id: 'q_pet',
+    title: 'Warm Affection',
+    description: 'Pet your sanctuary kitties 4 times',
+    targetCount: 4,
+    currentCount: 0,
+    rewardSilver: 40,
+    rewardGold: 1,
+    rewardXp: 30,
+    isClaimed: false,
+    icon: '💖'
+  },
+  {
+    id: 'q_feed',
+    title: 'Tummy Feast',
+    description: 'Serve a fresh food bowl in the yard',
+    targetCount: 1,
+    currentCount: 0,
+    rewardSilver: 30,
+    rewardXp: 25,
+    isClaimed: false,
+    icon: '🥣'
+  },
+  {
+    id: 'q_laser',
+    title: 'Laser Reflexes',
+    description: 'Score 80+ points in Laser Frenzy Arcade',
+    targetCount: 80,
+    currentCount: 0,
+    rewardSilver: 50,
+    rewardGold: 3,
+    rewardXp: 45,
+    isClaimed: false,
+    icon: '🔴'
+  },
+  {
+    id: 'q_snack',
+    title: 'Snack Basket Champion',
+    description: 'Score 80+ points in Snack Catcher Arcade',
+    targetCount: 80,
+    currentCount: 0,
+    rewardSilver: 50,
+    rewardGold: 3,
+    rewardXp: 45,
+    isClaimed: false,
+    icon: '🧺'
+  },
+  {
+    id: 'q_costume',
+    title: 'Haute Feline Fashion',
+    description: 'Equip any costume on your cats',
+    targetCount: 1,
+    currentCount: 0,
+    rewardSilver: 25,
+    rewardXp: 20,
+    isClaimed: false,
+    icon: '🎩'
+  }
+];
+
 export const MiniCatsApp: React.FC = () => {
+  // Current game tab: 'yard' | 'arcade' | 'quests' | 'shop' | 'catdex'
+  const [activeTab, setActiveTab] = useState<MiniCatGameTab>('yard');
+
   // Cats state loaded from localStorage or defaults
   const [cats, setCats] = useState<MiniCat[]>(() => {
     try {
-      const saved = localStorage.getItem('pocket_paws_sanctuary_v2');
+      const saved = localStorage.getItem('pocket_paws_sanctuary_v3');
       if (saved) return JSON.parse(saved);
     } catch {}
     return INITIAL_CATS;
@@ -41,39 +126,234 @@ export const MiniCatsApp: React.FC = () => {
   const [selectedCatId, setSelectedCatId] = useState<string | null>('cat_orange');
   const [background, setBackground] = useState<SanctuaryBackground>('garden');
   const [isMuted, setIsMuted] = useState(false);
+  const [isBgmActive, setIsBgmActive] = useState(false);
   const [isDiscoParty, setIsDiscoParty] = useState(false);
+
+  // Yard Laser Pointer
   const [isLaserActive, setIsLaserActive] = useState(false);
   const [laserPos, setLaserPos] = useState({ x: 50, y: 50 });
 
-  // Currencies like Neko Atsume (Silver Fish & Gold Fish)
-  const [silverFish, setSilverFish] = useState(380);
-  const [goldFish, setGoldFish] = useState(25);
+  // Currencies & Progression
+  const [silverFish, setSilverFish] = useState(() => {
+    try {
+      const val = localStorage.getItem('pocket_paws_silver');
+      return val ? Number(val) : 450;
+    } catch {
+      return 450;
+    }
+  });
+
+  const [goldFish, setGoldFish] = useState(() => {
+    try {
+      const val = localStorage.getItem('pocket_paws_gold');
+      return val ? Number(val) : 30;
+    } catch {
+      return 30;
+    }
+  });
+
+  const [sanctuaryXp, setSanctuaryXp] = useState(() => {
+    try {
+      const val = localStorage.getItem('pocket_paws_xp');
+      return val ? Number(val) : 60;
+    } catch {
+      return 60;
+    }
+  });
+
+  const [level, setLevel] = useState(() => {
+    try {
+      const val = localStorage.getItem('pocket_paws_level');
+      return val ? Number(val) : 1;
+    } catch {
+      return 1;
+    }
+  });
+
+  // Daily Quests
+  const [quests, setQuests] = useState<CatQuest[]>(() => {
+    try {
+      const val = localStorage.getItem('pocket_paws_quests_v2');
+      if (val) return JSON.parse(val);
+    } catch {}
+    return DEFAULT_QUESTS;
+  });
+
+  // Active Mini-Game launcher
+  const [activeMiniGame, setActiveMiniGame] = useState<'laser' | 'snack' | null>(null);
+
+  // Yard Food Dish State
+  const [foodBowl, setFoodBowl] = useState<{ active: boolean; type: 'kibble' | 'tuna' | 'salmon'; x: number; y: number; servings: number } | null>(null);
 
   // Modals
   const [isWardrobeOpen, setIsWardrobeOpen] = useState(false);
   const [isAdoptModalOpen, setIsAdoptModalOpen] = useState(false);
-  const [isCatBookOpen, setIsCatBookOpen] = useState(false);
-  const [isShopOpen, setIsShopOpen] = useState(false);
+  const [isFoodMenuOpen, setIsFoodMenuOpen] = useState(false);
 
   const [selectedBreedForAdoption, setSelectedBreedForAdoption] = useState<string>(CAT_BREEDS[0].id);
   const [newCatName, setNewCatName] = useState('');
-  const [catBookPage, setCatBookPage] = useState<number>(0);
   const [photoFlash, setPhotoFlash] = useState(false);
   const [pettingHearts, setPettingHearts] = useState<{ id: number; x: number; y: number; text?: string }[]>([]);
+  const [levelUpNotice, setLevelUpNotice] = useState<string | null>(null);
 
   // Dragging state tracking
   const [draggingCatId, setDraggingCatId] = useState<string | null>(null);
   const sanctuaryRef = useRef<HTMLDivElement>(null);
 
-  // Persist cats to localStorage
+  // Persist State
   useEffect(() => {
     try {
-      localStorage.setItem('pocket_paws_sanctuary_v2', JSON.stringify(cats));
+      localStorage.setItem('pocket_paws_sanctuary_v3', JSON.stringify(cats));
+      localStorage.setItem('pocket_paws_silver', silverFish.toString());
+      localStorage.setItem('pocket_paws_gold', goldFish.toString());
+      localStorage.setItem('pocket_paws_xp', sanctuaryXp.toString());
+      localStorage.setItem('pocket_paws_level', level.toString());
+      localStorage.setItem('pocket_paws_quests_v2', JSON.stringify(quests));
     } catch {}
-  }, [cats]);
+  }, [cats, silverFish, goldFish, sanctuaryXp, level, quests]);
+
+  // Clean BGM on unmount
+  useEffect(() => {
+    return () => {
+      sounds.stopCatBgm();
+    };
+  }, []);
 
   const selectedCat = cats.find((c) => c.id === selectedCatId) || cats[0];
   const selectedBreed = CAT_BREEDS.find((b) => b.id === (selectedCat?.breedId || 'orange_tabby')) || CAT_BREEDS[0];
+
+  // Award XP and check Level-up
+  const addXp = (amount: number) => {
+    setSanctuaryXp((prev) => {
+      const nextXp = prev + amount;
+      const xpNeeded = level * 100;
+      if (nextXp >= xpNeeded) {
+        const nextLevel = level + 1;
+        setLevel(nextLevel);
+        setGoldFish((g) => g + 5);
+        setSilverFish((s) => s + 50);
+        sounds.playVictory();
+        confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 } });
+        const title = LEVEL_TITLES[Math.min(nextLevel - 1, LEVEL_TITLES.length - 1)];
+        setLevelUpNotice(`🎉 LEVEL UP! You are now a ${title} (Lv. ${nextLevel})! +5 🪙 Gold Fish`);
+        setTimeout(() => setLevelUpNotice(null), 5000);
+        return nextXp - xpNeeded;
+      }
+      return nextXp;
+    });
+  };
+
+  // Progress a Quest
+  const updateQuestProgress = (questId: string, amount: number = 1, isAbsolute: boolean = false) => {
+    setQuests((prev) =>
+      prev.map((q) => {
+        if (q.id === questId && !q.isClaimed) {
+          const nextCount = isAbsolute ? Math.max(q.currentCount, amount) : q.currentCount + amount;
+          return {
+            ...q,
+            currentCount: Math.min(q.targetCount, nextCount)
+          };
+        }
+        return q;
+      })
+    );
+  };
+
+  // Claim Quest Reward
+  const handleClaimQuest = (questId: string) => {
+    const quest = quests.find((q) => q.id === questId);
+    if (!quest || quest.isClaimed || quest.currentCount < quest.targetCount) return;
+
+    sounds.playCoin();
+    setSilverFish((s) => s + quest.rewardSilver);
+    if (quest.rewardGold) {
+      const goldAmt = quest.rewardGold;
+      setGoldFish((g) => g + goldAmt);
+    }
+    addXp(quest.rewardXp);
+
+    setQuests((prev) =>
+      prev.map((q) => (q.id === questId ? { ...q, isClaimed: true } : q))
+    );
+  };
+
+  // Toggle Cozy BGM
+  const handleToggleBgm = () => {
+    sounds.playTap();
+    if (isBgmActive) {
+      sounds.stopCatBgm();
+      setIsBgmActive(false);
+    } else {
+      sounds.startCatBgm();
+      setIsBgmActive(true);
+    }
+  };
+
+  // Cat Wandering AI Loop (cozy real behavior in yard)
+  useEffect(() => {
+    if (activeTab !== 'yard' || isDiscoParty) return;
+
+    const wanderTimer = setInterval(() => {
+      if (Math.random() < 0.45 && cats.length > 0) {
+        const randomIdx = Math.floor(Math.random() * cats.length);
+        const target = cats[randomIdx];
+        if (target.action === 'sleep' || target.isDragging) return;
+
+        const newX = Math.max(10, Math.min(90, target.x + (Math.random() - 0.5) * 22));
+        const newY = Math.max(25, Math.min(80, target.y + (Math.random() - 0.5) * 16));
+        const facingLeft = newX < target.x;
+
+        setCats((prev) =>
+          prev.map((c, i) =>
+            i === randomIdx
+              ? {
+                  ...c,
+                  x: newX,
+                  y: newY,
+                  facingLeft,
+                  thoughtBubble: Math.random() < 0.3 ? 'Sniffing around... 🌸' : undefined
+                }
+              : c
+          )
+        );
+      }
+    }, 4500);
+
+    return () => clearInterval(wanderTimer);
+  }, [activeTab, cats, isDiscoParty]);
+
+  // Yard Feeding Logic: Cats walk to food bowl
+  const handleServeFoodBowl = (type: 'kibble' | 'tuna' | 'salmon') => {
+    sounds.playTap();
+    sounds.playMunch();
+    setIsFoodMenuOpen(false);
+
+    const cost = type === 'salmon' ? 30 : type === 'tuna' ? 15 : 0;
+    if (silverFish < cost) return;
+    setSilverFish((s) => s - cost);
+
+    const bowlX = 50;
+    const bowlY = 70;
+    setFoodBowl({ active: true, type, x: bowlX, y: bowlY, servings: 3 });
+    updateQuestProgress('q_feed', 1);
+    addXp(25);
+
+    // Nearby cats rush to the bowl!
+    setCats((prev) =>
+      prev.map((c, idx) => {
+        const offset = (idx - 1) * 14;
+        return {
+          ...c,
+          x: Math.max(15, Math.min(85, bowlX + offset)),
+          y: bowlY - 4,
+          facingLeft: offset > 0,
+          action: 'eat',
+          happiness: 100,
+          thoughtBubble: type === 'salmon' ? 'DELUXE SALMON! 🍣' : 'Yum! Nom nom! 🐟'
+        };
+      })
+    );
+  };
 
   // Mouse & Touch Tracking for Dragging & Laser Pointer
   const handleMouseMoveSanctuary = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -84,6 +364,22 @@ export const MiniCatsApp: React.FC = () => {
 
     if (isLaserActive) {
       setLaserPos({ x: xPct, y: yPct });
+      // Laser chase response from nearby cats
+      setCats((prev) =>
+        prev.map((c) => {
+          const dist = Math.hypot(c.x - xPct, c.y - yPct);
+          if (dist < 20 && c.action !== 'sleep') {
+            return {
+              ...c,
+              x: c.x + (xPct - c.x) * 0.15,
+              y: c.y + (yPct - c.y) * 0.15,
+              facingLeft: xPct < c.x,
+              thoughtBubble: 'CATCH IT! 🔴'
+            };
+          }
+          return c;
+        })
+      );
     }
 
     if (draggingCatId) {
@@ -96,35 +392,13 @@ export const MiniCatsApp: React.FC = () => {
               x: xPct,
               y: yPct,
               facingLeft,
-              isDragging: true,
+              isDragging: true
             };
           }
           return c;
         })
       );
     }
-  };
-
-  const handleTouchMoveSanctuary = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!sanctuaryRef.current || !draggingCatId) return;
-    const touch = e.touches[0];
-    const rect = sanctuaryRef.current.getBoundingClientRect();
-    const xPct = Math.max(5, Math.min(95, ((touch.clientX - rect.left) / rect.width) * 100));
-    const yPct = Math.max(15, Math.min(85, ((touch.clientY - rect.top) / rect.height) * 100));
-
-    setCats((prev) =>
-      prev.map((c) => {
-        if (c.id === draggingCatId) {
-          return {
-            ...c,
-            x: xPct,
-            y: yPct,
-            isDragging: true,
-          };
-        }
-        return c;
-      })
-    );
   };
 
   const handlePointerUp = () => {
@@ -137,7 +411,7 @@ export const MiniCatsApp: React.FC = () => {
     }
   };
 
-  // BREED-SPECIFIC MEOW SOUND WHEN PETTING
+  // Petting with real Breed-Specific Meow Sound & Hearts
   const handlePetCat = (e: React.MouseEvent | React.TouchEvent, catId: string) => {
     e.stopPropagation();
     setSelectedCatId(catId);
@@ -146,24 +420,25 @@ export const MiniCatsApp: React.FC = () => {
     if (!targetCat) return;
     const breed = CAT_BREEDS.find((b) => b.id === targetCat.breedId) || CAT_BREEDS[0];
 
-    // Emit unique breed-specific meow sound!
     if (!isMuted) {
       sounds.playBreedMeow(breed.id);
-      setTimeout(() => sounds.playPurr(), 350);
+      setTimeout(() => sounds.playPurr(), 300);
     }
 
-    // Award silver fish on petting like Neko Atsume gratitude
-    setSilverFish((prev) => prev + Math.floor(Math.random() * 3) + 1);
+    // Award silver fish and progress quest
+    setSilverFish((prev) => prev + Math.floor(Math.random() * 3) + 2);
+    addXp(12);
+    updateQuestProgress('q_pet', 1);
 
-    // Spawn floating heart + onomatopoeia sound text
+    // Floating heart
     const heartId = Date.now() + Math.random();
     setPettingHearts((prev) => [
       ...prev,
-      { id: heartId, x: targetCat.x, y: targetCat.y - 10, text: breed.meowOnomatopoeia },
+      { id: heartId, x: targetCat.x, y: targetCat.y - 10, text: breed.meowOnomatopoeia }
     ]);
     setTimeout(() => {
       setPettingHearts((prev) => prev.filter((h) => h.id !== heartId));
-    }, 1500);
+    }, 1400);
 
     setCats((prev) =>
       prev.map((c) =>
@@ -171,84 +446,23 @@ export const MiniCatsApp: React.FC = () => {
           ? {
               ...c,
               happiness: 100,
-              thoughtBubble: `${breed.meowOnomatopoeia} 💕`,
+              thoughtBubble: `${breed.meowOnomatopoeia} 💕`
             }
           : c
       )
     );
   };
 
-  // Action Change for Individual Cat
-  const handleSetCatAction = (catId: string, action: CatAction) => {
-    const targetCat = cats.find((c) => c.id === catId);
-    const breedId = targetCat?.breedId || 'orange_tabby';
+  // Finish an arcade game
+  const handleFinishArcadeGame = (score: number, silverEarned: number, goldEarned: number, xpEarned: number) => {
+    setSilverFish((s) => s + silverEarned);
+    setGoldFish((g) => g + goldEarned);
+    addXp(xpEarned);
 
-    if (!isMuted) {
-      if (action === 'eat') sounds.playMunch();
-      else if (action === 'drink') sounds.playSlurp();
-      else if (action === 'sleep') sounds.playPurr();
-      else if (action === 'dance') sounds.playVictory();
-      else sounds.playBreedMeow(breedId);
-    }
-
-    setCats((prev) =>
-      prev.map((c) =>
-        c.id === catId
-          ? {
-              ...c,
-              action,
-              thoughtBubble: getActionThought(action),
-            }
-          : c
-      )
-    );
-  };
-
-  // Group Actions for ALL cats
-  const handleSetAllAction = (action: CatAction) => {
-    if (!isMuted) {
-      if (action === 'dance') {
-        sounds.playVictory();
-        setIsDiscoParty(true);
-      } else if (action === 'eat') {
-        sounds.playMunch();
-      } else if (action === 'drink') {
-        sounds.playSlurp();
-      } else if (action === 'sleep') {
-        sounds.playPurr();
-        setIsDiscoParty(false);
-      } else if (action === 'loaf') {
-        sounds.playPurr();
-        setIsDiscoParty(false);
-      } else {
-        sounds.playTap();
-        setIsDiscoParty(false);
-      }
-    }
-
-    setCats((prev) =>
-      prev.map((c) => ({
-        ...c,
-        action,
-        thoughtBubble: getActionThought(action),
-      }))
-    );
-  };
-
-  const getActionThought = (action: CatAction): string => {
-    switch (action) {
-      case 'sleep':
-        return 'Purrrrr... 💤';
-      case 'loaf':
-        return 'Loaf mode 🍞';
-      case 'eat':
-        return 'Yum! Nom nom! 🐟';
-      case 'drink':
-        return 'Refreshing! 🥛';
-      case 'dance':
-        return 'Groove time! 🕺';
-      default:
-        return 'Mew! ✨';
+    if (activeMiniGame === 'laser') {
+      updateQuestProgress('q_laser', score, true);
+    } else if (activeMiniGame === 'snack') {
+      updateQuestProgress('q_snack', score, true);
     }
   };
 
@@ -256,35 +470,23 @@ export const MiniCatsApp: React.FC = () => {
   const handleEquipCostume = (costumeId: string) => {
     if (!selectedCatId) return;
     if (!isMuted) sounds.playCostumeChime();
+    updateQuestProgress('q_costume', 1);
+    addXp(15);
+
     setCats((prev) =>
       prev.map((c) =>
         c.id === selectedCatId
           ? {
               ...c,
               costumeId,
-              thoughtBubble: 'Look at my outfit! ✨',
+              thoughtBubble: 'Look at my stylish outfit! ✨'
             }
           : c
       )
     );
   };
 
-  const handleRandomizeCostumes = () => {
-    if (!isMuted) sounds.playCostumeChime();
-    const costumeIds = CAT_COSTUMES.map((c) => c.id);
-    setCats((prev) =>
-      prev.map((cat) => {
-        const randCostume = costumeIds[Math.floor(Math.random() * costumeIds.length)];
-        return {
-          ...cat,
-          costumeId: randCostume,
-          thoughtBubble: 'Silly fashion! 🎭',
-        };
-      })
-    );
-  };
-
-  // Adopt / Add Kitty
+  // Adopt Kitty
   const handleAdoptKitty = () => {
     const breed = CAT_BREEDS.find((b) => b.id === selectedBreedForAdoption) || CAT_BREEDS[0];
     const name = newCatName.trim() || breed.name.split(' ')[0];
@@ -296,7 +498,7 @@ export const MiniCatsApp: React.FC = () => {
       name,
       breedId: breed.id,
       x: 25 + Math.random() * 50,
-      y: 40 + Math.random() * 38,
+      y: 40 + Math.random() * 35,
       action: 'loaf',
       costumeId: randomCostume,
       scale: 0.95 + Math.random() * 0.15,
@@ -305,862 +507,888 @@ export const MiniCatsApp: React.FC = () => {
       hunger: 20,
       thirst: 20,
       energy: 90,
-      thoughtBubble: `${breed.meowOnomatopoeia} Hi, I'm ${name}! 🐾`,
+      thoughtBubble: `${breed.meowOnomatopoeia} Hello, I'm ${name}! 🐾`
     };
 
     setCats((prev) => [...prev, newCat]);
     setSelectedCatId(newCat.id);
     setIsAdoptModalOpen(false);
     setNewCatName('');
-    if (!isMuted) {
-      sounds.playBreedMeow(breed.id);
-    }
+    sounds.playVictory();
+    addXp(40);
   };
 
-  const handleRemoveCat = (catId: string) => {
-    if (cats.length <= 1) return;
-    if (!isMuted) sounds.playTap();
-    setCats((prev) => prev.filter((c) => c.id !== catId));
-    if (selectedCatId === catId) {
-      const remaining = cats.filter((c) => c.id !== catId);
-      setSelectedCatId(remaining[0]?.id || null);
-    }
-  };
-
-  // Buy item from Neko Atsume Shop
-  const handleBuyGoodie = (goodie: NekoShopGoodie) => {
-    if (silverFish < goodie.costSilver) return;
-    setSilverFish((prev) => prev - goodie.costSilver);
-    if (!isMuted) sounds.playVictory();
-
-    if (goodie.actionTrigger) {
-      handleSetAllAction(goodie.actionTrigger);
-    }
-    setIsShopOpen(false);
-  };
-
-  // Photo Snapshot
   const handleTakeSnapshot = () => {
     if (!isMuted) sounds.playTap();
     setPhotoFlash(true);
-    setTimeout(() => setPhotoFlash(false), 300);
+    setTimeout(() => setPhotoFlash(false), 250);
+  };
+
+  // Background CSS styles
+  const bgClasses: Record<SanctuaryBackground, string> = {
+    garden: 'from-[#ecfccb] via-[#fef08a] to-[#fed7aa]',
+    living_room: 'from-[#ffedd5] via-[#fed7aa] to-[#fef3c7]',
+    cat_cafe: 'from-[#fef3c7] via-[#fde68a] to-[#fed7aa]',
+    tatami: 'from-[#f5f5f4] via-[#e7e5e4] to-[#d6d3d1]',
+    cosmic: 'from-[#1e1b4b] via-[#31104b] to-[#0f172a]'
   };
 
   return (
     <div
-      className="h-full flex flex-col bg-[#fdf6e2] text-stone-900 select-none overflow-hidden relative font-sans"
+      className="h-full flex flex-col bg-[#fffbeb] text-stone-900 select-none overflow-hidden relative font-sans"
       onMouseMove={handleMouseMoveSanctuary}
-      onTouchMove={handleTouchMoveSanctuary}
       onMouseUp={handlePointerUp}
       onTouchEnd={handlePointerUp}
     >
-      {/* Photo Flash Overlay */}
+      {/* Level-Up Banner Notification */}
+      <AnimatePresence>
+        {levelUpNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -40 }}
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-500 via-rose-500 to-pink-500 text-white font-black text-xs sm:text-sm shadow-2xl border-2 border-white flex items-center gap-2 whitespace-nowrap animate-bounce"
+          >
+            <Sparkles className="w-4 h-4 fill-white" />
+            <span>{levelUpNotice}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Snapshot Flash Overlay */}
       {photoFlash && (
         <div className="absolute inset-0 bg-white z-50 pointer-events-none animate-out fade-out duration-300" />
       )}
 
-      {/* TOP HEADER CONTROLS BAR (Neko Atsume / Cat Snack Bar Warm Wooden Aesthetic) */}
-      <div className="h-14 px-3 sm:px-5 bg-[#fff8e7] border-b-2 border-[#d97706]/30 shadow-sm flex items-center justify-between z-30 shrink-0">
-        {/* Title with Neko Paw Badge */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-[#fbbf24] border-2 border-[#b45309] flex items-center justify-center text-2xl shadow-sm">
-            <span>🐾</span>
+      {/* TOP SYSTEM & GAME STATS HUD */}
+      <header className="px-3 sm:px-6 py-2 bg-[#fef3c7] dark:bg-stone-900 border-b-2 border-[#b45309]/30 flex flex-wrap items-center justify-between gap-2.5 z-30 shrink-0">
+        {/* Left: Sanctuary Rank & Level */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-amber-400 border-2 border-[#b45309] flex items-center justify-center text-xl shadow-sm">
+            🐱
           </div>
           <div>
-            <h1 className="text-sm font-black text-[#78350f] flex items-center gap-2 tracking-tight">
-              <span>Neko Atsume Sanctuary</span>
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e] border border-[#d97706]/40">
-                {cats.length} {cats.length === 1 ? 'cat' : 'cats'}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-black text-[#78350f] dark:text-amber-200">
+                Lv. {level} {LEVEL_TITLES[Math.min(level - 1, LEVEL_TITLES.length - 1)]}
               </span>
-            </h1>
-            <p className="text-[11px] text-[#92400e]/80 font-bold hidden sm:block">
-              Tap any cat for unique breed meow sounds · Silly dress-up · Feed & relax
-            </p>
+              <span className="text-[10px] text-stone-500 dark:text-stone-400 font-bold">
+                ({sanctuaryXp}/{level * 100} XP)
+              </span>
+            </div>
+            {/* Level XP Bar */}
+            <div className="w-36 h-2 rounded-full bg-amber-200 dark:bg-stone-700 overflow-hidden mt-0.5">
+              <motion.div
+                className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full"
+                animate={{ width: `${Math.min(100, (sanctuaryXp / (level * 100)) * 100)}%` }}
+                transition={{ type: 'spring', damping: 20 }}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Currency & Primary Navigation Buttons */}
+        {/* Center: Currency Display (Silver & Gold Fish) */}
+        <div className="flex items-center gap-2 px-3 py-1 rounded-2xl bg-white/80 dark:bg-stone-800 border border-[#b45309]/30 shadow-inner text-xs font-black">
+          <span className="flex items-center gap-1 text-slate-700 dark:text-stone-200" title="Silver Fish (Earned from petting & games)">
+            <span>🐟</span>
+            <span>{silverFish}</span>
+          </span>
+          <div className="w-px h-3 bg-amber-300" />
+          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400" title="Gold Fish (Rare currency)">
+            <span>🪙</span>
+            <span>{goldFish}</span>
+          </span>
+        </div>
+
+        {/* Right: Audio Toggles & Adopt Button */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Fish Currency Counters */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#fffbeb] border-2 border-[#f59e0b]/40 shadow-inner text-xs font-black">
-            <span className="flex items-center gap-1 text-slate-700" title="Silver Fish">
-              <span>🐟</span>
-              <span>{silverFish}</span>
-            </span>
-            <div className="w-px h-3.5 bg-amber-300" />
-            <span className="flex items-center gap-1 text-amber-600" title="Gold Fish">
-              <span>✨</span>
-              <span>{goldFish}</span>
-            </span>
-          </div>
-
-          {/* Cat Book (Cat-o-logue Album) */}
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setIsCatBookOpen(true);
-            }}
-            className="px-2.5 py-1.5 rounded-xl bg-[#fef3c7] hover:bg-[#fde68a] text-[#78350f] border-2 border-[#d97706]/40 text-xs font-black flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
-            title="Open Cat Book (Neko Atsume Album)"
-          >
-            <BookOpen className="w-4 h-4 text-[#b45309]" />
-            <span className="hidden sm:inline">Cat Book</span>
-          </button>
-
-          {/* Goodies Shop */}
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setIsShopOpen(true);
-            }}
-            className="px-2.5 py-1.5 rounded-xl bg-[#dcfce7] hover:bg-[#bbf7d0] text-[#14532d] border-2 border-[#22c55e]/40 text-xs font-black flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
-            title="Open Neko Treats & Toys Shop"
-          >
-            <ShoppingBag className="w-4 h-4 text-[#16a34a]" />
-            <span className="hidden sm:inline">Shop</span>
-          </button>
-
-          {/* Laser Pointer */}
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setIsLaserActive((prev) => !prev);
-            }}
-            className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all border-2 ${
-              isLaserActive
-                ? 'bg-rose-500 text-white border-rose-700 shadow-md animate-pulse'
-                : 'bg-[#fffbeb] hover:bg-[#fef3c7] text-[#78350f] border-[#d97706]/30'
+          {/* Lo-Fi Cat BGM button */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleToggleBgm}
+            className={`px-2.5 py-1.5 rounded-xl border text-xs font-black flex items-center gap-1 transition-all ${
+              isBgmActive
+                ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm animate-pulse'
+                : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-[#b45309]/20'
             }`}
-            title="Laser Pointer mode"
+            title={isBgmActive ? 'Stop Cozy BGM' : 'Play Cozy Lo-Fi Cat Sanctuary BGM'}
           >
-            <span className="w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
-            <span className="hidden md:inline">Laser</span>
-          </button>
+            <Music className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">BGM {isBgmActive ? 'ON' : 'OFF'}</span>
+          </motion.button>
 
-          {/* Snapshot Button */}
-          <button
-            onClick={handleTakeSnapshot}
-            className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-[#fffbeb] hover:bg-[#fef3c7] text-[#78350f] border-2 border-[#d97706]/30 text-xs font-black flex items-center gap-1.5 transition-all"
-            title="Take a photo snapshot"
-          >
-            <Camera className="w-4 h-4 text-blue-500" />
-            <span className="hidden md:inline">Photo</span>
-          </button>
-
-          {/* Sound Toggle */}
+          {/* SFX Toggle */}
           <button
             onClick={() => {
               setIsMuted((prev) => !prev);
               sounds.enabled = isMuted;
             }}
-            className="p-2 rounded-xl bg-[#fffbeb] hover:bg-[#fef3c7] border-2 border-[#d97706]/30 text-[#78350f] transition-colors"
-            title={isMuted ? 'Unmute sounds' : 'Mute sounds'}
+            className="p-1.5 rounded-xl bg-white dark:bg-stone-800 border border-[#b45309]/20 text-stone-700 dark:text-stone-300"
+            title={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-rose-500" /> : <Volume2 className="w-4 h-4 text-emerald-600" />}
           </button>
 
-          {/* Adopt Kitty Button */}
-          <button
+          {/* Adopt Kitty */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => {
               sounds.playTap();
               setIsAdoptModalOpen(true);
             }}
-            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black flex items-center gap-1.5 shadow-md border-2 border-[#b45309] transition-transform active:scale-95"
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 text-white text-xs font-black flex items-center gap-1 shadow-md"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>Adopt</span>
+          </motion.button>
+        </div>
+      </header>
+
+      {/* GAME MODE NAVIGATION TABS */}
+      <nav className="h-10 px-3 sm:px-6 bg-[#fde68a] dark:bg-stone-800 border-b border-[#b45309]/20 flex items-center justify-between shrink-0 overflow-x-auto gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* 1. Yard */}
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setActiveTab('yard');
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
+              activeTab === 'yard'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-[#78350f] dark:text-stone-300 hover:bg-amber-300/60'
+            }`}
+          >
+            <Home className="w-3.5 h-3.5" />
+            <span>Yard Habitat</span>
+          </button>
+
+          {/* 2. Arcade Games */}
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setActiveTab('arcade');
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
+              activeTab === 'arcade'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'text-[#78350f] dark:text-stone-300 hover:bg-amber-300/60'
+            }`}
+          >
+            <Gamepad2 className="w-3.5 h-3.5" />
+            <span>Arcade Games</span>
+          </button>
+
+          {/* 3. Daily Quests */}
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setActiveTab('quests');
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
+              activeTab === 'quests'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-[#78350f] dark:text-stone-300 hover:bg-amber-300/60'
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            <span>Quests</span>
+            {quests.some((q) => !q.isClaimed && q.currentCount >= q.targetCount) && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+            )}
+          </button>
+
+          {/* 4. CatDex (Encyclopedia) */}
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setActiveTab('catdex');
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
+              activeTab === 'catdex'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-[#78350f] dark:text-stone-300 hover:bg-amber-300/60'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>CatDex</span>
+          </button>
+
+          {/* 5. Neko Shop */}
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setActiveTab('shop');
+            }}
+            className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
+              activeTab === 'shop'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-[#78350f] dark:text-stone-300 hover:bg-amber-300/60'
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Shop</span>
           </button>
         </div>
-      </div>
 
-      {/* ALL CATS QUICK GROUP ACTION BAR */}
-      <div className="px-4 py-1.5 bg-[#fef3c7]/90 border-b border-[#d97706]/20 flex items-center justify-between text-xs font-extrabold overflow-x-auto gap-2 z-20 shrink-0">
-        <div className="flex items-center gap-1 text-[#92400e] text-[11px] whitespace-nowrap">
-          <span>Make All:</span>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <button
-            onClick={() => handleSetAllAction('loaf')}
-            className="px-2.5 py-1 rounded-xl bg-amber-200/70 hover:bg-amber-300 text-amber-900 border border-amber-400 flex items-center gap-1 transition-all active:scale-95"
-          >
-            <span>Loaf 🍞</span>
-          </button>
-          <button
-            onClick={() => handleSetAllAction('sleep')}
-            className="px-2.5 py-1 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300 flex items-center gap-1 transition-all active:scale-95"
-          >
-            <Moon className="w-3 h-3 text-indigo-600" />
-            <span>Sleep 💤</span>
-          </button>
-          <button
-            onClick={() => handleSetAllAction('eat')}
-            className="px-2.5 py-1 rounded-xl bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-300 flex items-center gap-1 transition-all active:scale-95"
-          >
-            <Utensils className="w-3 h-3 text-orange-600" />
-            <span>Feast 🐟</span>
-          </button>
-          <button
-            onClick={() => handleSetAllAction('drink')}
-            className="px-2.5 py-1 rounded-xl bg-cyan-100 hover:bg-cyan-200 text-cyan-900 border border-cyan-300 flex items-center gap-1 transition-all active:scale-95"
-          >
-            <Coffee className="w-3 h-3 text-cyan-600" />
-            <span>Milk 🥛</span>
-          </button>
-          <button
-            onClick={() => handleSetAllAction('dance')}
-            className="px-2.5 py-1 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-900 border border-pink-300 flex items-center gap-1 transition-all active:scale-95"
-          >
-            <Music className="w-3 h-3 text-pink-600" />
-            <span>Dance 🪩</span>
-          </button>
-          <button
-            onClick={handleRandomizeCostumes}
-            className="px-2.5 py-1 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 flex items-center gap-1 transition-all active:scale-95"
-          >
-            <Shuffle className="w-3 h-3 text-purple-600" />
-            <span>Mix Outfits</span>
-          </button>
-        </div>
-      </div>
+        {/* Quick Yard Tools when in Yard mode */}
+        {activeTab === 'yard' && (
+          <div className="flex items-center gap-1.5">
+            {/* Serve Food Dish Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsFoodMenuOpen(true)}
+              className="px-2.5 py-1 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-black flex items-center gap-1 shadow-sm"
+            >
+              <Utensils className="w-3 h-3" />
+              <span>Serve Food</span>
+            </motion.button>
 
-      {/* NEKO ATSUME YARD / SANCTUARY STAGE */}
-      <div
-        ref={sanctuaryRef}
-        className="flex-1 relative overflow-hidden bg-[#e8eed9] select-none"
-        onClick={() => setSelectedCatId(null)}
-      >
-        {/* Neko Atsume Japanese Engawa Porch & Garden Yard Art Layers */}
-        <div className="absolute inset-0 pointer-events-none">
-          {/* 1. Left Indoor Room & Wooden Veranda Deck (Engawa) */}
-          <div className="absolute top-0 bottom-0 left-0 w-1/2 bg-[#d79a5b] border-r-4 border-[#8c5222] shadow-2xl">
-            {/* Wooden Planks Pattern */}
-            <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_92%,rgba(92,51,18,0.35)_100%)] bg-[length:100%_44px]" />
-            
-            {/* Sliding Shoji Screen / Wall at top */}
-            <div className="absolute top-0 inset-x-0 h-24 bg-[#fff8e7] border-b-4 border-[#8c5222] flex items-center justify-around px-4 opacity-90">
-              <div className="w-16 h-16 border-2 border-[#a66a38] bg-white/60 rounded" />
-              <div className="w-16 h-16 border-2 border-[#a66a38] bg-white/60 rounded" />
-              <div className="w-16 h-16 border-2 border-[#a66a38] bg-white/60 rounded" />
-            </div>
+            {/* Laser pointer button */}
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setIsLaserActive((prev) => !prev);
+              }}
+              className={`px-2 py-1 rounded-xl text-xs font-black flex items-center gap-1 border ${
+                isLaserActive
+                  ? 'bg-rose-600 text-white border-rose-700 animate-pulse'
+                  : 'bg-white dark:bg-stone-700 text-stone-700 dark:text-stone-200 border-amber-300'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span>Laser</span>
+            </button>
 
-            {/* Furniture Cabinet in room */}
-            <div className="absolute top-28 left-6 w-36 h-24 rounded-lg bg-[#b4713a] border-3 border-[#5c3312] shadow-md flex flex-col justify-between p-2">
-              <div className="w-8 h-8 rounded-full bg-white/80 border-2 border-[#5c3312] mx-auto -mt-6 shadow flex items-center justify-center text-xs">
-                🌿
-              </div>
-              <div className="grid grid-cols-2 gap-1.5 h-12">
-                <div className="border-2 border-[#5c3312] bg-[#d79a5b]/60 rounded" />
-                <div className="border-2 border-[#5c3312] bg-[#d79a5b]/60 rounded" />
-              </div>
-            </div>
-
-            {/* Fish Bowl on deck */}
-            <div className="absolute top-44 left-48 text-3xl animate-bounce">
-              🐟
-            </div>
-
-            {/* Round Green Clover Rug on deck */}
-            <div className="absolute bottom-10 left-8 w-44 h-32 rounded-[50%] bg-[#a3c983] border-3 border-[#527933] shadow-inner flex items-center justify-center">
-              <span className="text-xl opacity-40">☘️</span>
-            </div>
-
-            {/* Cardboard Box Cube ("Mikan Box") */}
-            <div className="absolute bottom-16 left-12 w-20 h-20 rounded-xl bg-[#f59e0b] border-3 border-[#92400e] shadow-lg flex flex-col items-center justify-center">
-              <div className="w-10 h-10 rounded-full bg-[#78350f] border-2 border-[#92400e] flex items-center justify-center text-sm shadow-inner">
-                🐱
-              </div>
-              <span className="text-[9px] font-black text-amber-950 mt-1">みかん</span>
-            </div>
-
-            {/* Red Silk Cushion on deck */}
-            <div className="absolute bottom-8 left-48 w-24 h-16 rounded-2xl bg-[#dc2626] border-3 border-[#7f1d1d] shadow-md flex items-center justify-center">
-              <div className="w-16 h-8 border border-yellow-300/60 rounded-xl border-dashed" />
-            </div>
+            {/* Snapshot */}
+            <button
+              onClick={handleTakeSnapshot}
+              className="p-1 rounded-xl bg-white dark:bg-stone-700 border border-amber-300 text-stone-700 dark:text-stone-300"
+              title="Take Photo"
+            >
+              <Camera className="w-3.5 h-3.5 text-blue-500" />
+            </button>
           </div>
+        )}
+      </nav>
 
-          {/* 2. Right Garden Yard with Snow Patches & Stepping Stones */}
-          <div className="absolute top-0 bottom-0 right-0 w-1/2 bg-[#bcd69b] overflow-hidden">
-            {/* Garden Fence / Wall at top */}
-            <div className="absolute top-0 inset-x-0 h-28 bg-[#dfc09f] border-b-4 border-[#8c5222] p-3">
-              <div className="w-full h-full border-2 border-dashed border-[#8c5222] rounded flex items-center justify-around">
-                <span className="text-2xl">🌱</span>
-                <span className="text-2xl">🌾</span>
+      {/* MAIN VIEW CONTENT CONTAINER */}
+      <div className="flex-1 relative overflow-hidden flex flex-col">
+        {/* 1. YARD HABITAT VIEW */}
+        {activeTab === 'yard' && (
+          <div
+            ref={sanctuaryRef}
+            className={`flex-1 relative bg-gradient-to-b ${bgClasses[background]} overflow-hidden`}
+          >
+            {/* Yard Environment Props */}
+            <div className="absolute inset-0 pointer-events-none select-none">
+              {/* Wooden Fence on Garden */}
+              <div className="absolute top-16 left-0 right-0 h-10 border-b-4 border-[#b45309]/30 flex justify-around opacity-40">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="w-3 h-10 bg-[#b45309] rounded-t-sm" />
+                ))}
+              </div>
+
+              {/* Cat Tree Tower on Right */}
+              <div className="absolute top-20 right-6 flex flex-col items-center opacity-90">
+                <div className="w-16 h-4 rounded-full bg-amber-800" />
+                <div className="w-3 h-28 bg-[#92400e]" />
+                <div className="w-20 h-5 rounded-full bg-amber-800" />
+                <div className="w-3 h-24 bg-[#92400e]" />
+                <div className="w-24 h-5 rounded-full bg-amber-900" />
+              </div>
+
+              {/* Cozy Rug in Middle */}
+              <div className="absolute top-44 left-1/2 -translate-x-1/2 w-80 h-36 rounded-full border-4 border-dashed border-[#b45309]/20 flex items-center justify-center opacity-30">
+                <span className="text-6xl font-serif">🐾</span>
               </div>
             </div>
 
-            {/* Garden Stepping Stones (like in screenshot) */}
-            <div className="absolute top-36 right-16 flex flex-col gap-3">
-              <div className="w-20 h-12 rounded-2xl bg-[#e2e8f0] border-3 border-[#64748b] shadow" />
-              <div className="w-24 h-14 rounded-2xl bg-[#cbd5e1] border-3 border-[#475569] shadow" />
-              <div className="w-20 h-12 rounded-2xl bg-[#e2e8f0] border-3 border-[#64748b] shadow" />
-            </div>
+            {/* Live Food Bowl on Yard Ground */}
+            {foodBowl && foodBowl.active && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute z-20 flex flex-col items-center -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${foodBowl.x}%`, top: `${foodBowl.y}%` }}
+              >
+                <div className="px-2 py-0.5 rounded-full bg-white text-[10px] font-black text-orange-600 border border-orange-300 shadow-sm animate-bounce mb-1">
+                  Fresh Bowl 🥣
+                </div>
+                <div className="w-14 h-9 rounded-full bg-amber-100 border-2 border-amber-500 shadow-md flex items-center justify-center text-lg">
+                  {foodBowl.type === 'salmon' ? '🍣' : foodBowl.type === 'tuna' ? '🐟' : '🥣'}
+                </div>
+              </motion.div>
+            )}
 
-            {/* S-Track Toy with Ball (like in Neko Atsume screenshot) */}
-            <div className="absolute bottom-16 right-16 w-32 h-20 rounded-3xl border-4 border-[#3b82f6] bg-[#bfdbfe]/80 shadow-md flex items-center justify-around px-2">
-              <div className="w-5 h-5 rounded-full bg-indigo-600 border-2 border-white animate-bounce shadow" />
-              <span className="text-xs font-black text-blue-900 tracking-widest">S-TRACK</span>
-            </div>
+            {/* Laser Pointer Red Dot in Yard */}
+            {isLaserActive && (
+              <div
+                className="absolute w-5 h-5 rounded-full bg-rose-600 shadow-[0_0_20px_#f43f5e] -translate-x-1/2 -translate-y-1/2 pointer-events-none z-40 animate-ping"
+                style={{ left: `${laserPos.x}%`, top: `${laserPos.y}%` }}
+              />
+            )}
 
-            {/* Garden Beach Parasol */}
-            <div className="absolute top-36 left-2 flex flex-col items-center z-10">
-              <div className="w-32 h-14 rounded-t-full bg-gradient-to-r from-red-500 via-white to-emerald-500 border-3 border-[#2b1810] shadow-lg flex items-center justify-around">
-                <div className="w-1.5 h-12 bg-white/40" />
+            {/* Floating Petting Hearts & Meow Sound Texts */}
+            {pettingHearts.map((item) => (
+              <div
+                key={item.id}
+                className="absolute pointer-events-none z-40 flex flex-col items-center animate-out fade-out slide-out-to-top duration-1000 -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${item.x}%`, top: `${item.y}%` }}
+              >
+                <span className="text-2xl animate-bounce">💖</span>
+                {item.text && (
+                  <span className="text-xs font-black px-2 py-0.5 rounded-full bg-white text-[#78350f] border-2 border-[#78350f] shadow-md whitespace-nowrap">
+                    {item.text}
+                  </span>
+                )}
               </div>
-              <div className="w-2 h-24 bg-stone-700 border-x border-[#2b1810]" />
-              <div className="w-12 h-3 rounded-full bg-stone-800 shadow" />
-            </div>
+            ))}
 
-            {/* Food Plates / Sushi Dish on yard floor */}
-            <div className="absolute bottom-6 left-6 w-20 h-12 rounded-full bg-[#fef3c7] border-3 border-[#b45309] shadow-md flex items-center justify-center">
-              <span className="text-base animate-pulse">🍣</span>
-            </div>
+            {/* DRAGGABLE & INTERACTIVE CATS */}
+            {cats.map((cat) => {
+              const breed = CAT_BREEDS.find((b) => b.id === cat.breedId) || CAT_BREEDS[0];
+              const isSelected = selectedCatId === cat.id;
+
+              return (
+                <div
+                  key={cat.id}
+                  className={`absolute cursor-grab active:cursor-grabbing transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 z-20 ${
+                    cat.isDragging ? 'z-40 scale-110 duration-0' : ''
+                  }`}
+                  style={{
+                    left: `${cat.x}%`,
+                    top: `${cat.y}%`
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setSelectedCatId(cat.id);
+                    setDraggingCatId(cat.id);
+                    handlePetCat(e, cat.id);
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePetCat(e, cat.id);
+                  }}
+                >
+                  {/* Name Tag */}
+                  <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-white/95 text-[10px] font-black text-[#78350f] border border-[#b45309]/40 whitespace-nowrap shadow-sm pointer-events-none">
+                    {cat.name}
+                  </div>
+
+                  {/* Cat Vector Body */}
+                  <MiniatureCatRenderer
+                    cat={cat}
+                    breed={breed}
+                    isSelected={isSelected}
+                    onPet={(e) => handlePetCat(e, cat.id)}
+                  />
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )}
 
-        {/* Disco Ball during Dance Party */}
-        {isDiscoParty && (
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-30 animate-in slide-in-from-top duration-500">
-            <div className="w-1 h-10 bg-[#78350f]" />
-            <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-200 via-pink-300 to-cyan-200 border-3 border-[#78350f] shadow-2xl animate-spin flex items-center justify-center text-xl">
-              🪩
+        {/* 2. ARCADE GAMES LAUNCHER VIEW */}
+        {activeTab === 'arcade' && (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#fffbeb] dark:bg-stone-900 select-none">
+            <div className="max-w-3xl mx-auto flex flex-col gap-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-black text-[#78350f] dark:text-amber-300">
+                  Feline Arcade Center 🎮
+                </h2>
+                <p className="text-xs text-stone-600 dark:text-stone-400 font-bold mt-1">
+                  Test your reflexes with real mini-games, set high scores, and win Fish Coins & XP!
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Game 1: Laser Frenzy */}
+                <motion.div
+                  whileHover={{ y: -4 }}
+                  className="p-5 rounded-3xl bg-gradient-to-br from-rose-500/10 via-amber-500/10 to-orange-500/10 border-2 border-rose-400 rounded-3xl shadow-lg flex flex-col justify-between gap-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-rose-500 text-white flex items-center justify-center text-3xl shadow-md">
+                      🔴
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-stone-900 dark:text-white">
+                        Laser Frenzy
+                      </h3>
+                      <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
+                        Guide your red laser dot and tap darting yarn balls, clockwork mice, and catnip moths in 30 seconds!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs font-black pt-3 border-t border-rose-200 dark:border-rose-900">
+                    <span className="text-amber-600">🏆 Rewards: 🐟 + 🪙 + ⭐</span>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setActiveMiniGame('laser')}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md"
+                    >
+                      PLAY (30s)
+                    </motion.button>
+                  </div>
+                </motion.div>
+
+                {/* Game 2: Snack Catcher */}
+                <motion.div
+                  whileHover={{ y: -4 }}
+                  className="p-5 rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-blue-500/10 border-2 border-emerald-400 rounded-3xl shadow-lg flex flex-col justify-between gap-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-white flex items-center justify-center text-3xl shadow-md">
+                      🧺
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-stone-900 dark:text-white">
+                        Snack Catcher
+                      </h3>
+                      <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
+                        Move {selectedCat?.name || 'kitty'} along the bottom to catch falling tuna, salmon & catnip while avoiding water drops!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs font-black pt-3 border-t border-emerald-200 dark:border-emerald-900">
+                    <span className="text-emerald-600">🏆 Fast Reflex Arcade</span>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setActiveMiniGame('snack')}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md"
+                    >
+                      PLAY (30s)
+                    </motion.button>
+                  </div>
+                </motion.div>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Laser Pointer Red Dot */}
-        {isLaserActive && (
-          <div
-            className="absolute w-4 h-4 rounded-full bg-rose-600 shadow-[0_0_15px_#f43f5e] -translate-x-1/2 -translate-y-1/2 pointer-events-none z-40 animate-ping"
-            style={{ left: `${laserPos.x}%`, top: `${laserPos.y}%` }}
+        {/* 3. QUESTS VIEW */}
+        {activeTab === 'quests' && (
+          <SanctuaryQuestsView
+            quests={quests}
+            onClaimQuest={handleClaimQuest}
+            silverFish={silverFish}
+            goldFish={goldFish}
           />
         )}
 
-        {/* Floating Petting Hearts & Breed Meow Onomatopoeia Text */}
-        {pettingHearts.map((item) => (
-          <div
-            key={item.id}
-            className="absolute pointer-events-none z-40 flex flex-col items-center animate-out fade-out slide-out-to-top duration-1000 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${item.x}%`, top: `${item.y}%` }}
-          >
-            <span className="text-2xl animate-bounce">💖</span>
-            {item.text && (
-              <span className="text-xs font-black px-2 py-0.5 rounded-full bg-white text-[#78350f] border-2 border-[#78350f] shadow-md whitespace-nowrap">
-                {item.text}
-              </span>
-            )}
-          </div>
-        ))}
-
-        {/* DRAGGABLE MINIATURE CATS */}
-        {cats.map((cat) => {
-          const breed = CAT_BREEDS.find((b) => b.id === cat.breedId) || CAT_BREEDS[0];
-          const isSelected = selectedCatId === cat.id;
-
-          return (
-            <div
-              key={cat.id}
-              className={`absolute cursor-grab active:cursor-grabbing transform -translate-x-1/2 -translate-y-1/2 transition-opacity z-20 ${
-                cat.isDragging ? 'z-40 scale-110' : ''
-              }`}
-              style={{
-                left: `${cat.x}%`,
-                top: `${cat.y}%`,
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                setSelectedCatId(cat.id);
-                setDraggingCatId(cat.id);
-                handlePetCat(e, cat.id);
-              }}
-              onTouchStart={(e) => {
-                e.stopPropagation();
-                setSelectedCatId(cat.id);
-                setDraggingCatId(cat.id);
-                handlePetCat(e, cat.id);
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePetCat(e, cat.id);
-              }}
-            >
-              {/* Name Tag */}
-              <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-[#fff8e7]/95 text-[10px] font-black text-[#78350f] border-2 border-[#78350f] whitespace-nowrap shadow-sm pointer-events-none">
-                {cat.name}
+        {/* 4. CATDEX ENCYCLOPEDIA */}
+        {activeTab === 'catdex' && (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#fffbeb] dark:bg-stone-900 select-none">
+            <div className="max-w-4xl mx-auto flex flex-col gap-4">
+              <div className="text-center">
+                <h2 className="text-xl font-black text-[#78350f] dark:text-amber-300">
+                  Illustrated CatDex Catalog 📖
+                </h2>
+                <p className="text-xs text-stone-600 dark:text-stone-400 font-bold">
+                  Discover all {CAT_BREEDS.length} distinct miniature breeds and their vocal meow personalities!
+                </p>
               </div>
 
-              {/* Cat Vector Body */}
-              <MiniatureCatRenderer
-                cat={cat}
-                breed={breed}
-                isSelected={isSelected}
-                onPet={(e) => handlePetCat(e, cat.id)}
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                {CAT_BREEDS.map((breed) => {
+                  const isUnlocked = cats.some((c) => c.breedId === breed.id);
+
+                  return (
+                    <motion.div
+                      key={breed.id}
+                      whileHover={{ y: -3 }}
+                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between gap-3 ${
+                        isUnlocked
+                          ? 'bg-white dark:bg-stone-800 border-[#b45309]/30 shadow-md'
+                          : 'bg-stone-100 dark:bg-stone-800/40 border-stone-200 dark:border-stone-700 opacity-70'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="w-12 h-12 rounded-2xl border-2 border-stone-800 flex items-center justify-center text-2xl shadow-sm shrink-0"
+                          style={{ backgroundColor: breed.bodyColor }}
+                        >
+                          🐱
+                        </div>
+
+                        <div>
+                          <h3 className="text-sm font-black text-[#78350f] dark:text-stone-100">
+                            {breed.name}
+                          </h3>
+                          <span className="text-[10px] font-bold text-stone-400 block">
+                            Origin: {breed.origin}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-stone-600 dark:text-stone-300 font-medium line-clamp-2">
+                        {breed.personality}
+                      </p>
+
+                      <div className="pt-2 border-t border-stone-100 dark:border-stone-700 flex items-center justify-between">
+                        <button
+                          onClick={() => sounds.playBreedMeow(breed.id)}
+                          className="px-2.5 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-300 text-xs font-black flex items-center gap-1"
+                        >
+                          <Volume1 className="w-3.5 h-3.5" />
+                          <span>"{breed.meowOnomatopoeia}"</span>
+                        </button>
+
+                        <span className="text-[11px] font-black text-amber-600">
+                          Power: {breed.powerLevel || 100}
+                        </span>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
             </div>
-          );
-        })}
+          </div>
+        )}
+
+        {/* 5. NEKO SHOP */}
+        {activeTab === 'shop' && (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#fffbeb] dark:bg-stone-900 select-none">
+            <div className="max-w-3xl mx-auto flex flex-col gap-4">
+              <div className="text-center">
+                <h2 className="text-xl font-black text-[#78350f] dark:text-amber-300">
+                  Neko Treats & Goodies Shop 🛍️
+                </h2>
+                <p className="text-xs text-stone-600 dark:text-stone-400 font-bold">
+                  Spend your earned Silver and Gold Fish on tasty food, cushions, and scratchers!
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {NEKO_SHOP_GOODIES.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    whileHover={{ y: -2 }}
+                    className="p-4 rounded-2xl bg-white dark:bg-stone-800 border-2 border-[#b45309]/30 shadow-sm flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-stone-700 flex items-center justify-center text-3xl shrink-0">
+                        {item.emoji}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-[#78350f] dark:text-stone-100">
+                          {item.name}
+                        </h4>
+                        <p className="text-[11px] text-stone-500 dark:text-stone-400 font-medium line-clamp-1">
+                          {item.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        if (silverFish >= item.costSilver) {
+                          setSilverFish((s) => s - item.costSilver);
+                          sounds.playVictory();
+                          addXp(20);
+                        } else {
+                          sounds.playIncorrect();
+                        }
+                      }}
+                      disabled={silverFish < item.costSilver}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-black text-xs shrink-0 shadow"
+                    >
+                      {item.costSilver} 🐟
+                    </motion.button>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* BOTTOM SELECTED CAT CONTROL PANEL / HUD */}
-      {selectedCat && (
-        <div className="px-4 py-2.5 bg-[#fff8e7] border-t-2 border-[#d97706]/30 z-30 flex flex-col md:flex-row items-center justify-between gap-2.5 shrink-0 shadow-lg">
-          {/* Selected Cat Profile info */}
-          <div className="flex items-center gap-3 w-full md:w-auto">
+      {/* BOTTOM SELECTED CAT CONTROL PANEL */}
+      {selectedCat && activeTab === 'yard' && (
+        <footer className="px-4 py-2 bg-[#fff8e7] dark:bg-stone-900 border-t-2 border-[#b45309]/30 z-30 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-lg">
+          <div className="flex items-center gap-3">
             <button
               onClick={(e) => handlePetCat(e, selectedCat.id)}
-              className="relative group p-0.5 rounded-2xl bg-[#fbbf24] border-2 border-[#b45309] shadow hover:scale-105 active:scale-95 transition-transform"
-              title="Click to Pet Kitty & Hear Breed Meow!"
+              className="w-11 h-11 rounded-2xl bg-amber-400 hover:scale-105 active:scale-95 border-2 border-[#b45309] shadow flex items-center justify-center text-2xl transition-transform"
+              title="Click to Pet Kitty!"
             >
-              <div className="w-11 h-11 rounded-[12px] bg-[#fffbeb] flex items-center justify-center text-2xl">
-                <span>🐱</span>
-              </div>
-              <span className="absolute -bottom-1 -right-1 p-1 rounded-full bg-rose-500 text-white text-[10px] shadow">
-                💖
-              </span>
+              🐱
             </button>
-
-            <div className="flex flex-col">
+            <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-[#78350f]">{selectedCat.name}</span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e] border border-[#d97706]/40">
+                <span className="text-sm font-black text-[#78350f] dark:text-amber-200">
+                  {selectedCat.name}
+                </span>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#fef3c7] dark:bg-stone-800 text-[#92400e] dark:text-stone-300 border border-[#d97706]/40">
                   {selectedBreed.name}
                 </span>
-                <span className="text-[11px] font-black text-rose-600 flex items-center gap-1">
-                  <Volume1 className="w-3.5 h-3.5" />
-                  <span>"{selectedBreed.meowOnomatopoeia}"</span>
-                </span>
               </div>
-              <p className="text-[11px] text-[#92400e]/80 font-semibold max-w-sm line-clamp-1">
-                {selectedBreed.meowStyle} · Snack: {selectedBreed.favoriteSnack}
+              <p className="text-[11px] text-[#92400e]/80 dark:text-stone-400 font-semibold">
+                Favorite: {selectedBreed.favoriteSnack} · Meow: "{selectedBreed.meowOnomatopoeia}"
               </p>
             </div>
           </div>
 
-          {/* Action Buttons for Selected Cat */}
-          <div className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto justify-end overflow-x-auto">
-            {/* Pet Button with Breed Sound */}
-            <button
+          <div className="flex items-center gap-2">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={(e) => handlePetCat(e, selectedCat.id)}
-              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white text-xs font-black shadow flex items-center gap-1.5 transition-transform active:scale-95"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-black flex items-center gap-1.5 shadow"
             >
               <Heart className="w-3.5 h-3.5 fill-current" />
               <span>Pet ({selectedBreed.meowOnomatopoeia})</span>
-            </button>
+            </motion.button>
 
-            {/* Loaf */}
-            <button
-              onClick={() => handleSetCatAction(selectedCat.id, 'loaf')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all border ${
-                selectedCat.action === 'loaf'
-                  ? 'bg-amber-400 text-amber-950 border-amber-600 shadow'
-                  : 'bg-[#fffbeb] hover:bg-[#fef3c7] text-[#78350f] border-amber-300'
-              }`}
-            >
-              <span>Loaf 🍞</span>
-            </button>
-
-            {/* Sleep */}
-            <button
-              onClick={() => handleSetCatAction(selectedCat.id, 'sleep')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all border ${
-                selectedCat.action === 'sleep'
-                  ? 'bg-indigo-500 text-white border-indigo-700 shadow'
-                  : 'bg-[#fffbeb] hover:bg-[#fef3c7] text-[#78350f] border-amber-300'
-              }`}
-            >
-              <Moon className="w-3.5 h-3.5" />
-              <span>Sleep</span>
-            </button>
-
-            {/* Eat */}
-            <button
-              onClick={() => handleSetCatAction(selectedCat.id, 'eat')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all border ${
-                selectedCat.action === 'eat'
-                  ? 'bg-orange-500 text-white border-orange-700 shadow'
-                  : 'bg-[#fffbeb] hover:bg-[#fef3c7] text-[#78350f] border-amber-300'
-              }`}
-            >
-              <Utensils className="w-3.5 h-3.5" />
-              <span>Eat</span>
-            </button>
-
-            {/* Drink */}
-            <button
-              onClick={() => handleSetCatAction(selectedCat.id, 'drink')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all border ${
-                selectedCat.action === 'drink'
-                  ? 'bg-cyan-500 text-white border-cyan-700 shadow'
-                  : 'bg-[#fffbeb] hover:bg-[#fef3c7] text-[#78350f] border-amber-300'
-              }`}
-            >
-              <Coffee className="w-3.5 h-3.5" />
-              <span>Drink</span>
-            </button>
-
-            {/* Dance */}
-            <button
-              onClick={() => handleSetCatAction(selectedCat.id, 'dance')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all border ${
-                selectedCat.action === 'dance'
-                  ? 'bg-pink-500 text-white border-pink-700 shadow'
-                  : 'bg-[#fffbeb] hover:bg-[#fef3c7] text-[#78350f] border-amber-300'
-              }`}
-            >
-              <Music className="w-3.5 h-3.5" />
-              <span>Dance</span>
-            </button>
-
-            {/* Dress Up */}
-            <button
-              onClick={() => {
-                sounds.playTap();
-                setIsWardrobeOpen(true);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black flex items-center gap-1.5 shadow border border-purple-800 transition-transform active:scale-95"
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsWardrobeOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black flex items-center gap-1 shadow"
             >
               <Shirt className="w-3.5 h-3.5" />
               <span>Costumes</span>
-            </button>
-
-            {/* Remove */}
-            {cats.length > 1 && (
-              <button
-                onClick={() => handleRemoveCat(selectedCat.id)}
-                className="p-1.5 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                title="Put kitty up for adoption"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+            </motion.button>
           </div>
-        </div>
+        </footer>
       )}
 
-      {/* NEKO ATSUME CAT BOOK (CAT-O-LOGUE) MODAL */}
-      {isCatBookOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm p-4 sm:p-8 flex items-center justify-center animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl bg-[#fff8e7] border-4 border-[#b45309] rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#d97706]/30">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">📖</span>
-                <div>
-                  <h2 className="text-base font-black text-[#78350f]">
-                    Cat-o-logue Book (ねこ手帳)
-                  </h2>
-                  <p className="text-xs text-[#92400e] font-semibold">
-                    16 Unique Cat Breeds & their distinct voice meow sounds!
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsCatBookOpen(false)}
-                className="p-2 rounded-full hover:bg-amber-100 text-[#78350f] transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Grid of Cat Book Polaroid Cards */}
-            <div className="flex-1 overflow-y-auto py-4 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {CAT_BREEDS.map((breed) => (
-                <div
-                  key={breed.id}
-                  className="p-4 rounded-2xl bg-white border-2 border-[#d97706]/40 shadow-sm flex flex-col justify-between"
+      {/* SERVE FOOD DISH MODAL */}
+      <AnimatePresence>
+        {isFoodMenuOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm bg-[#fffbeb] dark:bg-stone-900 border-3 border-[#b45309] rounded-3xl p-6 shadow-2xl flex flex-col gap-4"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-[#b45309]/30">
+                <h3 className="text-base font-black text-[#78350f] dark:text-amber-200 flex items-center gap-2">
+                  <span>🥣</span>
+                  <span>Serve Fresh Bowl</span>
+                </h3>
+                <button
+                  onClick={() => setIsFoodMenuOpen(false)}
+                  className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 text-stone-500 flex items-center justify-center"
                 >
-                  <div className="flex items-start justify-between gap-2 mb-2">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                <button
+                  onClick={() => handleServeFoodBowl('kibble')}
+                  className="p-3 rounded-2xl bg-white dark:bg-stone-800 border-2 border-amber-300 hover:border-amber-500 flex items-center justify-between text-left transition-all active:scale-95"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">🥣</span>
                     <div>
-                      <h4 className="text-xs font-black text-[#78350f]">{breed.name}</h4>
-                      <p className="text-[10px] text-[#92400e] font-bold">{breed.origin}</p>
+                      <h4 className="text-xs font-black">Daily Dry Kibble</h4>
+                      <p className="text-[10px] text-stone-500">Satisfies hungry cats</p>
                     </div>
+                  </div>
+                  <span className="text-xs font-black text-emerald-600">FREE</span>
+                </button>
+
+                <button
+                  onClick={() => handleServeFoodBowl('tuna')}
+                  disabled={silverFish < 15}
+                  className="p-3 rounded-2xl bg-white dark:bg-stone-800 border-2 border-amber-300 hover:border-amber-500 disabled:opacity-40 flex items-center justify-between text-left transition-all active:scale-95"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">🐟</span>
+                    <div>
+                      <h4 className="text-xs font-black">Tuna Bonito Bowl</h4>
+                      <p className="text-[10px] text-stone-500">+15 XP & high delight</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black text-blue-600">15 🐟</span>
+                </button>
+
+                <button
+                  onClick={() => handleServeFoodBowl('salmon')}
+                  disabled={silverFish < 30}
+                  className="p-3 rounded-2xl bg-white dark:bg-stone-800 border-2 border-amber-300 hover:border-amber-500 disabled:opacity-40 flex items-center justify-between text-left transition-all active:scale-95"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">🍣</span>
+                    <div>
+                      <h4 className="text-xs font-black">Deluxe Sashimi Feast</h4>
+                      <p className="text-[10px] text-stone-500">+30 XP & purr party</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black text-blue-600">30 🐟</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ADOPT KITTY MODAL */}
+      <AnimatePresence>
+        {isAdoptModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md bg-[#fffbeb] dark:bg-stone-900 border-3 border-[#b45309] rounded-3xl p-6 shadow-2xl flex flex-col gap-4 max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-[#b45309]/30">
+                <h3 className="text-base font-black text-[#78350f] dark:text-amber-200 flex items-center gap-2">
+                  <span>🐾</span>
+                  <span>Adopt a New Kitty</span>
+                </h3>
+                <button
+                  onClick={() => setIsAdoptModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 text-stone-500 flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Name Input */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-black text-[#78350f] dark:text-stone-300">Cat Name:</label>
+                <input
+                  type="text"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="e.g. Biscuit, Nala, Oreo..."
+                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-stone-800 border-2 border-amber-300 focus:outline-none focus:border-amber-500 text-xs font-bold"
+                />
+              </div>
+
+              {/* Breed Selector */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-black text-[#78350f] dark:text-stone-300">Choose Breed:</label>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {CAT_BREEDS.map((b) => (
                     <button
-                      onClick={() => {
-                        sounds.playBreedMeow(breed.id);
-                      }}
-                      className="px-2.5 py-1 rounded-xl bg-amber-100 hover:bg-amber-200 text-[#78350f] border border-amber-300 text-[11px] font-black flex items-center gap-1 transition-transform active:scale-90"
-                      title="Play breed sound"
+                      key={b.id}
+                      onClick={() => setSelectedBreedForAdoption(b.id)}
+                      className={`p-2.5 rounded-xl border-2 flex items-center gap-2 text-left text-xs font-black transition-all ${
+                        selectedBreedForAdoption === b.id
+                          ? 'bg-amber-100 dark:bg-stone-700 border-amber-500 text-[#78350f] dark:text-amber-300 shadow-sm'
+                          : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300'
+                      }`}
                     >
-                      <Volume2 className="w-3.5 h-3.5 text-amber-700" />
-                      <span>{breed.meowOnomatopoeia}</span>
+                      <span className="text-xl">🐱</span>
+                      <span className="truncate">{b.name.split(' ')[0]}</span>
                     </button>
-                  </div>
-
-                  <p className="text-[11px] text-stone-600 font-medium mb-2">
-                    {breed.personality}
-                  </p>
-
-                  <div className="pt-2 border-t border-stone-200 text-[10px] flex items-center justify-between font-bold text-stone-500">
-                    <span>Power Level: {breed.powerLevel || 100}</span>
-                    <span className="text-amber-700">Fav Snack: {breed.favoriteSnack}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className="pt-3 border-t-2 border-[#d97706]/30 flex items-center justify-end">
-              <button
-                onClick={() => setIsCatBookOpen(false)}
-                className="px-6 py-2 rounded-xl bg-[#b45309] hover:bg-[#92400e] text-white text-xs font-black shadow transition-transform active:scale-95"
-              >
-                Close Cat Book
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* NEKO ATSUME SHOP MODAL */}
-      {isShopOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm p-4 sm:p-8 flex items-center justify-center animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl bg-[#fff8e7] border-4 border-[#b45309] rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#d97706]/30">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🛍️</span>
-                <div>
-                  <h2 className="text-base font-black text-[#78350f]">
-                    Neko Goodies & Treats Shop (かいもの)
-                  </h2>
-                  <p className="text-xs text-[#92400e] font-semibold">
-                    Buy delicious cat food and toys with your Silver 🐟 & Gold 🐟✨ Fish!
-                  </p>
+                  ))}
                 </div>
               </div>
-              <button
-                onClick={() => setIsShopOpen(false)}
-                className="p-2 rounded-full hover:bg-amber-100 text-[#78350f] transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            {/* Goodies Grid (matching Neko Atsume screenshot recipe cards) */}
-            <div className="flex-1 overflow-y-auto py-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {NEKO_SHOP_GOODIES.map((goodie) => (
-                <div
-                  key={goodie.id}
-                  className="p-3.5 rounded-2xl bg-white border-2 border-[#d97706]/40 shadow-sm flex flex-col justify-between"
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleAdoptKitty}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-500 text-white font-black text-sm shadow-md"
+              >
+                Welcome Kitty Home (+40 ⭐)
+              </motion.button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* WARDROBE / COSTUME MODAL */}
+      <AnimatePresence>
+        {isWardrobeOpen && selectedCat && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-lg bg-[#fffbeb] dark:bg-stone-900 border-3 border-[#b45309] rounded-3xl p-6 shadow-2xl flex flex-col gap-4 max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-[#b45309]/30">
+                <h3 className="text-base font-black text-[#78350f] dark:text-amber-200 flex items-center gap-2">
+                  <span>🎩</span>
+                  <span>Dress Up {selectedCat.name}</span>
+                </h3>
+                <button
+                  onClick={() => setIsWardrobeOpen(false)}
+                  className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 text-stone-500 flex items-center justify-center"
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-3xl">{goodie.emoji}</span>
-                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                        {goodie.japaneseName}
-                      </span>
-                    </div>
-                    <h4 className="text-xs font-black text-[#78350f] mt-1">{goodie.name}</h4>
-                    <p className="text-[10px] text-stone-600 mt-1 line-clamp-2">
-                      {goodie.description}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => handleBuyGoodie(goodie)}
-                    disabled={silverFish < goodie.costSilver}
-                    className="mt-3 w-full py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-40 text-white text-xs font-black flex items-center justify-center gap-1 shadow-sm transition-transform active:scale-95"
-                  >
-                    <span>Buy for {goodie.costSilver} 🐟</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className="pt-3 border-t-2 border-[#d97706]/30 flex items-center justify-between">
-              <div className="text-xs font-black text-[#78350f]">
-                Your Balance: <strong>{silverFish} 🐟</strong> · <strong>{goldFish} ✨</strong>
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={() => setIsShopOpen(false)}
-                className="px-6 py-2 rounded-xl bg-[#b45309] hover:bg-[#92400e] text-white text-xs font-black shadow transition-transform active:scale-95"
-              >
-                Done Shopping
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* SILLY COSTUMES WARDROBE DRAWER MODAL */}
-      {isWardrobeOpen && selectedCat && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm p-4 sm:p-8 flex items-center justify-center animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl bg-[#fff8e7] border-4 border-[#b45309] rounded-3xl p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#d97706]/30">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">👗</span>
-                <div>
-                  <h2 className="text-base font-black text-[#78350f]">
-                    Silly Costumes Wardrobe
-                  </h2>
-                  <p className="text-xs text-[#92400e] font-semibold">
-                    Dress up <strong className="text-amber-800">{selectedCat.name}</strong> ({selectedBreed.name})!
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsWardrobeOpen(false)}
-                className="p-2 rounded-full hover:bg-amber-100 text-[#78350f] transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Costumes Grid */}
-            <div className="flex-1 overflow-y-auto py-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {CAT_COSTUMES.map((costume) => {
-                const isEquipped = selectedCat.costumeId === costume.id;
-
-                return (
-                  <button
-                    key={costume.id}
-                    onClick={() => handleEquipCostume(costume.id)}
-                    className={`p-3 rounded-2xl border-2 text-left flex flex-col justify-between transition-all hover:scale-[1.02] active:scale-95 ${
-                      isEquipped
-                        ? 'bg-purple-100 border-purple-600 ring-2 ring-purple-500 shadow-md'
-                        : 'bg-white border-[#d97706]/30 hover:bg-amber-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <span className="text-3xl">{costume.emoji}</span>
-                      {isEquipped && (
-                        <span className="p-1 rounded-full bg-purple-600 text-white">
-                          <Check className="w-3 h-3" />
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-[#78350f]">{costume.name}</h4>
-                      <p className="text-[10px] text-amber-700 font-bold mt-0.5">
-                        {costume.tagline}
-                      </p>
-                      <p className="text-[10px] text-stone-600 mt-1 line-clamp-2">
-                        {costume.description}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Footer */}
-            <div className="pt-3 border-t-2 border-[#d97706]/30 flex items-center justify-between">
-              <button
-                onClick={handleRandomizeCostumes}
-                className="px-4 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-xs font-black text-[#78350f] flex items-center gap-1.5 border border-amber-300"
-              >
-                <Shuffle className="w-3.5 h-3.5 text-purple-600" />
-                <span>Randomize All Cats</span>
-              </button>
-              <button
-                onClick={() => setIsWardrobeOpen(false)}
-                className="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow"
-              >
-                Done Dressing Up
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ADOPT NEW KITTY MODAL */}
-      {isAdoptModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm p-4 sm:p-8 flex items-center justify-center animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl bg-[#fff8e7] border-4 border-[#b45309] rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#d97706]/30">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🐾</span>
-                <div>
-                  <h2 className="text-base font-black text-[#78350f]">
-                    Adopt a New Miniature Kitty
-                  </h2>
-                  <p className="text-xs text-[#92400e] font-semibold">
-                    Select any of the 16 breeds with unique voice meows.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsAdoptModalOpen(false)}
-                className="p-2 rounded-full hover:bg-amber-100 text-[#78350f] transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Breed Picker List */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {CAT_BREEDS.map((breed) => {
-                  const isSelected = selectedBreedForAdoption === breed.id;
+                {CAT_COSTUMES.map((costume) => {
+                  const isEquipped = selectedCat.costumeId === costume.id;
 
                   return (
                     <button
-                      key={breed.id}
-                      onClick={() => {
-                        sounds.playBreedMeow(breed.id);
-                        setSelectedBreedForAdoption(breed.id);
-                        if (!newCatName) setNewCatName(breed.name.split(' ')[0]);
-                      }}
-                      className={`p-3 rounded-2xl border-2 text-left transition-all hover:scale-[1.02] ${
-                        isSelected
-                          ? 'bg-amber-100 border-amber-600 ring-2 ring-amber-500 shadow-md'
-                          : 'bg-white border-[#d97706]/30 hover:bg-amber-50'
+                      key={costume.id}
+                      onClick={() => handleEquipCostume(costume.id)}
+                      className={`p-3 rounded-2xl border-2 flex flex-col items-center gap-1.5 text-center transition-all ${
+                        isEquipped
+                          ? 'bg-purple-100 dark:bg-purple-950/60 border-purple-500 shadow-sm'
+                          : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 hover:border-purple-300'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div
-                          className="w-5 h-5 rounded-full border-2 border-[#2b1810] shadow-inner"
-                          style={{ backgroundColor: breed.bodyColor }}
-                        />
-                        <span className="text-[10px] font-black text-rose-600 flex items-center gap-0.5">
-                          <Volume2 className="w-3 h-3" />
-                          <span>{breed.meowOnomatopoeia}</span>
+                      <span className="text-3xl">{costume.emoji}</span>
+                      <span className="text-xs font-black text-stone-800 dark:text-stone-200">
+                        {costume.name}
+                      </span>
+                      {isEquipped && (
+                        <span className="text-[10px] font-black text-purple-600 dark:text-purple-400">
+                          Equipped ✓
                         </span>
-                      </div>
-                      <h4 className="text-xs font-black text-[#78350f]">{breed.name}</h4>
-                      <p className="text-[10px] text-stone-600 mt-0.5 line-clamp-1">
-                        {breed.personality}
-                      </p>
+                      )}
                     </button>
                   );
                 })}
               </div>
 
-              {/* Name Input */}
-              <div className="pt-2">
-                <label className="block text-xs font-black text-[#78350f] mb-1.5">
-                  Give your new kitty a name:
-                </label>
-                <input
-                  type="text"
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                  placeholder="e.g. Mikan, Cheddar, Wasabi, Marshmallow..."
-                  className="w-full px-4 py-2 rounded-xl bg-white border-2 border-[#d97706]/40 text-sm font-black text-[#78350f] placeholder-stone-400 focus:outline-none focus:border-[#b45309] transition-colors"
-                />
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="pt-3 border-t-2 border-[#d97706]/30 flex items-center justify-between">
               <button
-                onClick={() => setIsAdoptModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-[#92400e] hover:bg-amber-100 transition-colors"
+                onClick={() => setIsWardrobeOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-stone-800 text-white font-black text-xs"
               >
-                Cancel
+                Done
               </button>
-              <button
-                onClick={handleAdoptKitty}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black shadow border border-[#b45309] transition-transform active:scale-95"
-              >
-                Adopt & Bring Home 🐾
-              </button>
-            </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
+      {/* ACTIVE ARCADE MINI-GAME MODALS */}
+      <AnimatePresence>
+        {activeMiniGame === 'laser' && (
+          <LaserFrenzyMiniGame
+            onClose={() => setActiveMiniGame(null)}
+            onFinishGame={handleFinishArcadeGame}
+            catName={selectedCat?.name || 'Pumpkin'}
+            breedEmoji={selectedBreed?.meowOnomatopoeia ? '🐱' : '🐈'}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeMiniGame === 'snack' && (
+          <SnackCatcherMiniGame
+            onClose={() => setActiveMiniGame(null)}
+            onFinishGame={handleFinishArcadeGame}
+            catName={selectedCat?.name || 'Pumpkin'}
+            breedEmoji={selectedBreed?.meowOnomatopoeia ? '🐱' : '🐈'}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

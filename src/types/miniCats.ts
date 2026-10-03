@@ -73,3 +73,19 @@ export interface NekoShopGoodie {
   description: string;
   actionTrigger?: CatAction;
 }
+
+export interface CatQuest {
+  id: string;
+  title: string;
+  description: string;
+  targetCount: number;
+  currentCount: number;
+  rewardSilver: number;
+  rewardGold?: number;
+  rewardXp: number;
+  isClaimed: boolean;
+  icon: string;
+}
+
+export type MiniCatGameTab = 'yard' | 'arcade' | 'quests' | 'shop' | 'catdex';
+
