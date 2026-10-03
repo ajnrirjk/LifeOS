@@ -52,6 +52,12 @@ export const SystemSettingsModal: React.FC = () => {
     setIsSettingsOpen,
     activeTab,
     setActiveTab,
+    googleUser,
+    isGoogleSigningIn,
+    signInWithGoogle,
+    signOutGoogle,
+    isAuthorizedAdmin,
+    masterAdminEmail,
     members,
     updateMemberRole,
     updateMemberStatus,
@@ -102,7 +108,7 @@ export const SystemSettingsModal: React.FC = () => {
 
   if (!isSettingsOpen) return null;
 
-  const isAdmin = settings.profile.role === 'admin' || settings.profile.role === 'superadmin';
+  const isAdmin = isAuthorizedAdmin || settings.profile.role === 'admin' || settings.profile.role === 'superadmin';
 
   const filteredMembers = members.filter(m =>
     m.name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
@@ -332,8 +338,10 @@ export const SystemSettingsModal: React.FC = () => {
             >
               <Shield className="w-4 h-4 text-amber-400" />
               <span>Admin Controls</span>
-              <span className="ml-auto text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/30 text-amber-200">
-                GOD
+              <span className={`ml-auto text-[9px] font-black px-1.5 py-0.2 rounded ${
+                isAuthorizedAdmin ? 'bg-amber-500/30 text-amber-200' : 'bg-stone-800 text-stone-400'
+              }`}>
+                {isAuthorizedAdmin ? 'GOD' : 'LOCKED'}
               </span>
             </button>
           </div>
@@ -346,6 +354,73 @@ export const SystemSettingsModal: React.FC = () => {
                 <div>
                   <h3 className="text-base font-black text-white mb-1">Personal Identity & Spiritual Bio</h3>
                   <p className="text-xs text-stone-400">Configure how other believers see you in Fellowship Chat & leaderboards.</p>
+                </div>
+
+                {/* Google Account Authentication Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-stone-950 via-slate-900 to-stone-950 border border-white/15 space-y-3 shadow-md">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {googleUser?.photoURL ? (
+                        <img
+                          src={googleUser.photoURL}
+                          alt="Google Profile"
+                          className="w-12 h-12 rounded-2xl border-2 border-emerald-500/60 object-cover shadow-sm"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-xl">
+                          🌐
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-black text-white">Google Account</h4>
+                          {isAuthorizedAdmin && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              👑 Master Admin
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-stone-400">
+                          {googleUser?.email ? googleUser.email : 'Connect your Google account for cloud sync & administrator verification'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {googleUser ? (
+                      <button
+                        onClick={signOutGoogle}
+                        className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-rose-950/60 hover:border-rose-500/40 border border-white/10 text-stone-300 hover:text-rose-300 text-xs font-bold transition-all shrink-0"
+                      >
+                        Sign Out
+                      </button>
+                    ) : (
+                      <button
+                        disabled={isGoogleSigningIn}
+                        onClick={signInWithGoogle}
+                        className="px-4 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-900 text-xs font-black flex items-center gap-2 transition-all shadow-md active:scale-95 shrink-0"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                          <path
+                            fill="#4285F4"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                          />
+                        </svg>
+                        <span>{isGoogleSigningIn ? 'Connecting...' : 'Sign In with Google'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Avatar Picker */}
@@ -758,25 +833,93 @@ export const SystemSettingsModal: React.FC = () => {
               </div>
             )}
 
-            {/* TAB 6: ADMIN CONTROLS SUITE (GOD MODE) */}
+            {/* TAB 6: ADMIN CONTROLS SUITE (GOD MODE - STRICTLY RESTRICTED TO aw03102008@gmail.com) */}
             {activeTab === 'admin' && (
-              <div className="space-y-6">
+              !isAuthorizedAdmin ? (
+                /* RESTRICTED ACCESS SCREEN FOR NON-ADMINS */
+                <div className="py-12 px-4 flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-5 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-4xl shadow-lg">
+                    🔒
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-black text-white mb-1">
+                      Master Administrator Access Restricted
+                    </h3>
+                    <p className="text-xs text-stone-400 leading-relaxed">
+                      God-Mode economy overrides, global alert broadcasting, and user role elevation are strictly restricted to the authorized master administrator account:
+                    </p>
+                    <div className="mt-2.5 inline-block px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-xs font-black">
+                      {masterAdminEmail}
+                    </div>
+                  </div>
+
+                  {googleUser ? (
+                    <div className="p-3 rounded-xl bg-black/40 border border-white/10 w-full text-xs text-stone-300 space-y-2">
+                      <div className="text-[11px] text-stone-400">Currently signed in as:</div>
+                      <div className="font-bold text-white flex items-center justify-center gap-2">
+                        <span>{googleUser.email}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-white/10 text-stone-300 text-[10px]">Standard Believer</span>
+                      </div>
+                      <button
+                        onClick={signOutGoogle}
+                        className="w-full mt-2 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-stone-200 font-bold text-xs transition-colors"
+                      >
+                        Switch Google Account
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full space-y-2">
+                      <button
+                        disabled={isGoogleSigningIn}
+                        onClick={signInWithGoogle}
+                        className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-stone-100 text-stone-900 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path
+                            fill="#4285F4"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                          />
+                        </svg>
+                        <span>{isGoogleSigningIn ? 'Authenticating...' : `Sign In with ${masterAdminEmail}`}</span>
+                      </button>
+                      <p className="text-[10px] text-stone-500">
+                        Sign in using your Google Administrator email to unlock God-Mode.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+              <div className="space-y-6 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-base font-black text-amber-400">Administrator Control Center</h3>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        Full Access Unlocked
+                      <h3 className="text-base font-black text-amber-400">Master Administrator Control Center</h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <Crown className="w-3 h-3 text-amber-400" />
+                        <span>Verified Master Admin ({masterAdminEmail})</span>
                       </span>
                     </div>
                     <p className="text-xs text-stone-400">
-                      Master controls for user moderation, economy overrides, system announcements & app visibility.
+                      Authorized God-Mode controls for economy overrides, system announcements, and global user management.
                     </p>
                   </div>
 
                   {/* Quick Role Switcher */}
                   <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10">
-                    {(['user', 'moderator', 'admin'] as UserRole[]).map((r) => (
+                    {(['user', 'moderator', 'admin', 'superadmin'] as UserRole[]).map((r) => (
                       <button
                         key={r}
                         onClick={() => {
@@ -1143,6 +1286,7 @@ export const SystemSettingsModal: React.FC = () => {
                   </div>
                 </div>
               </div>
+              )
             )}
           </div>
         </div>

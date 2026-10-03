@@ -1,3 +1,5 @@
+export const MASTER_ADMIN_EMAIL = 'aw03102008@gmail.com';
+
 export type UserRole = 'user' | 'moderator' | 'admin' | 'superadmin';
 
 export type ThemeAccent = 'emerald' | 'purple' | 'blue' | 'amber' | 'rose' | 'cyan';
@@ -9,6 +11,7 @@ export interface UserProfile {
   name: string;
   handle: string;
   avatar: string;
+  photoURL?: string;
   bio: string;
   role: UserRole;
   email?: string;

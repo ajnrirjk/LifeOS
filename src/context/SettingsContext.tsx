@@ -5,9 +5,18 @@ import {
   FellowshipMember,
   SystemAuditLog,
   SystemAnnouncement,
-  UserRole
+  UserRole,
+  MASTER_ADMIN_EMAIL
 } from '../types/settings';
 import { sounds } from '../services/soundEffects';
+import { googleDriveService } from '../services/googleDriveService';
+
+interface GoogleUserInfo {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+}
 
 interface SettingsContextType {
   settings: UserSettings;
@@ -18,6 +27,14 @@ interface SettingsContextType {
   activeTab: 'profile' | 'appearance' | 'audio' | 'spiritual' | 'storage' | 'admin';
   setActiveTab: (tab: 'profile' | 'appearance' | 'audio' | 'spiritual' | 'storage' | 'admin') => void;
   
+  // Google Authentication & Master Admin Status
+  googleUser: GoogleUserInfo | null;
+  isGoogleSigningIn: boolean;
+  signInWithGoogle: () => Promise<void>;
+  signOutGoogle: () => Promise<void>;
+  isAuthorizedAdmin: boolean;
+  masterAdminEmail: string;
+
   // Fellowship & User Roster (Admin)
   members: FellowshipMember[];
   updateMemberRole: (memberId: string, role: UserRole) => void;
@@ -53,8 +70,8 @@ const DEFAULT_PROFILE: UserProfile = {
   handle: '@disciple',
   avatar: '🕊️',
   bio: 'Walking with Christ daily • LifeOS Pilgrim • Seeking Truth & Grace',
-  role: 'admin', // Default admin access for the app owner
-  email: 'believer@lifeos.church',
+  role: 'user', // Default is standard user unless authenticated as aw03102008@gmail.com
+  email: '',
   joinedDate: 'Oct 2026',
   statusText: '📖 In the Word',
   isOnline: true
@@ -219,6 +236,96 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'audio' | 'spiritual' | 'storage' | 'admin'>('profile');
+
+  // Google User Authentication state
+  const [googleUser, setGoogleUser] = useState<GoogleUserInfo | null>(() => {
+    return googleDriveService.getStoredUser();
+  });
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
+
+  // Initialize and listen to Firebase Google Auth state
+  useEffect(() => {
+    const unsubscribe = googleDriveService.initAuth(
+      (user) => {
+        if (user) {
+          const uInfo: GoogleUserInfo = {
+            uid: user.uid,
+            email: user.email || '',
+            displayName: user.displayName || 'Believer',
+            photoURL: user.photoURL || undefined
+          };
+          setGoogleUser(uInfo);
+
+          const isSuper = user.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+          updateProfile({
+            name: user.displayName || settings.profile.name,
+            email: user.email || '',
+            avatar: isSuper ? '👑' : settings.profile.avatar,
+            photoURL: user.photoURL || undefined,
+            role: isSuper ? 'superadmin' : 'user'
+          });
+        }
+      },
+      () => {
+        setGoogleUser(null);
+      }
+    );
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
+  const isAuthorizedAdmin = (googleUser?.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) || 
+                            (settings.profile.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase());
+
+  const signInWithGoogle = async () => {
+    setIsGoogleSigningIn(true);
+    try {
+      const res = await googleDriveService.signIn();
+      const uInfo: GoogleUserInfo = {
+        uid: res.user.uid,
+        email: res.user.email || '',
+        displayName: res.user.displayName || 'Believer',
+        photoURL: res.user.photoURL || undefined
+      };
+      setGoogleUser(uInfo);
+      
+      const isSuper = res.user.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+      updateProfile({
+        name: res.user.displayName || 'Believer',
+        email: res.user.email || '',
+        avatar: isSuper ? '👑' : '🕊️',
+        photoURL: res.user.photoURL || undefined,
+        role: isSuper ? 'superadmin' : 'user'
+      });
+
+      sounds.playCorrect();
+      logAuditEvent('Google Sign-In Success', `Signed in as ${res.user.email} (${isSuper ? 'MASTER ADMIN' : 'User'})`, 'auth');
+    } catch (err: any) {
+      sounds.playIncorrect();
+      logAuditEvent('Google Sign-In Failed', err?.message || 'Popup closed', 'auth');
+      throw err;
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
+  };
+
+  const signOutGoogle = async () => {
+    try {
+      await googleDriveService.signOutUser();
+      setGoogleUser(null);
+      updateProfile({
+        email: '',
+        role: 'user',
+        photoURL: undefined
+      });
+      sounds.playVictory();
+      logAuditEvent('Google Sign-Out', 'User logged out', 'auth');
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Persist settings
   useEffect(() => {
@@ -395,6 +502,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setIsSettingsOpen,
         activeTab,
         setActiveTab,
+        googleUser,
+        isGoogleSigningIn,
+        signInWithGoogle,
+        signOutGoogle,
+        isAuthorizedAdmin,
+        masterAdminEmail: MASTER_ADMIN_EMAIL,
         members,
         updateMemberRole,
         updateMemberStatus,
