@@ -345,6 +345,7 @@ class DiscordChatService {
   public dmChannelsCache: ChatChannel[] = [];
   public messagesCache: ChatMessage[] = [];
   public membersCache: ActiveChatMember[] = DEFAULT_MEMBERS;
+  public bannedMembersCache: Record<string, import('../types/chat').BannedMember> = {};
   public roleOverrides: Record<string, { role: string; roleColor: string }> = {};
 
   constructor() {
@@ -425,6 +426,13 @@ class DiscordChatService {
     } catch {}
 
     try {
+      const savedBanned = localStorage.getItem('lifeos_discord_banned_v6');
+      if (savedBanned) {
+        this.bannedMembersCache = JSON.parse(savedBanned);
+      }
+    } catch {}
+
+    try {
       const savedMsgs = localStorage.getItem('lifeos_discord_messages_v6');
       if (savedMsgs) {
         const parsed = JSON.parse(savedMsgs);
@@ -443,6 +451,7 @@ class DiscordChatService {
       localStorage.setItem('lifeos_discord_channels_v6', JSON.stringify(this.channelsCache));
       localStorage.setItem('lifeos_discord_dms_v6', JSON.stringify(this.dmChannelsCache));
       localStorage.setItem('lifeos_discord_roles_v6', JSON.stringify(this.roleOverrides));
+      localStorage.setItem('lifeos_discord_banned_v6', JSON.stringify(this.bannedMembersCache));
     } catch {}
   }
 
@@ -552,6 +561,57 @@ class DiscordChatService {
       this.messagesCache = DEFAULT_SEED_MESSAGES;
       this.saveCaches();
       this.emit({ type: 'purge_all', data: this.messagesCache });
+    } else if (type === 'ban_member') {
+      const { memberId, reason, email, name } = data;
+      this.bannedMembersCache[memberId] = {
+        id: memberId,
+        name: name || 'User',
+        email: email || null,
+        reason: reason || 'Violation of Fellowship Rules',
+        bannedAt: Date.now(),
+        bannedBy: 'Owner',
+      };
+      this.membersCache = this.membersCache.filter((m) => m.id !== memberId);
+      if (this.currentUser.id === memberId || (email && this.currentUser.email === email)) {
+        this.currentUser.isBanned = true;
+        this.currentUser.banReason = reason;
+      }
+      this.saveCaches();
+      this.emit({ type: 'ban_member', data });
+      this.emit({ type: 'user_status', data: { members: this.membersCache } });
+    } else if (type === 'unban_member') {
+      const { memberId } = data;
+      delete this.bannedMembersCache[memberId];
+      if (this.currentUser.id === memberId) {
+        this.currentUser.isBanned = false;
+        this.currentUser.banReason = undefined;
+      }
+      this.saveCaches();
+      this.emit({ type: 'unban_member', data });
+    } else if (type === 'kick_member') {
+      const { memberId, reason } = data;
+      this.membersCache = this.membersCache.filter((m) => m.id !== memberId);
+      if (this.currentUser.id === memberId) {
+        this.currentUser.status = 'offline';
+      }
+      this.saveCaches();
+      this.emit({ type: 'kick_member', data });
+      this.emit({ type: 'user_status', data: { members: this.membersCache } });
+    } else if (type === 'timeout_member') {
+      const { memberId, mutedUntil } = data;
+      const mem = this.membersCache.find((m) => m.id === memberId);
+      if (mem) mem.mutedUntil = mutedUntil;
+      if (this.currentUser.id === memberId) {
+        this.currentUser.mutedUntil = mutedUntil;
+      }
+      this.saveCaches();
+      this.emit({ type: 'timeout_member', data });
+    } else if (type === 'purge_user_messages') {
+      const { userId } = data;
+      this.messagesCache = this.messagesCache.filter((m) => m.senderId !== userId);
+      this.saveCaches();
+      this.emit({ type: 'purge_user_messages', data });
+      this.emit({ type: 'sync_all', data: this.messagesCache });
     } else if (type === 'typing') {
       this.emit({ type: 'typing', data });
     }
@@ -968,6 +1028,84 @@ class DiscordChatService {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
         JSON.stringify({ type: 'delete_message', data: payload })
+      );
+    }
+  }
+
+  // Ban Member from Fellowship (Super Admin only)
+  public banMember(memberId: string, reason: string = 'Violation of community fellowship rules') {
+    const mem = this.membersCache.find((m) => m.id === memberId);
+    const memberName = mem?.name || 'User';
+    const memberEmail = mem?.email || null;
+
+    const data = {
+      memberId,
+      name: memberName,
+      email: memberEmail,
+      reason,
+      bannedAt: Date.now(),
+      bannedBy: 'Owner (aw03102008@gmail.com)',
+    };
+
+    this.handleIncomingPayload('ban_member', data, true);
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_MESSAGES,
+        JSON.stringify({ type: 'ban_member', data })
+      );
+    }
+  }
+
+  // Unban Member (Super Admin only)
+  public unbanMember(memberId: string) {
+    const data = { memberId };
+    this.handleIncomingPayload('unban_member', data, true);
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_MESSAGES,
+        JSON.stringify({ type: 'unban_member', data })
+      );
+    }
+  }
+
+  // Kick Member from server
+  public kickMember(memberId: string, reason: string = 'Kicked by Server Owner') {
+    const data = { memberId, reason };
+    this.handleIncomingPayload('kick_member', data, true);
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_MESSAGES,
+        JSON.stringify({ type: 'kick_member', data })
+      );
+    }
+  }
+
+  // Timeout / Mute Member
+  public timeoutMember(memberId: string, durationMinutes: number) {
+    const mutedUntil = Date.now() + durationMinutes * 60 * 1000;
+    const data = { memberId, mutedUntil };
+    this.handleIncomingPayload('timeout_member', data, true);
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_MESSAGES,
+        JSON.stringify({ type: 'timeout_member', data })
+      );
+    }
+  }
+
+  // Purge all messages by a specific user
+  public purgeUserMessages(userId: string) {
+    const data = { userId };
+    this.handleIncomingPayload('purge_user_messages', data, true);
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_MESSAGES,
+        JSON.stringify({ type: 'purge_user_messages', data })
       );
     }
   }

@@ -866,7 +866,21 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       {/* ========================================================================= */}
       {/* 3. MAIN CONTENT: ADMIN DASHBOARD VIEW OR CHAT STREAM                      */}
       {/* ========================================================================= */}
-      {showAdminDashboard && isSuperAdmin ? (
+      {currentUser.isBanned ? (
+        /* BANNED LOCKOUT SCREEN */
+        <main className="flex-1 bg-[#1e1f22] flex flex-col items-center justify-center p-6 text-center z-0">
+          <div className="w-16 h-16 rounded-full bg-rose-500/20 border-2 border-rose-500/40 flex items-center justify-center text-rose-400 text-3xl mb-4 shadow-xl">
+            🔨
+          </div>
+          <h2 className="text-xl font-black text-white mb-2">You Have Been Banned</h2>
+          <p className="text-xs text-rose-300 max-w-md bg-rose-950/30 border border-rose-500/30 p-3.5 rounded-xl mb-4 leading-relaxed">
+            <strong>Reason:</strong> {currentUser.banReason || 'Violation of Fellowship rules and community guidelines by Server Owner.'}
+          </p>
+          <p className="text-[11px] text-[#949ba4]">
+            If you believe this was in error, contact the app owner at <span className="text-white font-medium">{SUPER_ADMIN_EMAIL}</span>.
+          </p>
+        </main>
+      ) : showAdminDashboard && isSuperAdmin ? (
         /* SUPER ADMIN DASHBOARD VIEW */
         <AdminDashboardView
           onClose={() => setShowAdminDashboard(false)}
@@ -1171,67 +1185,73 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               </div>
             )}
 
-            <form
-              onSubmit={handleSendMessage}
-              className={`flex items-center gap-1.5 sm:gap-2 bg-[#383a40] px-2.5 sm:px-3 py-2 sm:py-2.5 ${
-                replyingTo ? 'rounded-b-lg' : 'rounded-lg'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setShowVerseModal(true)}
-                className="p-1.5 rounded-full bg-[#4e5058] hover:bg-[#5865F2] text-[#dbdee1] hover:text-white transition-colors shrink-0"
-                title="Share Scripture"
+            {currentUser.mutedUntil && currentUser.mutedUntil > Date.now() ? (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center justify-center gap-2">
+                <span>⏳ You have been temporarily muted by server administration until {new Date(currentUser.mutedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.</span>
+              </div>
+            ) : (
+              <form
+                onSubmit={handleSendMessage}
+                className={`flex items-center gap-1.5 sm:gap-2 bg-[#383a40] px-2.5 sm:px-3 py-2 sm:py-2.5 ${
+                  replyingTo ? 'rounded-b-lg' : 'rounded-lg'
+                }`}
               >
-                <Plus className="w-4 h-4" />
-              </button>
-
-              <input
-                type="text"
-                value={inputText}
-                onChange={handleInputChange}
-                placeholder={isDMView ? `Message @${activeChannel.name}...` : `Message #${activeChannel.name}...`}
-                className="flex-1 bg-transparent text-white text-xs sm:text-xs placeholder-[#80848e] focus:outline-none min-w-0"
-              />
-
-              <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-1.5 rounded hover:text-white text-[#b5bac1] transition-colors"
-                  title="Add Emoji"
+                  onClick={() => setShowVerseModal(true)}
+                  className="p-1.5 rounded-full bg-[#4e5058] hover:bg-[#5865F2] text-[#dbdee1] hover:text-white transition-colors shrink-0"
+                  title="Share Scripture"
                 >
-                  <Smile className="w-4 h-4 text-amber-300" />
+                  <Plus className="w-4 h-4" />
                 </button>
 
-                {showEmojiPicker && (
-                  <div className="absolute right-0 bottom-10 p-2 bg-[#2b2d31] border border-[#1f2023] rounded-lg shadow-xl flex gap-1 z-30">
-                    {['❤️', '🙏', '✝️', '🕊️', '🙌', '🔥', '📖', '✨'].map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => {
-                          setInputText((prev) => prev + emoji);
-                          setShowEmojiPicker(false);
-                        }}
-                        className="w-7 h-7 flex items-center justify-center hover:bg-[#35373c] rounded text-base transition-transform hover:scale-125"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={handleInputChange}
+                  placeholder={isDMView ? `Message @${activeChannel.name}...` : `Message #${activeChannel.name}...`}
+                  className="flex-1 bg-transparent text-white text-xs sm:text-xs placeholder-[#80848e] focus:outline-none min-w-0"
+                />
 
-              <button
-                type="submit"
-                disabled={!inputText.trim()}
-                className="p-1.5 sm:p-2 rounded-md bg-[#5865F2] hover:bg-[#4752c4] disabled:opacity-30 text-white transition-all shrink-0"
-                title="Send Message"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="p-1.5 rounded hover:text-white text-[#b5bac1] transition-colors"
+                    title="Add Emoji"
+                  >
+                    <Smile className="w-4 h-4 text-amber-300" />
+                  </button>
+
+                  {showEmojiPicker && (
+                    <div className="absolute right-0 bottom-10 p-2 bg-[#2b2d31] border border-[#1f2023] rounded-lg shadow-xl flex gap-1 z-30">
+                      {['❤️', '🙏', '✝️', '🕊️', '🙌', '🔥', '📖', '✨'].map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => {
+                            setInputText((prev) => prev + emoji);
+                            setShowEmojiPicker(false);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center hover:bg-[#35373c] rounded text-base transition-transform hover:scale-125"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!inputText.trim()}
+                  className="p-1.5 sm:p-2 rounded-md bg-[#5865F2] hover:bg-[#4752c4] disabled:opacity-30 text-white transition-all shrink-0"
+                  title="Send Message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            )}
           </div>
         </main>
       )}

@@ -32,10 +32,22 @@ export interface ChatUser {
   isGoogleUser: boolean;
   isOwner?: boolean;
   isAdmin?: boolean;
+  isBanned?: boolean;
+  banReason?: string;
+  mutedUntil?: number;
   status?: UserStatusType;
   customStatus?: string;
   role?: string;
   roleColor?: string;
+}
+
+export interface BannedMember {
+  id: string;
+  name: string;
+  email?: string | null;
+  reason: string;
+  bannedAt: number;
+  bannedBy: string;
 }
 
 export interface DiscordEmbed {
@@ -124,6 +136,9 @@ export interface ActiveChatMember {
   isGoogleUser: boolean;
   isOwner?: boolean;
   isAdmin?: boolean;
+  isBanned?: boolean;
+  banReason?: string;
+  mutedUntil?: number;
   status?: UserStatusType;
   customStatus?: string;
   role?: string;
