@@ -6,13 +6,9 @@ import {
   Bell,
   Pin,
   Users,
-  Search,
   Smile,
   Send,
   Settings,
-  Mic,
-  MicOff,
-  Headphones,
   ShieldCheck,
   ChevronDown,
   ChevronRight,
@@ -26,7 +22,12 @@ import {
   Sparkles,
   Check,
   Menu,
-  MessageSquare
+  MessageSquare,
+  Crown,
+  ShieldAlert,
+  UserCheck,
+  PlusCircle,
+  AtSign
 } from 'lucide-react';
 import {
   discordChatService,
@@ -38,7 +39,9 @@ import {
   ChatChannel,
   DiscordServer,
   ActiveChatMember,
-  UserStatusType
+  UserStatusType,
+  SUPER_ADMIN_EMAIL,
+  PRESET_ROLES
 } from '../../types/chat';
 import { googleDriveService } from '../../services/googleDriveService';
 import { sounds } from '../../services/soundEffects';
@@ -51,18 +54,28 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   // Navigation State
   const [activeServerId, setActiveServerId] = useState<string>('server_fellowship');
   const [activeChannelId, setActiveChannelId] = useState<string>('general');
+  const [isDMView, setIsDMView] = useState<boolean>(false);
+  const [activeDMRecipient, setActiveDMRecipient] = useState<ActiveChatMember | null>(null);
+
+  // Responsive Drawer State
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
   const [isMobileMembersOpen, setIsMobileMembersOpen] = useState<boolean>(false);
   const [showDesktopMembers, setShowDesktopMembers] = useState<boolean>(true);
   const [showPinnedDrawer, setShowPinnedDrawer] = useState<boolean>(false);
+
+  // Modals
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [showVerseModal, setShowVerseModal] = useState<boolean>(false);
+  const [showCreateServerModal, setShowCreateServerModal] = useState<boolean>(false);
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState<boolean>(false);
+  const [showRoleModal, setShowRoleModal] = useState<boolean>(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [selectedMember, setSelectedMember] = useState<ActiveChatMember | null>(null);
 
   // Chat & Data State
-  const [servers] = useState<DiscordServer[]>(DEFAULT_SERVERS);
-  const [channels, setChannels] = useState<ChatChannel[]>(DEFAULT_CHANNELS);
+  const [servers, setServers] = useState<DiscordServer[]>(discordChatService.serversCache);
+  const [channels, setChannels] = useState<ChatChannel[]>(discordChatService.channelsCache);
+  const [dmChannels, setDMChannels] = useState<ChatChannel[]>(discordChatService.dmChannelsCache);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [members, setMembers] = useState<ActiveChatMember[]>(discordChatService.membersCache);
   const [currentUser, setCurrentUser] = useState(discordChatService.currentUser);
@@ -76,8 +89,14 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
 
   // Voice Lounge State
   const [connectedVoiceChannel, setConnectedVoiceChannel] = useState<ChatChannel | null>(null);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [isDeafened, setIsDeafened] = useState<boolean>(false);
+
+  // Creation Forms
+  const [newServerName, setNewServerName] = useState('');
+  const [newServerEmoji, setNewServerEmoji] = useState('⛪');
+  const [newServerDesc, setNewServerDesc] = useState('');
+  const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelTopic, setNewChannelTopic] = useState('');
+  const [newChannelType, setNewChannelType] = useState<'text' | 'voice' | 'announcement'>('text');
 
   // Verse Modal Form
   const [verseRef, setVerseRef] = useState('Philippians 4:13');
@@ -90,21 +109,34 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<any>(null);
 
+  const isSuperAdmin = currentUser.email === SUPER_ADMIN_EMAIL || currentUser.isOwner;
+
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
-  const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0];
+  const activeChannel = isDMView
+    ? dmChannels.find((d) => d.id === activeChannelId) || {
+        id: activeChannelId,
+        name: activeDMRecipient?.name || 'Direct Message',
+        topic: `1-on-1 conversation with @${activeDMRecipient?.name || 'User'}`,
+        type: 'dm' as const,
+        createdAt: Date.now(),
+      }
+    : channels.find((c) => c.id === activeChannelId) || channels[0];
 
   // Sync with Google Auth on Mount
   useEffect(() => {
     const unsubAuth = googleDriveService.initAuth((user) => {
       if (user) {
+        const isOwner = user.email === SUPER_ADMIN_EMAIL;
         const userObj = {
           id: user.uid || user.email || 'google_user',
-          name: user.displayName || user.email?.split('@')[0] || 'Believer in Christ',
+          name: isOwner ? 'Anthony Williams (Owner)' : (user.displayName || user.email?.split('@')[0] || 'Believer in Christ'),
           email: user.email || undefined,
           photoURL: user.photoURL || undefined,
           isGoogleUser: true,
-          role: 'Google Verified',
-          roleColor: '#38BDF8',
+          isOwner,
+          isAdmin: isOwner,
+          role: isOwner ? 'Super Admin' : 'Google Verified',
+          roleColor: isOwner ? '#F59E0B' : '#38BDF8',
           status: 'online' as UserStatusType,
         };
         discordChatService.setCurrentUser(userObj);
@@ -118,7 +150,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
 
   // Subscribe to real-time Discord Chat events
   useEffect(() => {
-    // Initial Load
     setMessages(discordChatService.getMessages(activeChannelId));
 
     const unsubscribe = discordChatService.subscribe((event) => {
@@ -134,6 +165,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
           }
         }
         setChannels([...discordChatService.channelsCache]);
+        setDMChannels([...discordChatService.dmChannelsCache]);
       } else if (
         event.type === 'reaction' ||
         event.type === 'pin_message' ||
@@ -142,6 +174,14 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       ) {
         setMessages(discordChatService.getMessages(activeChannelId));
         setChannels([...discordChatService.channelsCache]);
+        setDMChannels([...discordChatService.dmChannelsCache]);
+      } else if (event.type === 'server_created') {
+        setServers([...discordChatService.serversCache]);
+      } else if (event.type === 'channel_created') {
+        setChannels([...discordChatService.channelsCache]);
+      } else if (event.type === 'role_assigned') {
+        setMembers([...discordChatService.membersCache]);
+        setCurrentUser({ ...discordChatService.currentUser });
       } else if (event.type === 'typing') {
         const { channelId, userName, isTyping } = event.data;
         if (channelId === activeChannelId && userName !== currentUser.name) {
@@ -166,7 +206,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Handle message send
+  // Handle message send (Channel or 1-on-1 DM)
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim()) return;
@@ -183,10 +223,24 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
 
     await discordChatService.sendMessage({
       channelId: activeChannelId,
-      serverId: activeServerId,
+      serverId: isDMView ? undefined : activeServerId,
+      recipientId: isDMView ? activeDMRecipient?.id : undefined,
       text: textToSend,
       replyTo: replyTarget,
     });
+  };
+
+  // Start a 1-on-1 Direct Message
+  const handleStartDM = (targetMember: ActiveChatMember) => {
+    sounds.playTap();
+    const dmChannel = discordChatService.getOrCreateDMChannel(targetMember);
+    setIsDMView(true);
+    setActiveDMRecipient(targetMember);
+    setActiveChannelId(dmChannel.id);
+    setDMChannels([...discordChatService.dmChannelsCache]);
+    setIsMobileNavOpen(false);
+    setIsMobileMembersOpen(false);
+    setSelectedMember(null);
   };
 
   // Handle typing input
@@ -200,6 +254,58 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     }, 2000);
   };
 
+  // Create Server
+  const handleCreateServer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newServerName.trim()) return;
+    sounds.playTap();
+
+    const created = discordChatService.createServer({
+      name: newServerName.trim(),
+      emoji: newServerEmoji.trim() || '⛪',
+      description: newServerDesc.trim() || 'Fellowship community server',
+    });
+
+    setServers([...discordChatService.serversCache]);
+    setActiveServerId(created.id);
+    const initialChan = discordChatService.channelsCache.find((c) => c.serverId === created.id);
+    if (initialChan) setActiveChannelId(initialChan.id);
+    setIsDMView(false);
+    setShowCreateServerModal(false);
+    setNewServerName('');
+    setNewServerDesc('');
+  };
+
+  // Create Channel
+  const handleCreateChannel = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+    sounds.playTap();
+
+    const created = discordChatService.createChannel({
+      serverId: activeServerId,
+      name: newChannelName.trim(),
+      topic: newChannelTopic.trim() || `Channel in ${activeServer.name}`,
+      type: newChannelType,
+    });
+
+    setChannels([...discordChatService.channelsCache]);
+    setActiveChannelId(created.id);
+    setShowCreateChannelModal(false);
+    setNewChannelName('');
+    setNewChannelTopic('');
+  };
+
+  // Assign Role to member
+  const handleAssignRole = (role: typeof PRESET_ROLES[0]) => {
+    if (!selectedMember || !isSuperAdmin) return;
+    sounds.playTap();
+
+    discordChatService.assignMemberRole(selectedMember.id, role.name, role.color);
+    setMembers([...discordChatService.membersCache]);
+    setShowRoleModal(false);
+  };
+
   // Share Verse Embed
   const handleSendVerseEmbed = async () => {
     if (!verseRef.trim() || !verseContent.trim()) return;
@@ -207,7 +313,8 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
 
     await discordChatService.sendMessage({
       channelId: activeChannelId,
-      serverId: activeServerId,
+      serverId: isDMView ? undefined : activeServerId,
+      recipientId: isDMView ? activeDMRecipient?.id : undefined,
       text: `📜 Shared Scripture: **${verseRef}**`,
       attachment: {
         type: 'verse',
@@ -256,14 +363,17 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     sounds.playTap();
     try {
       const { user } = await googleDriveService.signIn();
+      const isOwner = user.email === SUPER_ADMIN_EMAIL;
       const updatedUser = {
         id: user.uid || user.email || 'google_user',
-        name: user.displayName || user.email?.split('@')[0] || 'Believer in Christ',
+        name: isOwner ? 'Anthony Williams (Owner)' : (user.displayName || user.email?.split('@')[0] || 'Believer in Christ'),
         email: user.email || undefined,
         photoURL: user.photoURL || undefined,
         isGoogleUser: true,
-        role: 'Google Verified',
-        roleColor: '#38BDF8',
+        isOwner,
+        isAdmin: isOwner,
+        role: isOwner ? 'Super Admin' : 'Google Verified',
+        roleColor: isOwner ? '#F59E0B' : '#38BDF8',
       };
       discordChatService.setCurrentUser(updatedUser);
       setCurrentUser(discordChatService.currentUser);
@@ -281,6 +391,8 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       id: `guest_${Math.random().toString(36).substring(2, 7)}`,
       name: 'Believer in Christ',
       isGoogleUser: false,
+      isOwner: false,
+      isAdmin: false,
       role: 'Believer',
       roleColor: '#10B981',
       status: 'online' as UserStatusType,
@@ -302,19 +414,10 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     setShowSettingsModal(false);
   };
 
-  // Filter messages by search if active
-  const filteredMessages = searchQuery.trim()
-    ? messages.filter(
-        (m) =>
-          m.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.senderName.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : messages;
-
   return (
     <div className="relative flex h-full w-full bg-[#1e1f22] text-[#dbdee1] font-sans antialiased select-none overflow-hidden rounded-2xl shadow-2xl border border-white/10">
       {/* ========================================================================= */}
-      {/* MOBILE OVERLAY BACKDROP FOR LEFT SERVER / CHANNELS DRAWER                */}
+      {/* MOBILE OVERLAY BACKDROPS                                                  */}
       {/* ========================================================================= */}
       {isMobileNavOpen && (
         <div
@@ -322,10 +425,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
           className="md:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-30 transition-opacity"
         />
       )}
-
-      {/* ========================================================================= */}
-      {/* MOBILE OVERLAY BACKDROP FOR RIGHT MEMBERS DRAWER                         */}
-      {/* ========================================================================= */}
       {isMobileMembersOpen && (
         <div
           onClick={() => setIsMobileMembersOpen(false)}
@@ -342,28 +441,30 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
         }`}
       >
         {/* 1. LEFTMOST DISCORD SERVER BAR (72px) */}
-        <nav className="w-[68px] sm:w-[72px] bg-[#111214] flex flex-col items-center py-3 gap-2 shrink-0 z-20">
-          {/* Direct Messages / Home Button */}
+        <nav className="w-[68px] sm:w-[72px] bg-[#111214] flex flex-col items-center py-3 gap-2 shrink-0 z-20 overflow-y-auto custom-scrollbar">
+          {/* Direct Messages Button */}
           <button
             onClick={() => {
               sounds.playTap();
-              setActiveServerId('server_fellowship');
-              setActiveChannelId('general');
-              setIsMobileNavOpen(false);
+              setIsDMView(true);
+              if (dmChannels.length > 0) {
+                setActiveChannelId(dmChannels[0].id);
+                setActiveDMRecipient(dmChannels[0].dmRecipient || null);
+              }
             }}
             className={`relative group w-11 h-11 sm:w-12 sm:h-12 rounded-[24px] hover:rounded-[16px] flex items-center justify-center transition-all duration-200 ${
-              activeServerId === 'server_fellowship'
+              isDMView
                 ? 'bg-[#5865F2] text-white rounded-[16px]'
-                : 'bg-[#313338] text-emerald-400 hover:bg-[#5865F2] hover:text-white'
+                : 'bg-[#313338] text-[#5865F2] hover:bg-[#5865F2] hover:text-white'
             }`}
-            title="Fellowship Direct & Global"
+            title="Direct Messages (1-on-1)"
           >
             <span
               className={`absolute left-0 w-1 bg-white rounded-r-full transition-all duration-200 ${
-                activeServerId === 'server_fellowship' ? 'h-8 sm:h-10' : 'h-0 group-hover:h-5'
+                isDMView ? 'h-8 sm:h-10' : 'h-0 group-hover:h-5'
               }`}
             />
-            <span className="text-xl sm:text-2xl">🕊️</span>
+            <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
           {/* Separator */}
@@ -371,12 +472,13 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
 
           {/* Server Guild Icons */}
           {servers.map((server) => {
-            const isActive = activeServerId === server.id;
+            const isActive = !isDMView && activeServerId === server.id;
             return (
               <button
                 key={server.id}
                 onClick={() => {
                   sounds.playTap();
+                  setIsDMView(false);
                   setActiveServerId(server.id);
                   const firstChan = channels.find((c) => c.serverId === server.id);
                   if (firstChan) setActiveChannelId(firstChan.id);
@@ -397,126 +499,187 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               </button>
             );
           })}
+
+          {/* Add Server Button (Super Admin / Any User with permissions) */}
+          {isSuperAdmin && (
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setShowCreateServerModal(true);
+              }}
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-[24px] hover:rounded-[16px] bg-[#313338] hover:bg-[#23a55a] text-[#23a55a] hover:text-white flex items-center justify-center transition-all group mt-1"
+              title="Add a Server (Super Admin)"
+            >
+              <Plus className="w-6 h-6 transition-transform group-hover:rotate-90" />
+            </button>
+          )}
         </nav>
 
-        {/* 2. CHANNELS SIDEBAR (230px on mobile, 240px on desktop) */}
+        {/* 2. CHANNELS OR DIRECT MESSAGES SIDEBAR */}
         <aside className="w-[230px] sm:w-60 bg-[#2b2d31] flex flex-col shrink-0 border-r border-[#1f2023] z-10">
-          {/* Server Header Banner */}
-          <header
-            onClick={() => setShowSettingsModal(true)}
-            className="h-12 px-3 sm:px-4 border-b border-[#1f2023] flex items-center justify-between hover:bg-[#35373c] transition-colors cursor-pointer shadow-sm"
-          >
-            <div className="flex items-center gap-2 overflow-hidden">
-              <span className="text-base">{activeServer.emoji}</span>
-              <h1 className="font-extrabold text-xs sm:text-sm text-white truncate">
-                {activeServer.name}
-              </h1>
-              <span title="Verified Fellowship">
-                <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
-              </span>
-            </div>
-            <ChevronDown className="w-4 h-4 text-stone-400" />
-          </header>
-
-          {/* Channels List */}
-          <div className="flex-1 overflow-y-auto px-2 py-3 space-y-3 custom-scrollbar">
-            {activeServer.categories.map((category) => {
-              const isCollapsed = collapsedCategories[category.id];
-              const catChannels = channels.filter(
-                (c) => c.serverId === activeServerId && category.channelIds.includes(c.id)
-              );
-
-              return (
-                <div key={category.id} className="space-y-0.5">
-                  <button
-                    onClick={() => toggleCategory(category.id)}
-                    className="w-full flex items-center gap-1 px-1 py-1 text-[10px] sm:text-[11px] font-black tracking-wider text-[#949ba4] hover:text-stone-200 transition-colors uppercase"
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="w-3 h-3 text-[#949ba4]" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3 text-[#949ba4]" />
-                    )}
-                    <span>{category.name}</span>
-                  </button>
-
-                  {!isCollapsed && (
-                    <div className="space-y-[2px]">
-                      {catChannels.map((channel) => {
-                        const isActive = activeChannelId === channel.id;
-                        const isVoice = channel.type === 'voice';
-                        const isAnnouncement = channel.type === 'announcement';
-
-                        return (
-                          <button
-                            key={channel.id}
-                            onClick={() => {
-                              if (isVoice) {
-                                handleToggleVoiceChannel(channel);
-                              } else {
-                                sounds.playTap();
-                                setActiveChannelId(channel.id);
-                                setIsMobileNavOpen(false); // Auto close drawer on mobile selection
-                              }
-                            }}
-                            className={`w-full flex items-center justify-between px-2 py-1.5 rounded-[6px] text-xs font-semibold group transition-all ${
-                              isActive && !isVoice
-                                ? 'bg-[#35373c] text-white'
-                                : 'text-[#949ba4] hover:bg-[#35373c]/50 hover:text-[#dbdee1]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              {isVoice ? (
-                                <Volume2
-                                  className={`w-4 h-4 ${
-                                    connectedVoiceChannel?.id === channel.id
-                                      ? 'text-emerald-400 animate-pulse'
-                                      : 'text-[#80848e]'
-                                  }`}
-                                />
-                              ) : isAnnouncement ? (
-                                <Bell className="w-4 h-4 text-amber-400" />
-                              ) : (
-                                <Hash className="w-4 h-4 text-[#80848e] group-hover:text-[#dbdee1]" />
-                              )}
-                              <span className="truncate">{channel.name}</span>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Connected Voice Bar */}
-          {connectedVoiceChannel && (
-            <div className="p-2.5 bg-[#111214] border-t border-emerald-900/40 flex items-center justify-between">
-              <div className="flex items-center gap-2 overflow-hidden">
-                <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                <div className="flex flex-col truncate">
-                  <span className="text-[10px] font-bold text-emerald-400 truncate">
-                    Voice Connected
-                  </span>
-                  <span className="text-[9px] text-stone-400 truncate">
-                    {connectedVoiceChannel.name}
-                  </span>
-                </div>
+          {/* Header Banner */}
+          {isDMView ? (
+            <header className="h-12 px-3 sm:px-4 border-b border-[#1f2023] flex items-center justify-between shadow-sm bg-[#2b2d31]">
+              <div className="flex items-center gap-2">
+                <AtSign className="w-4 h-4 text-[#5865F2]" />
+                <h1 className="font-extrabold text-xs sm:text-sm text-white">Direct Messages</h1>
               </div>
-              <button
-                onClick={() => {
-                  sounds.playTap();
-                  setConnectedVoiceChannel(null);
-                }}
-                className="p-1 rounded hover:bg-rose-500/20 text-stone-400 hover:text-rose-400"
-                title="Disconnect"
-              >
-                <PhoneOff className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            </header>
+          ) : (
+            <header
+              onClick={() => setShowSettingsModal(true)}
+              className="h-12 px-3 sm:px-4 border-b border-[#1f2023] flex items-center justify-between hover:bg-[#35373c] transition-colors cursor-pointer shadow-sm"
+            >
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-base">{activeServer.emoji}</span>
+                <h1 className="font-extrabold text-xs sm:text-sm text-white truncate">
+                  {activeServer.name}
+                </h1>
+                {isSuperAdmin && (
+                  <span title="You are Super Admin & App Owner">
+                    <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  </span>
+                )}
+              </div>
+              <ChevronDown className="w-4 h-4 text-stone-400" />
+            </header>
           )}
+
+          {/* List Area */}
+          <div className="flex-1 overflow-y-auto px-2 py-3 space-y-3 custom-scrollbar">
+            {isDMView ? (
+              /* Direct Messages List */
+              <div className="space-y-1">
+                <div className="px-2 py-1 text-[10px] sm:text-[11px] font-black tracking-wider text-[#949ba4] uppercase flex items-center justify-between">
+                  <span>Direct Messages</span>
+                  <span className="text-[10px] text-[#5865F2] font-bold">1-on-1</span>
+                </div>
+
+                {/* List active DMs */}
+                {dmChannels.length === 0 ? (
+                  <div className="p-3 text-center text-xs text-[#949ba4] italic">
+                    No active 1-on-1 chats. Click on any member from the right to start a DM!
+                  </div>
+                ) : (
+                  dmChannels.map((dm) => {
+                    const isActive = activeChannelId === dm.id;
+                    const recipient = dm.dmRecipient;
+
+                    return (
+                      <button
+                        key={dm.id}
+                        onClick={() => {
+                          sounds.playTap();
+                          setActiveChannelId(dm.id);
+                          setActiveDMRecipient(recipient || null);
+                          setIsMobileNavOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-xs font-semibold group transition-all ${
+                          isActive
+                            ? 'bg-[#35373c] text-white'
+                            : 'text-[#949ba4] hover:bg-[#35373c]/50 hover:text-[#dbdee1]'
+                        }`}
+                      >
+                        <div className="relative shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white text-[10px] font-bold">
+                            {recipient?.name?.charAt(0) || dm.name.charAt(0)}
+                          </div>
+                          <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border border-[#2b2d31]" />
+                        </div>
+                        <span className="truncate">{recipient?.name || dm.name}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : (
+              /* Server Channels List */
+              activeServer.categories.map((category) => {
+                const isCollapsed = collapsedCategories[category.id];
+                const catChannels = channels.filter(
+                  (c) => c.serverId === activeServerId && category.channelIds.includes(c.id)
+                );
+
+                return (
+                  <div key={category.id} className="space-y-0.5">
+                    <div className="flex items-center justify-between px-1 py-1">
+                      <button
+                        onClick={() => toggleCategory(category.id)}
+                        className="flex items-center gap-1 text-[10px] sm:text-[11px] font-black tracking-wider text-[#949ba4] hover:text-stone-200 transition-colors uppercase"
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight className="w-3 h-3 text-[#949ba4]" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 text-[#949ba4]" />
+                        )}
+                        <span>{category.name}</span>
+                      </button>
+
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => {
+                            sounds.playTap();
+                            setShowCreateChannelModal(true);
+                          }}
+                          className="text-[#949ba4] hover:text-white p-0.5"
+                          title="Add Channel"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {!isCollapsed && (
+                      <div className="space-y-[2px]">
+                        {catChannels.map((channel) => {
+                          const isActive = activeChannelId === channel.id;
+                          const isVoice = channel.type === 'voice';
+                          const isAnnouncement = channel.type === 'announcement';
+
+                          return (
+                            <button
+                              key={channel.id}
+                              onClick={() => {
+                                if (isVoice) {
+                                  handleToggleVoiceChannel(channel);
+                                } else {
+                                  sounds.playTap();
+                                  setActiveChannelId(channel.id);
+                                  setIsMobileNavOpen(false);
+                                }
+                              }}
+                              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-[6px] text-xs font-semibold group transition-all ${
+                                isActive && !isVoice
+                                  ? 'bg-[#35373c] text-white'
+                                  : 'text-[#949ba4] hover:bg-[#35373c]/50 hover:text-[#dbdee1]'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                {isVoice ? (
+                                  <Volume2
+                                    className={`w-4 h-4 ${
+                                      connectedVoiceChannel?.id === channel.id
+                                        ? 'text-emerald-400 animate-pulse'
+                                        : 'text-[#80848e]'
+                                    }`}
+                                  />
+                                ) : isAnnouncement ? (
+                                  <Bell className="w-4 h-4 text-amber-400" />
+                                ) : (
+                                  <Hash className="w-4 h-4 text-[#80848e] group-hover:text-[#dbdee1]" />
+                                )}
+                                <span className="truncate">{channel.name}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
 
           {/* Bottom User Bar */}
           <footer className="h-[52px] bg-[#232428] px-2 flex items-center justify-between border-t border-[#1f2023] z-10">
@@ -532,7 +695,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                     className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-black text-xs">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center text-white font-black text-xs">
                     {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                 )}
@@ -542,14 +705,14 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               <div className="flex flex-col min-w-0">
                 <span className="text-xs font-bold text-white truncate leading-tight flex items-center gap-1">
                   {currentUser.name}
-                  {currentUser.isGoogleUser && (
-                    <span title="Google Verified">
-                      <Check className="w-3 h-3 text-sky-400" />
+                  {isSuperAdmin && (
+                    <span title="Super Admin / App Owner">
+                      <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     </span>
                   )}
                 </span>
-                <span className="text-[9px] sm:text-[10px] text-[#949ba4] truncate leading-tight">
-                  {currentUser.customStatus || `#${currentUser.discriminator || '7777'}`}
+                <span className="text-[9px] sm:text-[10px] text-amber-400 font-semibold truncate leading-tight">
+                  {isSuperAdmin ? '👑 App Owner' : (currentUser.role || 'Believer')}
                 </span>
               </div>
             </div>
@@ -558,7 +721,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               <button
                 onClick={() => setShowSettingsModal(true)}
                 className="p-1.5 rounded hover:bg-[#35373c] hover:text-white"
-                title="Settings & Name"
+                title="Settings & Admin"
               >
                 <Settings className="w-4 h-4" />
               </button>
@@ -574,19 +737,23 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
         {/* Top Header Bar */}
         <header className="h-12 px-3 sm:px-4 border-b border-[#1f2023] flex items-center justify-between shadow-sm bg-[#313338] z-10 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            {/* Mobile Hamburger Drawer Trigger */}
             <button
               onClick={() => {
                 sounds.playTap();
                 setIsMobileNavOpen(true);
               }}
               className="md:hidden p-1.5 -ml-1 rounded-md hover:bg-[#35373c] text-stone-200"
-              title="Open Channels Menu"
+              title="Open Navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
 
-            <Hash className="w-5 h-5 sm:w-6 sm:h-6 text-[#80848e] shrink-0" />
+            {isDMView ? (
+              <AtSign className="w-5 h-5 text-[#5865F2] shrink-0" />
+            ) : (
+              <Hash className="w-5 h-5 sm:w-6 sm:h-6 text-[#80848e] shrink-0" />
+            )}
+
             <h2 className="font-extrabold text-white text-xs sm:text-sm truncate">
               {activeChannel.name}
             </h2>
@@ -597,7 +764,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2.5 text-[#b5bac1]">
-            {/* Quick Share Verse Button */}
             <button
               onClick={() => setShowVerseModal(true)}
               className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 text-[11px] sm:text-xs font-bold transition-all"
@@ -606,19 +772,14 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               <span className="hidden xs:inline">Verse</span>
             </button>
 
-            {/* Pinned Messages Trigger */}
             <button
               onClick={() => setShowPinnedDrawer(!showPinnedDrawer)}
               className="p-1.5 rounded hover:bg-[#35373c] hover:text-white transition-colors relative"
               title="Pinned Messages"
             >
               <Pin className="w-4 h-4" />
-              {messages.some((m) => m.pinned) && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500" />
-              )}
             </button>
 
-            {/* Member List Toggle (Opens Right Drawer on mobile) */}
             <button
               onClick={() => {
                 sounds.playTap();
@@ -631,7 +792,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               <Users className="w-4 h-4" />
             </button>
 
-            {/* Close window if applet */}
             {onClose && (
               <button
                 onClick={onClose}
@@ -646,22 +806,27 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
 
         {/* Messages Stream */}
         <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 space-y-3.5 custom-scrollbar">
-          {/* Welcome Channel Banner */}
+          {/* Welcome Banner */}
           <div className="mt-2 mb-4 pb-3 border-b border-[#3f4147]">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#2b2d31] flex items-center justify-center mb-2 shadow-inner">
-              <Hash className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+              {isDMView ? (
+                <AtSign className="w-7 h-7 sm:w-8 sm:h-8 text-[#5865F2]" />
+              ) : (
+                <Hash className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+              )}
             </div>
             <h3 className="text-lg sm:text-xl font-black text-white">
-              Welcome to #{activeChannel.name}!
+              {isDMView ? `Direct Message with @${activeChannel.name}` : `Welcome to #${activeChannel.name}!`}
             </h3>
             <p className="text-[11px] sm:text-xs text-[#949ba4] mt-0.5">
-              This is the start of the #{activeChannel.name} channel. Text in real-time across all
-              devices! 🕊️
+              {isDMView
+                ? 'This is the start of your 1-on-1 private direct message history.'
+                : 'Text in real-time across all devices with instant sub-50ms sync! 🕊️'}
             </p>
           </div>
 
           {/* Render Messages */}
-          {filteredMessages.map((msg) => {
+          {messages.map((msg) => {
             const isMine = msg.senderId === currentUser.id;
             const timeString = new Date(msg.createdAt).toLocaleTimeString([], {
               hour: '2-digit',
@@ -675,7 +840,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                   msg.pinned ? 'bg-amber-500/5 border-l-2 border-amber-500 pl-2.5' : ''
                 }`}
               >
-                {/* Action Toolbar on Hover / Focus */}
+                {/* Action Toolbar */}
                 <div className="absolute right-2 -top-3 hidden group-hover:flex sm:flex opacity-0 group-hover:opacity-100 items-center bg-[#313338] border border-[#232428] rounded-md shadow-md overflow-hidden z-10">
                   <button
                     onClick={() => handleAddReaction(msg.id, '❤️')}
@@ -690,13 +855,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                     title="Pray"
                   >
                     🙏
-                  </button>
-                  <button
-                    onClick={() => handleAddReaction(msg.id, '🙌')}
-                    className="p-1 sm:p-1.5 hover:bg-[#35373c] text-stone-300 hover:text-emerald-400 text-xs"
-                    title="Praise"
-                  >
-                    🙌
                   </button>
                   <button
                     onClick={() => {
@@ -720,38 +878,37 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                   >
                     <Pin className="w-3.5 h-3.5" />
                   </button>
-                  {isMine && (
+                  {(isMine || isSuperAdmin) && (
                     <button
                       onClick={() => {
                         sounds.playTap();
                         discordChatService.deleteMessage(msg.id);
                       }}
                       className="p-1 sm:p-1.5 hover:bg-rose-500/20 text-[#b5bac1] hover:text-rose-400"
-                      title="Delete"
+                      title="Delete Message"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
 
-                {/* Left Avatar */}
+                {/* Avatar */}
                 <div className="shrink-0 pt-0.5">
                   {msg.senderPhoto ? (
                     <img
                       src={msg.senderPhoto}
                       alt={msg.senderName}
-                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover cursor-pointer hover:opacity-90"
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-black text-xs sm:text-sm cursor-pointer shadow-sm">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-amber-500 to-teal-600 flex items-center justify-center text-white font-black text-xs sm:text-sm shadow-sm">
                       {msg.senderName.charAt(0).toUpperCase()}
                     </div>
                   )}
                 </div>
 
-                {/* Message Body Content */}
+                {/* Content */}
                 <div className="flex-1 min-w-0">
-                  {/* Reply Reference Header if replied */}
                   {msg.replyTo && (
                     <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-[#949ba4] mb-0.5">
                       <CornerUpLeft className="w-3 h-3 rotate-180" />
@@ -760,11 +917,10 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                     </div>
                   )}
 
-                  {/* Sender Name + Role Badge + Time */}
                   <div className="flex items-center gap-1.5 sm:gap-2 leading-none mb-1 flex-wrap">
                     <span
                       style={{ color: msg.senderRoleColor || '#dbdee1' }}
-                      className="font-bold text-xs sm:text-xs hover:underline cursor-pointer"
+                      className="font-bold text-xs hover:underline cursor-pointer"
                     >
                       {msg.senderName}
                     </span>
@@ -781,29 +937,16 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                       </span>
                     )}
 
-                    {msg.isGoogleUser && (
-                      <span title="Google Verified">
-                        <Check className="w-3 h-3 text-sky-400" />
-                      </span>
-                    )}
-
                     <span className="text-[9px] sm:text-[10px] text-[#949ba4] font-medium">
                       {timeString}
                     </span>
-
-                    {msg.pinned && (
-                      <span className="text-[9px] font-bold text-amber-400 flex items-center gap-0.5">
-                        <Pin className="w-2.5 h-2.5" /> Pinned
-                      </span>
-                    )}
                   </div>
 
-                  {/* Text Content */}
-                  <p className="text-xs sm:text-xs text-[#dbdee1] leading-relaxed select-text font-normal whitespace-pre-wrap break-words">
+                  <p className="text-xs text-[#dbdee1] leading-relaxed select-text font-normal whitespace-pre-wrap break-words">
                     {msg.text}
                   </p>
 
-                  {/* Rich Discord Embed Card (if any) */}
+                  {/* Embeds */}
                   {msg.embed && (
                     <div
                       style={{ borderLeftColor: msg.embed.color || '#10B981' }}
@@ -818,15 +961,10 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                       <p className="text-xs text-stone-300 font-serif italic leading-relaxed">
                         {msg.embed.description}
                       </p>
-                      {msg.embed.footer && (
-                        <div className="text-[9px] text-[#80848e] pt-1 border-t border-[#383a40]">
-                          {msg.embed.footer}
-                        </div>
-                      )}
                     </div>
                   )}
 
-                  {/* Emoji Reactions Bar */}
+                  {/* Reactions */}
                   {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                     <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                       {Object.entries(msg.reactions).map(([emoji, users]) => {
@@ -842,7 +980,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                             }`}
                           >
                             <span>{emoji}</span>
-                            <span className="text-[10px] sm:text-[11px]">{users.length}</span>
+                            <span className="text-[10px]">{users.length}</span>
                           </button>
                         );
                       })}
@@ -855,19 +993,8 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Typing indicator */}
-        {typingUsers.length > 0 && (
-          <div className="px-3 sm:px-4 py-1 text-[10px] sm:text-[11px] text-[#23a55a] font-bold italic flex items-center gap-1.5 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#23a55a] animate-ping" />
-            <span>
-              {typingUsers.join(', ')} {typingUsers.length > 1 ? 'are' : 'is'} typing...
-            </span>
-          </div>
-        )}
-
-        {/* Discord Chat Input Box (Mobile-Optimized) */}
+        {/* Input Bar */}
         <div className="px-2.5 sm:px-4 pb-3 sm:pb-4 pt-1 bg-[#313338] shrink-0">
-          {/* Active Reply Banner */}
           {replyingTo && (
             <div className="flex items-center justify-between px-3 py-1 bg-[#2b2d31] rounded-t-lg text-xs text-stone-300 border-b border-[#1f2023]">
               <div className="flex items-center gap-1.5 truncate">
@@ -892,7 +1019,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               replyingTo ? 'rounded-b-lg' : 'rounded-lg'
             }`}
           >
-            {/* Attachment Button */}
             <button
               type="button"
               onClick={() => setShowVerseModal(true)}
@@ -902,16 +1028,14 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               <Plus className="w-4 h-4" />
             </button>
 
-            {/* Text Input */}
             <input
               type="text"
               value={inputText}
               onChange={handleInputChange}
-              placeholder={`Message #${activeChannel.name}...`}
+              placeholder={isDMView ? `Message @${activeChannel.name}...` : `Message #${activeChannel.name}...`}
               className="flex-1 bg-transparent text-white text-xs sm:text-xs placeholder-[#80848e] focus:outline-none min-w-0"
             />
 
-            {/* Emoji Quick Picker */}
             <div className="relative shrink-0">
               <button
                 type="button"
@@ -941,7 +1065,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               )}
             </div>
 
-            {/* Send Button */}
             <button
               type="submit"
               disabled={!inputText.trim()}
@@ -955,7 +1078,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       </main>
 
       {/* ========================================================================= */}
-      {/* 4. RIGHT MEMBERS SIDEBAR (RESPONSIVE DRAWER ON MOBILE, PANEL ON DESKTOP)  */}
+      {/* 4. RIGHT MEMBERS SIDEBAR (RESPONSIVE)                                     */}
       {/* ========================================================================= */}
       <aside
         className={`bg-[#2b2d31] flex flex-col border-l border-[#1f2023] z-40 transition-transform duration-300 ease-in-out fixed md:relative right-0 top-0 bottom-0 w-64 md:w-60 shrink-0 ${
@@ -964,7 +1087,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       >
         <div className="h-12 px-4 border-b border-[#1f2023] flex items-center justify-between">
           <span className="text-xs font-black text-[#949ba4] uppercase tracking-wider">
-            Fellowship Members — {members.length + 1}
+            Members — {members.length + 1}
           </span>
           <button
             onClick={() => setIsMobileMembersOpen(false)}
@@ -975,124 +1098,355 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4 custom-scrollbar">
-          {/* PASTORS & LEADERS */}
-          <div>
-            <div className="px-2 py-1 text-[11px] font-black text-amber-400 tracking-wider uppercase">
-              Pastors & Leaders — 1
-            </div>
-            <div className="space-y-0.5 mt-1">
-              {members
-                .filter((m) => m.role === 'Pastor')
-                .map((m) => (
-                  <div
-                    key={m.id}
-                    onClick={() => {
-                      setSelectedMember(m);
-                      setIsMobileMembersOpen(false);
-                    }}
-                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors"
-                  >
-                    <div className="relative">
-                      <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-white font-black text-xs">
-                        {m.name.charAt(0)}
-                      </div>
-                      <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-bold text-amber-300 truncate">{m.name}</span>
-                      <span className="text-[10px] text-[#949ba4] truncate">{m.customStatus}</span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          {/* ONLINE BELIEVERS */}
-          <div>
-            <div className="px-2 py-1 text-[11px] font-black text-emerald-400 tracking-wider uppercase">
-              Online Believers — {members.filter((m) => m.role !== 'Pastor').length + 1}
-            </div>
-            <div className="space-y-0.5 mt-1">
-              {/* Current User */}
-              <div
-                onClick={() => {
-                  setShowSettingsModal(true);
-                  setIsMobileMembersOpen(false);
-                }}
-                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] bg-[#35373c]/50 hover:bg-[#35373c] cursor-pointer transition-colors"
-              >
-                <div className="relative">
-                  {currentUser.photoURL ? (
-                    <img
-                      src={currentUser.photoURL}
-                      alt={currentUser.name}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-black text-xs">
-                      {currentUser.name.charAt(0)}
-                    </div>
-                  )}
-                  <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
+          {/* Active Members */}
+          <div className="space-y-1">
+            {/* Current User */}
+            <div
+              onClick={() => {
+                setShowSettingsModal(true);
+                setIsMobileMembersOpen(false);
+              }}
+              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] bg-[#35373c]/50 hover:bg-[#35373c] cursor-pointer transition-colors"
+            >
+              <div className="relative">
+                <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-white font-black text-xs">
+                  {currentUser.name.charAt(0)}
                 </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-bold text-white truncate flex items-center gap-1">
-                    {currentUser.name}
-                    <span className="text-[9px] text-stone-400 font-normal">(You)</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-400 truncate">
-                    {currentUser.customStatus || 'Active now'}
-                  </span>
-                </div>
+                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
               </div>
-
-              {/* Other Members */}
-              {members
-                .filter((m) => m.role !== 'Pastor')
-                .map((m) => (
-                  <div
-                    key={m.id}
-                    onClick={() => {
-                      setSelectedMember(m);
-                      setIsMobileMembersOpen(false);
-                    }}
-                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors"
-                  >
-                    <div className="relative">
-                      <div
-                        style={{ backgroundColor: m.roleColor || '#10B981' }}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs"
-                      >
-                        {m.name.charAt(0)}
-                      </div>
-                      <span
-                        className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border-2 border-[#2b2d31] ${
-                          m.status === 'online'
-                            ? 'bg-[#23a55a]'
-                            : m.status === 'idle'
-                            ? 'bg-[#f0b232]'
-                            : 'bg-[#80848e]'
-                        }`}
-                      />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span
-                        style={{ color: m.roleColor || '#dbdee1' }}
-                        className="text-xs font-bold truncate"
-                      >
-                        {m.name}
-                      </span>
-                      <span className="text-[10px] text-[#949ba4] truncate">{m.customStatus}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold text-white truncate flex items-center gap-1">
+                  {currentUser.name}
+                  {isSuperAdmin && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                </span>
+                <span className="text-[10px] text-amber-400 font-bold truncate">
+                  {isSuperAdmin ? '👑 Super Admin' : (currentUser.role || 'Believer')}
+                </span>
+              </div>
             </div>
+
+            {/* Other Members */}
+            {members.map((m) => (
+              <div
+                key={m.id}
+                onClick={() => {
+                  setSelectedMember(m);
+                  if (isSuperAdmin) {
+                    setShowRoleModal(true);
+                  } else {
+                    handleStartDM(m);
+                  }
+                }}
+                className="flex items-center justify-between px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors group"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="relative">
+                    <div
+                      style={{ backgroundColor: m.roleColor || '#10B981' }}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs"
+                    >
+                      {m.name.charAt(0)}
+                    </div>
+                    <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span
+                      style={{ color: m.roleColor || '#dbdee1' }}
+                      className="text-xs font-bold truncate flex items-center gap-1"
+                    >
+                      {m.name}
+                      {m.email === SUPER_ADMIN_EMAIL && <Crown className="w-3 h-3 text-amber-400" />}
+                    </span>
+                    <span className="text-[10px] text-[#949ba4] truncate">{m.role || 'Believer'}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleStartDM(m);
+                  }}
+                  className="p-1.5 rounded hover:bg-[#5865F2] text-stone-400 hover:text-white transition-colors"
+                  title={`Direct Message @${m.name}`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </aside>
 
       {/* ========================================================================= */}
-      {/* 5. MODAL: SCRIPTURE & EMBED GENERATOR (MOBILE-RESPONSIVE)                  */}
+      {/* 5. MODAL: CREATE SERVER (SUPER ADMIN ONLY)                                */}
+      {/* ========================================================================= */}
+      {showCreateServerModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-md bg-[#313338] border border-[#3f4147] rounded-xl shadow-2xl p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#3f4147] pb-3">
+              <div className="flex items-center gap-2 text-emerald-400 font-extrabold text-base">
+                <PlusCircle className="w-5 h-5" />
+                <span>Create New Fellowship Server</span>
+              </div>
+              <button
+                onClick={() => setShowCreateServerModal(false)}
+                className="text-stone-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateServer} className="space-y-3">
+              <div>
+                <label className="block text-[10px] sm:text-[11px] font-black uppercase text-[#949ba4] mb-1">
+                  Server Name
+                </label>
+                <input
+                  type="text"
+                  value={newServerName}
+                  onChange={(e) => setNewServerName(e.target.value)}
+                  placeholder="e.g. Youth Ministry, Prayer Warriors..."
+                  required
+                  className="w-full px-3 py-2 rounded-md bg-[#1e1f22] border border-[#3f4147] text-white text-xs focus:outline-none focus:border-[#23a55a]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-[11px] font-black uppercase text-[#949ba4] mb-1">
+                  Server Emoji Icon
+                </label>
+                <div className="flex gap-2">
+                  {['⛪', '✝️', '🕊️', '🔥', '📖', '🛡️', '👑', '🌟'].map((em) => (
+                    <button
+                      key={em}
+                      type="button"
+                      onClick={() => setNewServerEmoji(em)}
+                      className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center border transition-all ${
+                        newServerEmoji === em
+                          ? 'bg-[#23a55a]/30 border-[#23a55a]'
+                          : 'bg-[#1e1f22] border-[#3f4147]'
+                      }`}
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-[11px] font-black uppercase text-[#949ba4] mb-1">
+                  Server Description
+                </label>
+                <input
+                  type="text"
+                  value={newServerDesc}
+                  onChange={(e) => setNewServerDesc(e.target.value)}
+                  placeholder="Short purpose of this server..."
+                  className="w-full px-3 py-2 rounded-md bg-[#1e1f22] border border-[#3f4147] text-white text-xs focus:outline-none focus:border-[#23a55a]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#3f4147]">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateServerModal(false)}
+                  className="px-4 py-2 rounded-md text-xs font-bold text-stone-300 hover:bg-[#35373c]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-md bg-[#23a55a] hover:bg-[#1d8a4a] text-white text-xs font-bold shadow-lg"
+                >
+                  Create Server
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. MODAL: CREATE CHANNEL (SUPER ADMIN)                                    */}
+      {/* ========================================================================= */}
+      {showCreateChannelModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-md bg-[#313338] border border-[#3f4147] rounded-xl shadow-2xl p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#3f4147] pb-3">
+              <div className="flex items-center gap-2 text-white font-extrabold text-base">
+                <Hash className="w-5 h-5 text-[#5865F2]" />
+                <span>Create Channel in {activeServer.name}</span>
+              </div>
+              <button
+                onClick={() => setShowCreateChannelModal(false)}
+                className="text-stone-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateChannel} className="space-y-3">
+              <div>
+                <label className="block text-[10px] sm:text-[11px] font-black uppercase text-[#949ba4] mb-1">
+                  Channel Name
+                </label>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  placeholder="e.g. testimony-lounge, worship-schedule"
+                  required
+                  className="w-full px-3 py-2 rounded-md bg-[#1e1f22] border border-[#3f4147] text-white text-xs focus:outline-none focus:border-[#5865f2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-[11px] font-black uppercase text-[#949ba4] mb-1">
+                  Channel Type
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewChannelType('text')}
+                    className={`p-2 rounded-lg text-xs font-bold border flex flex-col items-center gap-1 ${
+                      newChannelType === 'text'
+                        ? 'bg-[#5865F2]/20 border-[#5865F2] text-white'
+                        : 'bg-[#1e1f22] border-[#3f4147] text-[#949ba4]'
+                    }`}
+                  >
+                    <Hash className="w-4 h-4" />
+                    <span>Text</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewChannelType('voice')}
+                    className={`p-2 rounded-lg text-xs font-bold border flex flex-col items-center gap-1 ${
+                      newChannelType === 'voice'
+                        ? 'bg-[#23a55a]/20 border-[#23a55a] text-white'
+                        : 'bg-[#1e1f22] border-[#3f4147] text-[#949ba4]'
+                    }`}
+                  >
+                    <Volume2 className="w-4 h-4" />
+                    <span>Voice</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewChannelType('announcement')}
+                    className={`p-2 rounded-lg text-xs font-bold border flex flex-col items-center gap-1 ${
+                      newChannelType === 'announcement'
+                        ? 'bg-amber-500/20 border-amber-500 text-white'
+                        : 'bg-[#1e1f22] border-[#3f4147] text-[#949ba4]'
+                    }`}
+                  >
+                    <Bell className="w-4 h-4" />
+                    <span>News</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-[11px] font-black uppercase text-[#949ba4] mb-1">
+                  Topic / Purpose
+                </label>
+                <input
+                  type="text"
+                  value={newChannelTopic}
+                  onChange={(e) => setNewChannelTopic(e.target.value)}
+                  placeholder="What is this channel about?"
+                  className="w-full px-3 py-2 rounded-md bg-[#1e1f22] border border-[#3f4147] text-white text-xs focus:outline-none focus:border-[#5865f2]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#3f4147]">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateChannelModal(false)}
+                  className="px-4 py-2 rounded-md text-xs font-bold text-stone-300 hover:bg-[#35373c]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-md bg-[#5865F2] hover:bg-[#4752c4] text-white text-xs font-bold shadow-lg"
+                >
+                  Create Channel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. MODAL: MEMBER ROLE MANAGEMENT (SUPER ADMIN ONLY)                       */}
+      {/* ========================================================================= */}
+      {showRoleModal && selectedMember && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-md bg-[#313338] border border-[#3f4147] rounded-xl shadow-2xl p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#3f4147] pb-3">
+              <div className="flex items-center gap-2 text-amber-400 font-extrabold text-base">
+                <Crown className="w-5 h-5" />
+                <span>Admin Role Manager: {selectedMember.name}</span>
+              </div>
+              <button onClick={() => setShowRoleModal(false)} className="text-stone-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-[#949ba4]">
+                As App Owner (<strong>{SUPER_ADMIN_EMAIL}</strong>), select a role to assign to{' '}
+                <strong>{selectedMember.name}</strong>:
+              </p>
+
+              <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pt-2">
+                {PRESET_ROLES.filter((r) => r.name !== 'Super Admin').map((role) => (
+                  <button
+                    key={role.name}
+                    onClick={() => handleAssignRole(role)}
+                    className="w-full flex items-center justify-between p-2.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] border border-[#3f4147] transition-all text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{role.icon}</span>
+                      <div>
+                        <span style={{ color: role.color }} className="text-xs font-bold block">
+                          {role.name}
+                        </span>
+                        <span className="text-[10px] text-stone-400">
+                          {role.canManageChannels ? 'Can manage channels' : 'Standard member access'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-white/50">Assign</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-[#3f4147]">
+              <button
+                type="button"
+                onClick={() => handleStartDM(selectedMember)}
+                className="px-3 py-1.5 rounded-md bg-[#5865F2] hover:bg-[#4752c4] text-white text-xs font-bold flex items-center gap-1.5"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Send 1-on-1 DM</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowRoleModal(false)}
+                className="px-4 py-1.5 rounded-md text-xs font-bold text-stone-300 hover:bg-[#35373c]"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 8. MODAL: SCRIPTURE EMBED                                                 */}
       {/* ========================================================================= */}
       {showVerseModal && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
@@ -1102,10 +1456,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                 <BookOpen className="w-5 h-5" />
                 <span>Share Scripture Card Embed</span>
               </div>
-              <button
-                onClick={() => setShowVerseModal(false)}
-                className="text-stone-400 hover:text-white"
-              >
+              <button onClick={() => setShowVerseModal(false)} className="text-stone-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1158,12 +1509,11 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       )}
 
       {/* ========================================================================= */}
-      {/* 6. MODAL: USER & DISCORD PROFILE SETTINGS (MOBILE-RESPONSIVE)             */}
+      {/* 9. MODAL: PROFILE & GOOGLE SETTINGS                                       */}
       {/* ========================================================================= */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="w-full max-w-lg bg-[#313338] border border-[#3f4147] rounded-xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
-            {/* Header Banner */}
             <div className="h-20 sm:h-24 bg-gradient-to-r from-[#5865F2] to-[#23a55a] p-4 flex items-end justify-between relative">
               <button
                 onClick={() => setShowSettingsModal(false)}
@@ -1172,11 +1522,12 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                 <X className="w-5 h-5" />
               </button>
               <div className="text-white">
-                <h3 className="text-base sm:text-lg font-black leading-tight">
-                  Fellowship Profile Settings
+                <h3 className="text-base sm:text-lg font-black leading-tight flex items-center gap-1.5">
+                  Fellowship Profile & App Settings
+                  {isSuperAdmin && <Crown className="w-4 h-4 text-amber-300" />}
                 </h3>
                 <p className="text-[11px] sm:text-xs text-white/80">
-                  Instant chat — no login required!
+                  {isSuperAdmin ? 'App Owner: aw03102008@gmail.com' : 'Instant chat enabled!'}
                 </p>
               </div>
             </div>
@@ -1208,16 +1559,16 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                 />
               </div>
 
-              {/* Google Account Optional Card */}
+              {/* Google Account Card */}
               <div className="p-3.5 bg-[#2b2d31] rounded-lg border border-[#3f4147] space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-sky-400" />
-                    <span>Google Verification (Optional)</span>
+                    <span>Google Account Verification</span>
                   </span>
-                  {currentUser.isGoogleUser && (
-                    <span className="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-1.5 py-0.5 rounded">
-                      Verified
+                  {isSuperAdmin && (
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 font-black px-2 py-0.5 rounded border border-amber-500/30">
+                      👑 Super Admin
                     </span>
                   )}
                 </div>
@@ -1261,7 +1612,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                       />
                     </svg>
-                    <span>Connect Google Account</span>
+                    <span>Sign in with Google (aw03102008@gmail.com)</span>
                   </button>
                 )}
               </div>
@@ -1287,7 +1638,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
       )}
 
       {/* ========================================================================= */}
-      {/* 7. PINNED MESSAGES DRAWER (RESPONSIVE)                                    */}
+      {/* 10. PINNED MESSAGES DRAWER                                                */}
       {/* ========================================================================= */}
       {showPinnedDrawer && (
         <div className="fixed right-0 top-0 bottom-0 w-72 sm:w-80 bg-[#2b2d31] border-l border-[#1f2023] shadow-2xl z-50 flex flex-col p-3 sm:p-4">

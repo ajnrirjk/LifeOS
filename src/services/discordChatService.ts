@@ -5,7 +5,9 @@ import {
   DiscordServer,
   ChatUser,
   ActiveChatMember,
-  UserStatusType
+  UserStatusType,
+  SUPER_ADMIN_EMAIL,
+  PRESET_ROLES
 } from '../types/chat';
 
 export const DEFAULT_SERVERS: DiscordServer[] = [
@@ -94,7 +96,7 @@ export const DEFAULT_CHANNELS: ChatChannel[] = [
     type: 'text',
     emoji: '🕊️',
     createdAt: 1790900000000,
-    lastMessage: 'Welcome to Fellowship! Real-time across all devices like iMessage — no login required!',
+    lastMessage: 'Welcome to Fellowship! Real-time across all devices like iMessage.',
     lastMessageTime: 1790900000000,
   },
   {
@@ -210,61 +212,6 @@ export const DEFAULT_CHANNELS: ChatChannel[] = [
   },
 ];
 
-export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
-  {
-    id: 'msg_seed_1',
-    channelId: 'general',
-    serverId: 'server_fellowship',
-    text: 'Welcome everyone to Fellowship Chat! 🕊️\n\n"Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another." — **Hebrews 10:24-25**',
-    senderId: 'pastor_david',
-    senderName: 'Pastor David',
-    senderRole: 'Pastor',
-    senderRoleColor: '#F59E0B',
-    isGoogleUser: true,
-    createdAt: Date.now() - 3600000 * 5,
-    reactions: { '🙏': ['Pastor David', 'Sister Sarah'], '❤️': ['Brother Marcus', 'Sister Sarah'] },
-    embed: {
-      title: '📖 Welcome to Fellowship Hub',
-      description: 'Real-time text messaging across all devices (phones, computers, tablets) with zero login required. You can also connect your Google account anytime!',
-      color: '#10B981',
-      author: 'Fellowship Ministry',
-      footer: 'Grace and Peace be with you all',
-    }
-  },
-  {
-    id: 'msg_seed_2',
-    channelId: 'general',
-    serverId: 'server_fellowship',
-    text: 'Glory to God! The real-time messaging is super fast now. Text on your phone or computer and it pops up instantly! ✨',
-    senderId: 'sister_sarah',
-    senderName: 'Sister Sarah',
-    senderRole: 'Moderator',
-    senderRoleColor: '#8B5CF6',
-    isGoogleUser: true,
-    createdAt: Date.now() - 3600000 * 3,
-    reactions: { '🙌': ['Pastor David', 'Sister Sarah', 'Brother Marcus'] },
-  },
-  {
-    id: 'msg_seed_3',
-    channelId: 'prayer-chain',
-    serverId: 'server_fellowship',
-    text: 'Please pray for my mother as she undergoes surgery this week. Standing firm on Jehovah Rapha for full restoration! 🙏',
-    senderId: 'brother_marcus',
-    senderName: 'Deacon Marcus',
-    senderRole: 'Deacon',
-    senderRoleColor: '#3B82F6',
-    isGoogleUser: true,
-    createdAt: Date.now() - 3600000 * 2,
-    reactions: { '🙏': ['Pastor David', 'Sister Sarah'] },
-    attachment: {
-      type: 'verse',
-      title: 'Jeremiah 30:17',
-      content: '“For I will restore health to you, and your wounds I will heal, declares the LORD.”',
-      reference: 'Jeremiah 30:17 (ESV)'
-    }
-  }
-];
-
 export const DEFAULT_MEMBERS: ActiveChatMember[] = [
   {
     id: 'pastor_david',
@@ -274,7 +221,7 @@ export const DEFAULT_MEMBERS: ActiveChatMember[] = [
     status: 'online',
     customStatus: 'Preaching Christ Crucified ✝️',
     role: 'Pastor',
-    roleColor: '#F59E0B',
+    roleColor: '#8B5CF6',
     lastSeen: Date.now(),
   },
   {
@@ -285,7 +232,7 @@ export const DEFAULT_MEMBERS: ActiveChatMember[] = [
     status: 'online',
     customStatus: 'Rejoicing always in the Lord! ✨',
     role: 'Moderator',
-    roleColor: '#8B5CF6',
+    roleColor: '#3B82F6',
     lastSeen: Date.now(),
   },
   {
@@ -296,7 +243,7 @@ export const DEFAULT_MEMBERS: ActiveChatMember[] = [
     status: 'idle',
     customStatus: 'In prayer room 🙏',
     role: 'Deacon',
-    roleColor: '#3B82F6',
+    roleColor: '#10B981',
     lastSeen: Date.now() - 120000,
   },
   {
@@ -313,9 +260,10 @@ export const DEFAULT_MEMBERS: ActiveChatMember[] = [
 ];
 
 const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
-const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v5/messages';
-const MQTT_TOPIC_PRESENCE = 'lifeos/fellowship/v5/presence';
-const MQTT_TOPIC_SYNC = 'lifeos/fellowship/v5/sync';
+const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v6/messages';
+const MQTT_TOPIC_PRESENCE = 'lifeos/fellowship/v6/presence';
+const MQTT_TOPIC_STRUCTURE = 'lifeos/fellowship/v6/structure';
+const MQTT_TOPIC_SYNC = 'lifeos/fellowship/v6/sync';
 
 type DiscordEventListener = (event: { type: string; data: any }) => void;
 
@@ -330,6 +278,8 @@ class DiscordChatService {
     name: 'Believer in Christ',
     discriminator: String(Math.floor(1000 + Math.random() * 9000)),
     isGoogleUser: false,
+    isOwner: false,
+    isAdmin: false,
     status: 'online',
     role: 'Believer',
     roleColor: '#10B981',
@@ -337,8 +287,10 @@ class DiscordChatService {
 
   public serversCache: DiscordServer[] = DEFAULT_SERVERS;
   public channelsCache: ChatChannel[] = DEFAULT_CHANNELS;
+  public dmChannelsCache: ChatChannel[] = [];
   public messagesCache: ChatMessage[] = [];
   public membersCache: ActiveChatMember[] = DEFAULT_MEMBERS;
+  public roleOverrides: Record<string, { role: string; roleColor: string }> = {};
 
   constructor() {
     this.initCaches();
@@ -348,40 +300,74 @@ class DiscordChatService {
 
   private initCaches() {
     try {
-      const savedUser = localStorage.getItem('lifeos_discord_user_v5');
+      const savedUser = localStorage.getItem('lifeos_discord_user_v6');
       if (savedUser) {
         this.currentUser = JSON.parse(savedUser);
       }
     } catch {}
 
+    // Verify Super Admin
+    if (this.currentUser.email === SUPER_ADMIN_EMAIL) {
+      this.currentUser.isOwner = true;
+      this.currentUser.isAdmin = true;
+      this.currentUser.role = 'Super Admin';
+      this.currentUser.roleColor = '#F59E0B';
+    }
+
     try {
-      const savedMsgs = localStorage.getItem('lifeos_discord_messages_v5');
+      const savedServers = localStorage.getItem('lifeos_discord_servers_v6');
+      if (savedServers) {
+        this.serversCache = JSON.parse(savedServers);
+      }
+    } catch {}
+
+    try {
+      const savedChannels = localStorage.getItem('lifeos_discord_channels_v6');
+      if (savedChannels) {
+        this.channelsCache = JSON.parse(savedChannels);
+      }
+    } catch {}
+
+    try {
+      const savedDMs = localStorage.getItem('lifeos_discord_dms_v6');
+      if (savedDMs) {
+        this.dmChannelsCache = JSON.parse(savedDMs);
+      }
+    } catch {}
+
+    try {
+      const savedRoles = localStorage.getItem('lifeos_discord_roles_v6');
+      if (savedRoles) {
+        this.roleOverrides = JSON.parse(savedRoles);
+      }
+    } catch {}
+
+    try {
+      const savedMsgs = localStorage.getItem('lifeos_discord_messages_v6');
       if (savedMsgs) {
         const parsed = JSON.parse(savedMsgs);
         if (Array.isArray(parsed) && parsed.length > 0) {
           this.messagesCache = parsed;
-        } else {
-          this.messagesCache = DEFAULT_SEED_MESSAGES;
         }
-      } else {
-        this.messagesCache = DEFAULT_SEED_MESSAGES;
       }
-    } catch {
-      this.messagesCache = DEFAULT_SEED_MESSAGES;
-    }
+    } catch {}
   }
 
   private saveCaches() {
     try {
-      localStorage.setItem('lifeos_discord_messages_v5', JSON.stringify(this.messagesCache));
-      localStorage.setItem('lifeos_discord_user_v5', JSON.stringify(this.currentUser));
+      localStorage.setItem('lifeos_discord_messages_v6', JSON.stringify(this.messagesCache));
+      localStorage.setItem('lifeos_discord_user_v6', JSON.stringify(this.currentUser));
+      localStorage.setItem('lifeos_discord_servers_v6', JSON.stringify(this.serversCache));
+      localStorage.setItem('lifeos_discord_channels_v6', JSON.stringify(this.channelsCache));
+      localStorage.setItem('lifeos_discord_dms_v6', JSON.stringify(this.dmChannelsCache));
+      localStorage.setItem('lifeos_discord_roles_v6', JSON.stringify(this.roleOverrides));
     } catch {}
   }
 
   private initBroadcastChannel() {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
-        this.broadcastChannel = new BroadcastChannel('lifeos_discord_sync_v5');
+        this.broadcastChannel = new BroadcastChannel('lifeos_discord_sync_v6');
         this.broadcastChannel.onmessage = (e) => {
           if (e.data && e.data.type) {
             this.handleIncomingPayload(e.data.type, e.data.data, false);
@@ -391,12 +377,11 @@ class DiscordChatService {
     }
   }
 
-  // Real-Time Cross-Device WebSocket Messaging (Sub-50ms iMessage Speed)
   private initMqttRealtime() {
     if (typeof window === 'undefined') return;
 
     try {
-      const clientId = `lifeos_client_${this.currentUser.id}_${Math.random().toString(36).substring(2, 6)}`;
+      const clientId = `lifeos_${this.currentUser.id}_${Math.random().toString(36).substring(2, 6)}`;
       const client = mqtt.connect(MQTT_BROKER_URL, {
         clientId,
         clean: true,
@@ -409,15 +394,15 @@ class DiscordChatService {
 
       client.on('connect', () => {
         this.isConnectedToBroker = true;
-
-        // Subscribe to real-time messages and sync channels
-        client.subscribe([MQTT_TOPIC_MESSAGES, MQTT_TOPIC_PRESENCE, MQTT_TOPIC_SYNC], (err) => {
-          if (!err) {
-            // Broadcast presence and request sync
-            this.publishPresence();
-            this.requestSync();
+        client.subscribe(
+          [MQTT_TOPIC_MESSAGES, MQTT_TOPIC_PRESENCE, MQTT_TOPIC_STRUCTURE, MQTT_TOPIC_SYNC],
+          (err) => {
+            if (!err) {
+              this.publishPresence();
+              this.requestSync();
+            }
           }
-        });
+        );
       });
 
       client.on('message', (topic, payload) => {
@@ -429,9 +414,10 @@ class DiscordChatService {
             this.handleIncomingPayload(parsed.type, parsed.data, false);
           } else if (topic === MQTT_TOPIC_PRESENCE) {
             this.handlePresenceUpdate(parsed.data);
+          } else if (topic === MQTT_TOPIC_STRUCTURE) {
+            this.handleStructureUpdate(parsed.type, parsed.data);
           } else if (topic === MQTT_TOPIC_SYNC) {
             if (parsed.type === 'sync_request' && parsed.fromId !== this.currentUser.id) {
-              // Share our cached messages to the newly joined device
               this.respondToSync(parsed.fromId);
             } else if (parsed.type === 'sync_response' && parsed.targetId === this.currentUser.id) {
               this.mergeHistory(parsed.messages);
@@ -448,7 +434,7 @@ class DiscordChatService {
         this.isConnectedToBroker = false;
       });
     } catch (err) {
-      console.warn('MQTT connection fallback:', err);
+      console.warn('MQTT init fallback:', err);
     }
   }
 
@@ -491,11 +477,55 @@ class DiscordChatService {
     }
   }
 
+  private handleStructureUpdate(type: string, data: any) {
+    if (type === 'server_created') {
+      const newServer: DiscordServer = data;
+      if (!this.serversCache.some((s) => s.id === newServer.id)) {
+        this.serversCache.push(newServer);
+        this.saveCaches();
+        this.emit({ type: 'server_created', data: newServer });
+      }
+    } else if (type === 'channel_created') {
+      const newChan: ChatChannel = data;
+      if (!this.channelsCache.some((c) => c.id === newChan.id)) {
+        this.channelsCache.push(newChan);
+        // Also update parent server categories
+        const srv = this.serversCache.find((s) => s.id === newChan.serverId);
+        if (srv && srv.categories.length > 0) {
+          srv.categories[0].channelIds.push(newChan.id);
+        }
+        this.saveCaches();
+        this.emit({ type: 'channel_created', data: newChan });
+      }
+    } else if (type === 'role_assigned') {
+      const { memberId, role, roleColor } = data;
+      this.roleOverrides[memberId] = { role, roleColor };
+      // Update in members cache
+      const mem = this.membersCache.find((m) => m.id === memberId);
+      if (mem) {
+        mem.role = role;
+        mem.roleColor = roleColor;
+      }
+      if (this.currentUser.id === memberId) {
+        this.currentUser.role = role;
+        this.currentUser.roleColor = roleColor;
+      }
+      this.saveCaches();
+      this.emit({ type: 'role_assigned', data });
+    }
+  }
+
   private handlePresenceUpdate(data: any) {
     if (!data || !data.user || data.user.id === this.currentUser.id) return;
     const incomingUser: ChatUser = data.user;
-    
-    // Update or add to members list
+
+    const roleInfo = this.roleOverrides[incomingUser.id] || {
+      role: incomingUser.role || 'Believer',
+      roleColor: incomingUser.roleColor || '#10B981',
+    };
+
+    const isOwner = incomingUser.email === SUPER_ADMIN_EMAIL;
+
     const existingIndex = this.membersCache.findIndex((m) => m.id === incomingUser.id);
     const memberObj: ActiveChatMember = {
       id: incomingUser.id,
@@ -504,10 +534,12 @@ class DiscordChatService {
       photoURL: incomingUser.photoURL,
       email: incomingUser.email,
       isGoogleUser: incomingUser.isGoogleUser,
+      isOwner,
+      isAdmin: isOwner || roleInfo.role === 'Admin' || roleInfo.role === 'Super Admin',
       status: incomingUser.status || 'online',
       customStatus: incomingUser.customStatus,
-      role: incomingUser.role || 'Believer',
-      roleColor: incomingUser.roleColor || '#10B981',
+      role: isOwner ? 'Super Admin' : roleInfo.role,
+      roleColor: isOwner ? '#F59E0B' : roleInfo.roleColor,
       lastSeen: Date.now(),
     };
 
@@ -551,7 +583,7 @@ class DiscordChatService {
         JSON.stringify({
           type: 'sync_response',
           targetId,
-          messages: this.messagesCache.slice(-50),
+          messages: this.messagesCache.slice(-80),
         })
       );
     }
@@ -591,9 +623,14 @@ class DiscordChatService {
   }
 
   public setCurrentUser(user: Partial<ChatUser>) {
+    const isOwner = user.email === SUPER_ADMIN_EMAIL || this.currentUser.email === SUPER_ADMIN_EMAIL;
     this.currentUser = {
       ...this.currentUser,
       ...user,
+      isOwner,
+      isAdmin: isOwner || user.isAdmin,
+      role: isOwner ? 'Super Admin' : (user.role || this.currentUser.role),
+      roleColor: isOwner ? '#F59E0B' : (user.roleColor || this.currentUser.roleColor),
     };
     this.saveCaches();
     this.publishPresence();
@@ -611,10 +648,146 @@ class DiscordChatService {
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
-  // Send Message - Sub-50ms Cross-Device Instant Text Message
+  // Direct Message Channels (1-on-1)
+  public getOrCreateDMChannel(targetMember: ActiveChatMember): ChatChannel {
+    const dmChannelId = `dm_${[this.currentUser.id, targetMember.id].sort().join('_')}`;
+    let existingDM = this.dmChannelsCache.find((d) => d.id === dmChannelId);
+
+    if (!existingDM) {
+      existingDM = {
+        id: dmChannelId,
+        name: targetMember.name,
+        topic: `Direct message with @${targetMember.name}`,
+        type: 'dm',
+        emoji: '💬',
+        isPrivate: true,
+        dmRecipient: targetMember,
+        createdAt: Date.now(),
+      };
+      this.dmChannelsCache.push(existingDM);
+      this.saveCaches();
+    }
+    return existingDM;
+  }
+
+  // Create Server (Super Admin & Authorized users)
+  public createServer(payload: { name: string; emoji: string; description: string }): DiscordServer {
+    const serverId = `server_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newServer: DiscordServer = {
+      id: serverId,
+      name: payload.name.trim(),
+      emoji: payload.emoji.trim() || '⛪',
+      description: payload.description.trim() || 'Fellowship community server',
+      bannerGradient: 'from-amber-900/60 via-slate-900 to-zinc-950',
+      creatorId: this.currentUser.id,
+      isOwnerCreated: this.currentUser.isOwner,
+      categories: [
+        {
+          id: `cat_${serverId}_general`,
+          name: 'CHANNELS',
+          channelIds: [`chan_${serverId}_general`],
+        },
+      ],
+    };
+
+    const initialChannel: ChatChannel = {
+      id: `chan_${serverId}_general`,
+      serverId: serverId,
+      name: 'general-chat',
+      topic: `Welcome to ${newServer.name}!`,
+      type: 'text',
+      emoji: '🕊️',
+      createdAt: Date.now(),
+    };
+
+    this.serversCache.push(newServer);
+    this.channelsCache.push(initialChannel);
+    this.saveCaches();
+
+    // Broadcast server & channel creation to other clients
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_STRUCTURE,
+        JSON.stringify({ type: 'server_created', data: newServer })
+      );
+      this.mqttClient.publish(
+        MQTT_TOPIC_STRUCTURE,
+        JSON.stringify({ type: 'channel_created', data: initialChannel })
+      );
+    }
+
+    this.emit({ type: 'server_created', data: newServer });
+    return newServer;
+  }
+
+  // Create Channel
+  public createChannel(payload: {
+    serverId: string;
+    name: string;
+    topic: string;
+    type: 'text' | 'voice' | 'announcement';
+  }): ChatChannel {
+    const channelId = `chan_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newChan: ChatChannel = {
+      id: channelId,
+      serverId: payload.serverId,
+      name: payload.name.toLowerCase().replace(/\s+/g, '-'),
+      topic: payload.topic,
+      type: payload.type,
+      emoji: payload.type === 'voice' ? '🔊' : payload.type === 'announcement' ? '📢' : '💬',
+      createdAt: Date.now(),
+    };
+
+    this.channelsCache.push(newChan);
+    const srv = this.serversCache.find((s) => s.id === payload.serverId);
+    if (srv && srv.categories.length > 0) {
+      srv.categories[0].channelIds.push(channelId);
+    }
+    this.saveCaches();
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_STRUCTURE,
+        JSON.stringify({ type: 'channel_created', data: newChan })
+      );
+    }
+
+    this.emit({ type: 'channel_created', data: newChan });
+    return newChan;
+  }
+
+  // Assign Role to any member (Super Admin / Admin only)
+  public assignMemberRole(memberId: string, roleName: string, roleColor: string) {
+    this.roleOverrides[memberId] = { role: roleName, roleColor };
+    const mem = this.membersCache.find((m) => m.id === memberId);
+    if (mem) {
+      mem.role = roleName;
+      mem.roleColor = roleColor;
+    }
+    if (this.currentUser.id === memberId) {
+      this.currentUser.role = roleName;
+      this.currentUser.roleColor = roleColor;
+    }
+    this.saveCaches();
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_STRUCTURE,
+        JSON.stringify({
+          type: 'role_assigned',
+          data: { memberId, role: roleName, roleColor },
+        })
+      );
+    }
+
+    this.emit({ type: 'role_assigned', data: { memberId, role: roleName, roleColor } });
+  }
+
+  // Send Message - Sub-50ms Instant 1-on-1 or Channel Delivery
   public async sendMessage(payload: {
     channelId: string;
-    serverId: string;
+    serverId?: string;
+    recipientId?: string;
     text: string;
     replyTo?: ChatMessage['replyTo'];
     attachment?: ChatMessage['attachment'];
@@ -625,6 +798,7 @@ class DiscordChatService {
       id: messageId,
       channelId: payload.channelId,
       serverId: payload.serverId,
+      recipientId: payload.recipientId,
       text: payload.text.trim(),
       senderId: this.currentUser.id,
       senderName: this.currentUser.name,
@@ -643,7 +817,7 @@ class DiscordChatService {
     // 1. Optimistic Local Update & Broadcast
     this.handleIncomingPayload('message', newMsg, true);
 
-    // 2. Publish to MQTT WebSocket Network for All Other Devices / Phones / Incognito
+    // 2. Publish to MQTT WebSocket Network
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
