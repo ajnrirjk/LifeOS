@@ -378,7 +378,20 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 </tr>
 
                 {/* Other Members */}
-                {filteredMembers.map((member) => (
+                {filteredMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 px-4 text-center">
+                      <div className="flex flex-col items-center justify-center space-y-2 text-[#949ba4]">
+                        <Users className="w-8 h-8 text-stone-500 opacity-60" />
+                        <p className="text-xs font-bold text-white">No other real members currently in this server</p>
+                        <p className="text-[11px] text-stone-400 max-w-md">
+                          All fake placeholder bots have been cleared. When another real person opens Fellowship Chat on their phone, laptop, or another browser window, their live session will automatically appear here in real-time!
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMembers.map((member) => (
                   <tr key={member.id} className="hover:bg-[#35373c]/50 transition-colors">
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2.5">
@@ -490,7 +503,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       </div>
                     </td>
                   </tr>
-                ))}
+                ))
+              )}
               </tbody>
             </table>
           </div>

@@ -1309,53 +1309,65 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
             </div>
 
             {/* Other Members */}
-            {members.map((m) => (
-              <div
-                key={m.id}
-                onClick={() => {
-                  setSelectedMember(m);
-                  if (isSuperAdmin) {
-                    setShowRoleModal(true);
-                  } else {
-                    handleStartDM(m);
-                  }
-                }}
-                className="flex items-center justify-between px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors group"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative">
-                    <div
-                      style={{ backgroundColor: m.roleColor || '#10B981' }}
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs"
-                    >
-                      {m.name.charAt(0)}
-                    </div>
-                    <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span
-                      style={{ color: m.roleColor || '#dbdee1' }}
-                      className="text-xs font-bold truncate flex items-center gap-1"
-                    >
-                      {m.name}
-                      {m.email === SUPER_ADMIN_EMAIL && <Crown className="w-3 h-3 text-amber-400" />}
-                    </span>
-                    <span className="text-[10px] text-[#949ba4] truncate">{m.role || 'Believer'}</span>
-                  </div>
+            {members.length === 0 ? (
+              <div className="px-2 py-4 text-center space-y-1.5 bg-[#232428]/40 rounded-lg mt-2 border border-[#383a40]/30">
+                <div className="w-7 h-7 rounded-full bg-[#35373c] flex items-center justify-center text-stone-400 mx-auto">
+                  <Users className="w-3.5 h-3.5" />
                 </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStartDM(m);
-                  }}
-                  className="p-1.5 rounded hover:bg-[#5865F2] text-stone-400 hover:text-white transition-colors"
-                  title={`Direct Message @${m.name}`}
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                </button>
+                <p className="text-[11px] font-bold text-stone-300">No other believers online</p>
+                <p className="text-[9px] text-stone-500 leading-tight">
+                  Open on your phone or invite friends to see real users appear live!
+                </p>
               </div>
-            ))}
+            ) : (
+              members.map((m) => (
+                <div
+                  key={m.id}
+                  onClick={() => {
+                    setSelectedMember(m);
+                    if (isSuperAdmin) {
+                      setShowRoleModal(true);
+                    } else {
+                      handleStartDM(m);
+                    }
+                  }}
+                  className="flex items-center justify-between px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative">
+                      <div
+                        style={{ backgroundColor: m.roleColor || '#10B981' }}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs"
+                      >
+                        {m.name.charAt(0)}
+                      </div>
+                      <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span
+                        style={{ color: m.roleColor || '#dbdee1' }}
+                        className="text-xs font-bold truncate flex items-center gap-1"
+                      >
+                        {m.name}
+                        {m.email === SUPER_ADMIN_EMAIL && <Crown className="w-3 h-3 text-amber-400" />}
+                      </span>
+                      <span className="text-[10px] text-[#949ba4] truncate">{m.role || 'Believer'}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartDM(m);
+                    }}
+                    className="p-1.5 rounded hover:bg-[#5865F2] text-stone-400 hover:text-white transition-colors"
+                    title={`Direct Message @${m.name}`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </aside>

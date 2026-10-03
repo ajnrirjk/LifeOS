@@ -214,105 +214,28 @@ export const DEFAULT_CHANNELS: ChatChannel[] = [
 
 export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
   {
-    id: 'msg_seed_1',
+    id: 'msg_welcome_fellowship',
     channelId: 'general',
     serverId: 'server_fellowship',
-    text: 'Welcome everyone to Fellowship Chat! 🕊️\n\n"Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another." — **Hebrews 10:24-25**',
-    senderId: 'pastor_david',
-    senderName: 'Pastor David',
-    senderRole: 'Pastor',
-    senderRoleColor: '#8B5CF6',
-    isGoogleUser: true,
-    createdAt: Date.now() - 3600000 * 5,
-    reactions: { '🙏': ['Pastor David', 'Sister Sarah'], '❤️': ['Deacon Marcus', 'Sister Sarah'] },
+    text: 'Welcome to Fellowship Chat! 🕊️\n\n"For where two or three are gathered together in my name, there am I in the midst of them." — **Matthew 18:20**\n\nReal-time multi-device text fellowship is active. Every person online appears live in the members list.',
+    senderId: 'fellowship_system',
+    senderName: 'Fellowship Global',
+    senderRole: 'System',
+    senderRoleColor: '#F59E0B',
+    isGoogleUser: false,
+    createdAt: Date.now(),
+    reactions: { '🙏': ['Anthony Williams'], '❤️': ['Anthony Williams'] },
     embed: {
-      title: '📖 Welcome to Fellowship Hub',
-      description: 'Real-time text messaging across all devices (phones, computers, tablets) with zero login required. You can also connect your Google account anytime!',
+      title: '🕊️ Real-Time Fellowship Hub',
+      description: 'Real-time multi-device messaging across all phones, tablets, and computers with sub-50ms sync.',
       color: '#10B981',
-      author: 'Fellowship Ministry',
+      author: 'Fellowship Sanctuary',
       footer: 'Grace and Peace be with you all',
-    }
-  },
-  {
-    id: 'msg_seed_2',
-    channelId: 'general',
-    serverId: 'server_fellowship',
-    text: 'Glory to God! The real-time messaging is super fast now. Text on your phone or computer and it pops up instantly! ✨',
-    senderId: 'sister_sarah',
-    senderName: 'Sister Sarah',
-    senderRole: 'Moderator',
-    senderRoleColor: '#3B82F6',
-    isGoogleUser: true,
-    createdAt: Date.now() - 3600000 * 3,
-    reactions: { '🙌': ['Pastor David', 'Sister Sarah', 'Deacon Marcus'] },
-  },
-  {
-    id: 'msg_seed_3',
-    channelId: 'prayer-chain',
-    serverId: 'server_fellowship',
-    text: 'Please pray for my mother as she undergoes surgery this week. Standing firm on Jehovah Rapha for full restoration! 🙏',
-    senderId: 'brother_marcus',
-    senderName: 'Deacon Marcus',
-    senderRole: 'Deacon',
-    senderRoleColor: '#10B981',
-    isGoogleUser: true,
-    createdAt: Date.now() - 3600000 * 2,
-    reactions: { '🙏': ['Pastor David', 'Sister Sarah'] },
-    attachment: {
-      type: 'verse',
-      title: 'Jeremiah 30:17',
-      content: '“For I will restore health to you, and your wounds I will heal, declares the LORD.”',
-      reference: 'Jeremiah 30:17 (ESV)'
     }
   }
 ];
 
-export const DEFAULT_MEMBERS: ActiveChatMember[] = [
-  {
-    id: 'pastor_david',
-    name: 'Pastor David',
-    discriminator: '0001',
-    isGoogleUser: true,
-    status: 'online',
-    customStatus: 'Preaching Christ Crucified ✝️',
-    role: 'Pastor',
-    roleColor: '#8B5CF6',
-    lastSeen: Date.now(),
-  },
-  {
-    id: 'sister_sarah',
-    name: 'Sister Sarah',
-    discriminator: '0002',
-    isGoogleUser: true,
-    status: 'online',
-    customStatus: 'Rejoicing always in the Lord! ✨',
-    role: 'Moderator',
-    roleColor: '#3B82F6',
-    lastSeen: Date.now(),
-  },
-  {
-    id: 'brother_marcus',
-    name: 'Deacon Marcus',
-    discriminator: '0003',
-    isGoogleUser: true,
-    status: 'idle',
-    customStatus: 'In prayer room 🙏',
-    role: 'Deacon',
-    roleColor: '#10B981',
-    lastSeen: Date.now() - 120000,
-  },
-  {
-    id: 'sister_hannah',
-    name: 'Hannah Grace',
-    discriminator: '0004',
-    isGoogleUser: true,
-    status: 'offline',
-    customStatus: 'Reading Psalms 23',
-    role: 'Worship Leader',
-    roleColor: '#EC4899',
-    lastSeen: Date.now() - 86400000,
-  }
-];
+export const DEFAULT_MEMBERS: ActiveChatMember[] = [];
 
 const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
 const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v6/messages';
@@ -441,6 +364,12 @@ class DiscordChatService {
         }
       }
     } catch {}
+
+    // Clean out fake mock placeholder accounts permanently
+    const FAKE_MOCK_IDS = new Set(['pastor_david', 'sister_sarah', 'brother_marcus', 'sister_hannah']);
+    this.membersCache = this.membersCache.filter((m) => !FAKE_MOCK_IDS.has(m.id));
+    this.messagesCache = this.messagesCache.filter((m) => !FAKE_MOCK_IDS.has(m.senderId));
+    this.saveCaches();
   }
 
   private saveCaches() {
@@ -494,6 +423,13 @@ class DiscordChatService {
             }
           }
         );
+
+        // Keep real users continuously discovered via 10s presence heartbeat
+        setInterval(() => {
+          if (this.mqttClient && this.mqttClient.connected) {
+            this.publishPresence();
+          }
+        }, 10000);
       });
 
       client.on('message', (topic, payload) => {
@@ -535,6 +471,26 @@ class DiscordChatService {
       if (!msg || !msg.id || !msg.text) return;
       if (!this.messagesCache.some((m) => m.id === msg.id)) {
         this.messagesCache.push(msg);
+
+        // Auto-register real incoming message senders in members list
+        if (msg.senderId && msg.senderId !== this.currentUser.id && msg.senderId !== 'fellowship_system') {
+          const exists = this.membersCache.some((m) => m.id === msg.senderId);
+          if (!exists) {
+            this.membersCache.push({
+              id: msg.senderId,
+              name: msg.senderName,
+              email: msg.senderEmail || undefined,
+              photoURL: msg.senderPhoto || undefined,
+              isGoogleUser: msg.isGoogleUser,
+              role: msg.senderRole || 'Believer',
+              roleColor: msg.senderRoleColor || '#10B981',
+              status: 'online',
+              lastSeen: Date.now(),
+            });
+            this.emit({ type: 'user_status', data: { members: this.membersCache } });
+          }
+        }
+
         this.saveCaches();
         this.emit({ type: 'message', data: msg });
       }
