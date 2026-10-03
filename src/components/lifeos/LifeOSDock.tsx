@@ -213,6 +213,19 @@ export const LifeOSDock: React.FC = () => {
       {/* MOBILE BOTTOM NAVIGATION DOCK (ALL APPS ACCESSIBLE) (< 768px) */}
       <nav className="flex md:hidden fixed bottom-0 left-0 right-0 z-40 bg-stone-950/95 backdrop-blur-2xl border-t border-white/15 px-1.5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] items-center select-none shadow-[0_-8px_30px_rgba(0,0,0,0.8)] overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-1.5 w-full justify-between min-w-max px-1">
+          {/* All Apps / Drawer Launcher Button at the START */}
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setIsAppDrawerOpen(true);
+            }}
+            className="flex flex-col items-center justify-center gap-0.5 py-1 px-2.5 rounded-2xl text-amber-300 hover:text-amber-200 bg-amber-500/15 border border-amber-500/30 min-w-[56px] min-h-[46px] active:scale-95 transition-all"
+            title="Open All Apps Drawer"
+          >
+            <LayoutGrid className="w-5 h-5 text-amber-400" />
+            <span className="text-[10px] tracking-tight font-black">All Apps</span>
+          </button>
+
           {/* Home / Desktop Tab */}
           <button
             onClick={() => {
@@ -273,19 +286,6 @@ export const LifeOSDock: React.FC = () => {
               </button>
             );
           })}
-
-          {/* All Apps / Drawer Launcher Button */}
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setIsAppDrawerOpen(true);
-            }}
-            className="flex flex-col items-center justify-center gap-0.5 py-1 px-2.5 rounded-2xl text-amber-300 hover:text-amber-200 bg-amber-500/15 border border-amber-500/30 min-w-[56px] min-h-[46px] active:scale-95 transition-all"
-            title="Open All Apps Drawer"
-          >
-            <LayoutGrid className="w-5 h-5 text-amber-400" />
-            <span className="text-[10px] tracking-tight font-black">All Apps</span>
-          </button>
         </div>
       </nav>
 
