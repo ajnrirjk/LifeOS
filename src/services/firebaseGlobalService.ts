@@ -81,7 +81,6 @@ class FirebaseGlobalService {
             };
             this.notifyConfigListeners();
           } else if (topic === 'lifeos/global/members_v3' && Array.isArray(parsed)) {
-            // Deduplicate incoming members
             this.cachedMembers = this.cleanAndDeduplicateMembers(parsed);
             this.notifyMembersListeners();
           }
@@ -143,9 +142,9 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // Deduplicate Anthony Williams and any other duplicate IDs
+  // Deduplicate members cleanly by handle and master admin email
   private cleanAndDeduplicateMembers(list: FellowshipMember[]): FellowshipMember[] {
-    const seenIds = new Set<string>();
+    const seenHandles = new Set<string>();
     const seenEmails = new Set<string>();
     const cleaned: FellowshipMember[] = [];
 
@@ -172,8 +171,10 @@ class FirebaseGlobalService {
         continue;
       }
 
-      if (seenIds.has(m.id)) continue;
-      seenIds.add(m.id);
+      const hKey = (m.handle || '').toLowerCase().trim();
+      if (hKey && seenHandles.has(hKey)) continue;
+      if (hKey) seenHandles.add(hKey);
+
       cleaned.push(m);
     }
 
@@ -277,13 +278,22 @@ class FirebaseGlobalService {
 
   // 7. Register or update a real user - PERMANENTLY MERGES INTO CLOUD
   async registerMember(member: FellowshipMember) {
-    const memberId = member.id || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const isMaster = (member.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
-                     (member.handle?.toLowerCase().includes('aw03102008'));
+    const cleanHandle = (member.handle || '').toLowerCase().trim();
+    const cleanEmail = (member.email || '').toLowerCase().trim();
+    const isMaster = (cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase()) ||
+                     cleanHandle.includes('aw03102008');
+
+    // Give each distinct handle its own stable, unique ID so devices never collide
+    const stableId = isMaster
+      ? 'usr_master_admin_aw'
+      : (member.id && member.id !== 'usr_me_001')
+      ? member.id
+      : `usr_${cleanHandle.replace(/[^a-z0-9]/g, '') || Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
     const safeMember: FellowshipMember = {
       ...member,
-      id: memberId,
+      id: stableId,
+      handle: member.handle || `@user_${Math.floor(1000 + Math.random() * 9000)}`,
       role: isMaster ? 'superadmin' : (member.role || 'user'),
       avatar: isMaster ? '👑' : (member.avatar || '🕊️'),
       status: member.status || 'active',
@@ -302,12 +312,15 @@ class FirebaseGlobalService {
       }
     } catch {}
 
-    // 2. Merge into cloud list
+    // 2. Filter out ONLY the same person (by handle or master admin email)
+    const targetHandle = safeMember.handle.toLowerCase().trim();
     const updatedList = cloudList.filter(m => {
-      if (m.id === memberId) return false;
-      if (isMaster && m.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) return false;
+      if (isMaster && m.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) return false;
+      if (!isMaster && m.handle?.toLowerCase().trim() === targetHandle) return false;
+      if (!isMaster && m.id === stableId) return false;
       return true;
     });
+
     updatedList.unshift(safeMember);
 
     const nextMembers = this.cleanAndDeduplicateMembers(updatedList);

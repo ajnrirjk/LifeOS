@@ -44,16 +44,16 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
       try {
         deviceUserId = localStorage.getItem('lifeos_device_unique_user_id') || '';
       } catch {}
-      if (!deviceUserId) {
+      if (!deviceUserId || deviceUserId === 'usr_me_001') {
         deviceUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
         try {
           localStorage.setItem('lifeos_device_unique_user_id', deviceUserId);
         } catch {}
       }
 
-      const userId = googleUser?.uid || deviceUserId;
       const isMasterAdmin = (googleUser?.email?.toLowerCase().trim() === 'aw03102008@gmail.com') ||
                             (settings.profile.email?.toLowerCase().trim() === 'aw03102008@gmail.com');
+      const userId = isMasterAdmin ? 'usr_master_admin_aw' : (googleUser?.uid || deviceUserId);
 
       // Register with global Firestore and backend
       await firebaseGlobalService.registerMember({

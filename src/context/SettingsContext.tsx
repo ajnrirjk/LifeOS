@@ -212,7 +212,14 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [settings, setSettings] = useState<UserSettings>(() => {
     try {
       const saved = localStorage.getItem('lifeos_system_settings_v1');
-      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.profile && (parsed.profile.id === 'usr_me_001' || !parsed.profile.id)) {
+          parsed.profile.id = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        }
+        return { ...DEFAULT_SETTINGS, ...parsed };
+      }
+      return DEFAULT_SETTINGS;
     } catch {
       return DEFAULT_SETTINGS;
     }
