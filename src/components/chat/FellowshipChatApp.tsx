@@ -282,8 +282,8 @@ export const FellowshipChatApp: React.FC = () => {
         text: textToSend,
         senderId: currentUser.id,
         senderName: currentUser.name,
-        senderPhoto: currentUser.photoURL,
-        senderEmail: currentUser.email,
+        senderPhoto: currentUser.photoURL || undefined,
+        senderEmail: currentUser.email || undefined,
         isGoogleUser: currentUser.isGoogleUser,
       });
 
@@ -305,8 +305,8 @@ export const FellowshipChatApp: React.FC = () => {
         text: `“${todayHighlight.text}” — ${todayHighlight.reference}`,
         senderId: currentUser.id,
         senderName: currentUser.name,
-        senderPhoto: currentUser.photoURL,
-        senderEmail: currentUser.email,
+        senderPhoto: currentUser.photoURL || undefined,
+        senderEmail: currentUser.email || undefined,
         isGoogleUser: currentUser.isGoogleUser,
         attachment: {
           type: 'verse',
@@ -339,8 +339,8 @@ export const FellowshipChatApp: React.FC = () => {
             text: `Sharing notes from today's sermon: "${note.title || 'Sunday Sermon'}" (${note.passage || 'Scripture'})`,
             senderId: currentUser.id,
             senderName: currentUser.name,
-            senderPhoto: currentUser.photoURL,
-            senderEmail: currentUser.email,
+            senderPhoto: currentUser.photoURL || undefined,
+            senderEmail: currentUser.email || undefined,
             isGoogleUser: currentUser.isGoogleUser,
             attachment: {
               type: 'sermon_note',

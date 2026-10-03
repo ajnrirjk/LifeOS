@@ -19,6 +19,7 @@ import { DailyWidget } from '../DailyWidget';
 import { LifeOSDesktopWidgets } from './LifeOSDesktopWidgets';
 import { AddWidgetModal } from './AddWidgetModal';
 import { FellowshipChatApp } from '../chat/FellowshipChatApp';
+import { DiscordFellowshipApp } from '../chat/DiscordFellowshipApp';
 import { MiniCatsApp } from '../mini-cats/MiniCatsApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
 import { useApp } from '../../context/AppContext';
@@ -260,7 +261,7 @@ export const LifeOSDesktop: React.FC = () => {
               <div className="flex-1 overflow-y-auto">
                 {activeApp.id === 'faithlingo' && <FaithLingoWindowContent />}
                 {activeApp.id === 'bible_journal' && <BibleJournalApp />}
-                {activeApp.id === 'fellowship_chat' && <FellowshipChatApp />}
+                {activeApp.id === 'fellowship_chat' && <DiscordFellowshipApp />}
                 {activeApp.id === 'mini_cats' && <MiniCatsApp />}
                 {activeApp.id === 'youtube' && <YouTubeApp />}
                 {activeApp.id === 'app_studio' && <AppStudio />}
