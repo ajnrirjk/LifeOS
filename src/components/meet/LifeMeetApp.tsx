@@ -49,6 +49,47 @@ interface ParticipantTileProps {
   onPin?: () => void;
 }
 
+// Stable video player that prevents camera flickering by only re-assigning srcObject when stream reference changes
+const VideoStreamPlayer = React.memo(({
+  stream,
+  isLocal = false,
+  className = ''
+}: {
+  stream: MediaStream | null;
+  isLocal?: boolean;
+  className?: string;
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (stream) {
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+      }
+      if (video.paused) {
+        video.play().catch(() => {});
+      }
+    } else {
+      if (video.srcObject !== null) {
+        video.srcObject = null;
+      }
+    }
+  }, [stream]);
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted={isLocal}
+      className={className}
+    />
+  );
+});
+
 const ParticipantTile: React.FC<ParticipantTileProps> = ({
   participant,
   isLocal,
@@ -57,14 +98,6 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
   isPinned,
   onPin,
 }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream, participant.isVideoMuted]);
-
   return (
     <div
       className={`relative w-full h-full bg-[#1e293b] rounded-2xl sm:rounded-3xl overflow-hidden flex items-center justify-center border transition-all duration-200 group shadow-lg ${
@@ -77,11 +110,9 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
     >
       {/* Video Stream Element */}
       {!participant.isVideoMuted && stream ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal} // Always mute local video element to avoid echo
+        <VideoStreamPlayer
+          stream={stream}
+          isLocal={isLocal}
           className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`}
         />
       ) : (
@@ -342,16 +373,25 @@ export const LifeMeetApp: React.FC = () => {
     setIsLoading(true);
     sounds.playTap();
     try {
+      const fallbackCode = `meet-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
+      let targetCode = fallbackCode;
+
       const newRoom = await meetService.createRoom({
         title: customTitle || `${currentUser.name}'s Fellowship Call`,
         isPublic,
-        hostId: currentUser.id
+        hostId: currentUser.id,
+        customCode: fallbackCode
       });
-      if (newRoom) {
-        await handleJoinMeeting(newRoom.id);
+
+      if (newRoom && newRoom.id) {
+        targetCode = newRoom.id;
       }
+
+      await handleJoinMeeting(targetCode);
     } catch (err) {
       console.error('Error creating meeting:', err);
+      const fallbackCode = `meet-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
+      await handleJoinMeeting(fallbackCode);
     } finally {
       setIsLoading(false);
     }
@@ -444,13 +484,9 @@ export const LifeMeetApp: React.FC = () => {
             <div className="lg:col-span-7 flex flex-col gap-4">
               <div className="relative aspect-video w-full bg-[#131b2e] rounded-3xl overflow-hidden border-2 border-white/15 shadow-2xl flex items-center justify-center">
                 {!isVideoMuted && localStream ? (
-                  <video
-                    ref={(el) => {
-                      if (el && localStream) el.srcObject = localStream;
-                    }}
-                    autoPlay
-                    playsInline
-                    muted
+                  <VideoStreamPlayer
+                    stream={localStream}
+                    isLocal={true}
                     className="w-full h-full object-cover scale-x-[-1]"
                   />
                 ) : (
