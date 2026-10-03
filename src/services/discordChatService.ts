@@ -275,6 +275,35 @@ class DiscordChatService {
     this.initCaches();
     this.initBroadcastChannel();
     this.initMqttRealtime();
+    this.initLivenessCheck();
+  }
+
+  private initLivenessCheck() {
+    if (typeof window === 'undefined') return;
+
+    // Listen for tab close or page hide to immediately signal offline status
+    window.addEventListener('beforeunload', () => {
+      this.publishOffline();
+    });
+    window.addEventListener('pagehide', () => {
+      this.publishOffline();
+    });
+
+    // Periodic sweep: If user hasn't sent a heartbeat in 20 seconds, mark as offline
+    setInterval(() => {
+      let changed = false;
+      const now = Date.now();
+      this.membersCache.forEach((m) => {
+        if (m.status !== 'offline' && now - m.lastSeen > 20000) {
+          m.status = 'offline';
+          changed = true;
+        }
+      });
+      if (changed) {
+        this.saveCaches();
+        this.emit({ type: 'user_status', data: { members: this.membersCache } });
+      }
+    }, 5000);
   }
 
   private initCaches() {
@@ -618,7 +647,20 @@ class DiscordChatService {
   }
 
   private handlePresenceUpdate(data: any) {
-    if (!data || !data.user || data.user.id === this.currentUser.id) return;
+    if (!data) return;
+
+    // Direct offline signal
+    if (data.type === 'offline' && data.userId) {
+      const mem = this.membersCache.find((m) => m.id === data.userId);
+      if (mem) {
+        mem.status = 'offline';
+        this.saveCaches();
+        this.emit({ type: 'user_status', data: { members: this.membersCache } });
+      }
+      return;
+    }
+
+    if (!data.user || data.user.id === this.currentUser.id) return;
     const incomingUser: ChatUser = data.user;
 
     const roleInfo = this.roleOverrides[incomingUser.id] || {
@@ -652,6 +694,20 @@ class DiscordChatService {
     }
 
     this.emit({ type: 'user_status', data: { members: this.membersCache } });
+  }
+
+  public publishOffline() {
+    if (this.mqttClient && this.mqttClient.connected) {
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_PRESENCE,
+          JSON.stringify({
+            type: 'presence',
+            data: { type: 'offline', userId: this.currentUser.id, timestamp: Date.now() },
+          })
+        );
+      } catch {}
+    }
   }
 
   private publishPresence() {

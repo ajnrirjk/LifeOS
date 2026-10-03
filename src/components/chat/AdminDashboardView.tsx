@@ -392,18 +392,35 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   </tr>
                 ) : (
                   filteredMembers.map((member) => (
-                  <tr key={member.id} className="hover:bg-[#35373c]/50 transition-colors">
+                  <tr key={member.id} className={`hover:bg-[#35373c]/50 transition-colors ${member.status === 'offline' ? 'opacity-70' : ''}`}>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2.5">
-                        <div
-                          style={{ backgroundColor: member.roleColor || '#10B981' }}
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shadow-sm"
-                        >
-                          {member.name.charAt(0)}
+                        <div className="relative">
+                          <div
+                            style={{ backgroundColor: member.roleColor || '#10B981' }}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shadow-sm ${member.status === 'offline' ? 'grayscale' : ''}`}
+                          >
+                            {member.name.charAt(0)}
+                          </div>
+                          <span
+                            className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#2b2d31] ${
+                              member.status === 'offline' ? 'bg-[#80848e]' : 'bg-[#23a55a]'
+                            }`}
+                          />
                         </div>
                         <div>
-                          <div className="font-bold text-white flex items-center gap-1">
-                            {member.name}
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span>{member.name}</span>
+                            {member.status === 'offline' ? (
+                              <span className="text-[9px] bg-stone-700/80 text-stone-300 font-bold px-1.5 py-0.2 rounded">
+                                Offline
+                              </span>
+                            ) : (
+                              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded flex items-center gap-1 border border-emerald-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                Online
+                              </span>
+                            )}
                             {member.mutedUntil && member.mutedUntil > Date.now() && (
                               <span className="text-[9px] bg-rose-500/20 text-rose-300 font-bold px-1 rounded flex items-center gap-0.5">
                                 <Clock className="w-2.5 h-2.5" /> Muted

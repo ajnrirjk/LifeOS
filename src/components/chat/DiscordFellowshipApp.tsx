@@ -1277,98 +1277,168 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4 custom-scrollbar">
-          {/* Active Members */}
-          <div className="space-y-1">
-            {/* Current User */}
-            <div
-              onClick={() => {
-                if (isSuperAdmin) {
-                  setShowAdminDashboard(true);
-                } else {
-                  setShowSettingsModal(true);
-                }
-                setIsMobileMembersOpen(false);
-              }}
-              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] bg-[#35373c]/50 hover:bg-[#35373c] cursor-pointer transition-colors"
-            >
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-white font-black text-xs">
-                  {currentUser.name.charAt(0)}
-                </div>
-                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-bold text-white truncate flex items-center gap-1">
-                  {currentUser.name}
-                  {isSuperAdmin && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                </span>
-                <span className="text-[10px] text-amber-400 font-bold truncate">
-                  {isSuperAdmin ? '👑 Super Admin' : (currentUser.role || 'Believer')}
-                </span>
-              </div>
-            </div>
+          {(() => {
+            const onlineOthers = members.filter((m) => m.status !== 'offline');
+            const offlineOthers = members.filter((m) => m.status === 'offline');
+            const totalOnline = onlineOthers.length + 1;
 
-            {/* Other Members */}
-            {members.length === 0 ? (
-              <div className="px-2 py-4 text-center space-y-1.5 bg-[#232428]/40 rounded-lg mt-2 border border-[#383a40]/30">
-                <div className="w-7 h-7 rounded-full bg-[#35373c] flex items-center justify-center text-stone-400 mx-auto">
-                  <Users className="w-3.5 h-3.5" />
-                </div>
-                <p className="text-[11px] font-bold text-stone-300">No other believers online</p>
-                <p className="text-[9px] text-stone-500 leading-tight">
-                  Open on your phone or invite friends to see real users appear live!
-                </p>
-              </div>
-            ) : (
-              members.map((m) => (
-                <div
-                  key={m.id}
-                  onClick={() => {
-                    setSelectedMember(m);
-                    if (isSuperAdmin) {
-                      setShowRoleModal(true);
-                    } else {
-                      handleStartDM(m);
-                    }
-                  }}
-                  className="flex items-center justify-between px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors group"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
+            return (
+              <div className="space-y-4">
+                {/* ONLINE GROUP */}
+                <div className="space-y-1">
+                  <div className="text-[11px] font-black uppercase tracking-wider text-[#949ba4] px-2 mb-1 flex items-center justify-between">
+                    <span>ONLINE — {totalOnline}</span>
+                  </div>
+
+                  {/* Current User */}
+                  <div
+                    onClick={() => {
+                      if (isSuperAdmin) {
+                        setShowAdminDashboard(true);
+                      } else {
+                        setShowSettingsModal(true);
+                      }
+                      setIsMobileMembersOpen(false);
+                    }}
+                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] bg-[#35373c]/50 hover:bg-[#35373c] cursor-pointer transition-colors"
+                  >
                     <div className="relative">
-                      <div
-                        style={{ backgroundColor: m.roleColor || '#10B981' }}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs"
-                      >
-                        {m.name.charAt(0)}
+                      <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-white font-black text-xs">
+                        {currentUser.name.charAt(0)}
                       </div>
-                      <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span
-                        style={{ color: m.roleColor || '#dbdee1' }}
-                        className="text-xs font-bold truncate flex items-center gap-1"
-                      >
-                        {m.name}
-                        {m.email === SUPER_ADMIN_EMAIL && <Crown className="w-3 h-3 text-amber-400" />}
+                      <span className="text-xs font-bold text-white truncate flex items-center gap-1">
+                        {currentUser.name}
+                        {isSuperAdmin && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
                       </span>
-                      <span className="text-[10px] text-[#949ba4] truncate">{m.role || 'Believer'}</span>
+                      <span className="text-[10px] text-amber-400 font-bold truncate">
+                        {isSuperAdmin ? '👑 Super Admin' : (currentUser.role || 'Believer')}
+                      </span>
                     </div>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleStartDM(m);
-                    }}
-                    className="p-1.5 rounded hover:bg-[#5865F2] text-stone-400 hover:text-white transition-colors"
-                    title={`Direct Message @${m.name}`}
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Online Members */}
+                  {onlineOthers.map((m) => (
+                    <div
+                      key={m.id}
+                      onClick={() => {
+                        setSelectedMember(m);
+                        if (isSuperAdmin) {
+                          setShowRoleModal(true);
+                        } else {
+                          handleStartDM(m);
+                        }
+                      }}
+                      className="flex items-center justify-between px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors group"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative">
+                          <div
+                            style={{ backgroundColor: m.roleColor || '#10B981' }}
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs"
+                          >
+                            {m.name.charAt(0)}
+                          </div>
+                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span
+                            style={{ color: m.roleColor || '#dbdee1' }}
+                            className="text-xs font-bold truncate flex items-center gap-1"
+                          >
+                            {m.name}
+                            {m.email === SUPER_ADMIN_EMAIL && <Crown className="w-3 h-3 text-amber-400" />}
+                          </span>
+                          <span className="text-[10px] text-[#949ba4] truncate">{m.role || 'Believer'}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartDM(m);
+                        }}
+                        className="p-1.5 rounded hover:bg-[#5865F2] text-stone-400 hover:text-white transition-colors"
+                        title={`Direct Message @${m.name}`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))
-            )}
-          </div>
+
+                {/* OFFLINE GROUP */}
+                {offlineOthers.length > 0 && (
+                  <div className="space-y-1 pt-2 border-t border-[#35373c]/50">
+                    <div className="text-[11px] font-black uppercase tracking-wider text-[#80848e] px-2 mb-1 flex items-center justify-between">
+                      <span>OFFLINE — {offlineOthers.length}</span>
+                    </div>
+
+                    {offlineOthers.map((m) => (
+                      <div
+                        key={m.id}
+                        onClick={() => {
+                          setSelectedMember(m);
+                          if (isSuperAdmin) {
+                            setShowRoleModal(true);
+                          } else {
+                            handleStartDM(m);
+                          }
+                        }}
+                        className="flex items-center justify-between px-2 py-1.5 rounded-[6px] hover:bg-[#35373c] cursor-pointer transition-colors group opacity-60 hover:opacity-100"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="relative">
+                            <div
+                              style={{ backgroundColor: m.roleColor || '#6b7280' }}
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white/80 font-black text-xs grayscale"
+                            >
+                              {m.name.charAt(0)}
+                            </div>
+                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#80848e] border-2 border-[#2b2d31]" />
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-semibold text-[#949ba4] truncate flex items-center gap-1">
+                              {m.name}
+                            </span>
+                            <span className="text-[10px] text-[#80848e] font-medium truncate">
+                              Offline
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartDM(m);
+                          }}
+                          className="p-1.5 rounded hover:bg-[#5865F2] text-stone-400 hover:text-white transition-colors"
+                          title={`Direct Message @${m.name}`}
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Empty State when no other members exist at all */}
+                {members.length === 0 && (
+                  <div className="px-2 py-4 text-center space-y-1.5 bg-[#232428]/40 rounded-lg border border-[#383a40]/30">
+                    <div className="w-7 h-7 rounded-full bg-[#35373c] flex items-center justify-center text-stone-400 mx-auto">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                    <p className="text-[11px] font-bold text-stone-300">No other believers online</p>
+                    <p className="text-[9px] text-stone-500 leading-tight">
+                      Open on your phone or invite friends to see real users appear live!
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </aside>
 
