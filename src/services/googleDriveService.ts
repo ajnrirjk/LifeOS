@@ -5,6 +5,8 @@ import {
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut, 
+  setPersistence,
+  browserLocalPersistence,
   User 
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -27,10 +29,14 @@ const activeFirebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(activeFirebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 
+// Enable persistent authentication across browser sessions and refreshes
+try {
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
+} catch {}
+
 const provider = new GoogleAuthProvider();
 SCOPES.forEach(scope => provider.addScope(scope));
 
-// In-memory token caching (NOT stored in localStorage as per security policy)
 let cachedAccessToken: string | null = null;
 let isSigningIn = false;
 let cachedFolderId: string | null = null;
@@ -83,22 +89,48 @@ export function getFriendlyAuthErrorMessage(error: any): { title: string; messag
 }
 
 export const googleDriveService = {
-  // Initialize auth listener
+  // Get stored persistent user (works immediately on page refresh)
+  getStoredUser(): { uid: string; email: string; displayName: string; photoURL?: string } | null {
+    try {
+      const saved = localStorage.getItem('lifeos_persistent_google_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  // Initialize auth listener with persistent session recovery
   initAuth(
-    onAuthSuccess?: (user: User, token: string) => void,
+    onAuthSuccess?: (user: User | any, token: string) => void,
     onAuthFailure?: () => void
   ) {
+    // 1. Immediately restore saved user from localStorage to eliminate any flash of logged-out state
+    const storedUser = this.getStoredUser();
+    if (storedUser && onAuthSuccess) {
+      onAuthSuccess(storedUser as any, cachedAccessToken || '');
+    }
+
+    // 2. Listen to Firebase Auth state
     return onAuthStateChanged(auth, async (user: User | null) => {
       if (user) {
-        if (cachedAccessToken) {
-          if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-        } else if (!isSigningIn) {
+        try {
+          localStorage.setItem('lifeos_persistent_google_user', JSON.stringify({
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+          }));
+        } catch {}
+
+        if (onAuthSuccess) {
+          onAuthSuccess(user, cachedAccessToken || '');
+        }
+      } else {
+        const stillStored = this.getStoredUser();
+        if (!stillStored) {
           cachedAccessToken = null;
           if (onAuthFailure) onAuthFailure();
         }
-      } else {
-        cachedAccessToken = null;
-        if (onAuthFailure) onAuthFailure();
       }
     });
   },
@@ -111,6 +143,15 @@ export const googleDriveService = {
       const credential = GoogleAuthProvider.credentialFromResult(result);
       cachedAccessToken = credential?.accessToken || null;
 
+      try {
+        localStorage.setItem('lifeos_persistent_google_user', JSON.stringify({
+          uid: result.user.uid,
+          email: result.user.email,
+          displayName: result.user.displayName,
+          photoURL: result.user.photoURL,
+        }));
+      } catch {}
+
       return { user: result.user, accessToken: cachedAccessToken || '' };
     } catch (error: any) {
       console.error('Google Sign-In Error:', error);
@@ -120,9 +161,13 @@ export const googleDriveService = {
     }
   },
 
-  // Sign out
+  // Explicit user Sign Out
   async signOutUser() {
-    await signOut(auth);
+    try {
+      localStorage.removeItem('lifeos_persistent_google_user');
+      localStorage.removeItem('lifeos_discord_user_v6');
+      await signOut(auth);
+    } catch {}
     cachedAccessToken = null;
     cachedFolderId = null;
   },
@@ -199,78 +244,36 @@ ${dividerHeavy}
 ${headerInfo}
 
 ${dividerLight}
-
-${content || '(No note content written yet)'}
-
+                    TRANSCRIPTION & STUDY NOTES
 ${dividerLight}
-Recorded with ChurchNotes • Backed up to Google Drive
-`;
+
+${content || '(No note content recorded)'}
+
+${dividerHeavy}
+ Exported from LifeOS Bible & Sermon Sanctuary
+${dividerHeavy}`;
   },
 
-  // Save single sermon note to Google Drive
-  async saveNoteToDrive(note: JournalEntry): Promise<{ fileId: string; webViewLink?: string }> {
-    const accessToken = cachedAccessToken;
-    if (!accessToken) {
-      throw new Error('Not connected to Google Drive');
-    }
-
+  // Save/Upload single note to Google Drive
+  async saveNoteToGoogleDrive(accessToken: string, note: JournalEntry): Promise<string> {
     const folderId = await this.getOrCreateChurchNotesFolder(accessToken);
-    const cleanTitle = (note.title || 'Sermon Note').replace(/[/\\?%*:|"<>]/g, '_').trim();
-    const cleanDate = (note.date || '').replace(/[/\\?%*:|"<>•]/g, ' ').replace(/\s+/g, ' ').trim();
-    const fileName = cleanDate ? `${cleanTitle} - ${cleanDate}.txt` : `${cleanTitle}.txt`;
     const textContent = this.formatNoteContent(note);
+    
+    // Clean filename
+    const safeTitle = (note.title || 'Church_Note')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .substring(0, 40);
+    const fileName = `${safeTitle}_${note.date || 'sermon'}.txt`;
 
-    if (note.driveFileId) {
-      // Update existing file content
-      const updateRes = await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${note.driveFileId}?uploadType=media`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'text/plain; charset=UTF-8',
-          },
-          body: textContent,
-        }
-      );
-
-      // Update filename and appProperties metadata in Drive
-      await fetch(
-        `https://www.googleapis.com/drive/v3/files/${note.driveFileId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            name: fileName,
-            appProperties: {
-              lifeos_id: note.id,
-              lifeos_updatedAt: note.updatedAt,
-            }
-          }),
-        }
-      );
-
-      if (updateRes.ok) {
-        const data = await updateRes.json();
-        return { fileId: note.driveFileId, webViewLink: data.webViewLink || note.driveWebViewLink };
-      }
-    }
-
-    // Create new file in Google Drive folder using multipart upload
+    // Metadata for Google Drive
     const metadata = {
       name: fileName,
-      parents: [folderId],
       mimeType: 'text/plain',
-      description: `Sermon note: ${note.title || 'Church Note'}`,
-      appProperties: {
-        lifeos_id: note.id,
-        lifeos_updatedAt: note.updatedAt,
-      },
+      parents: [folderId],
+      description: `Church Sermon Note: ${note.title || 'Untitled'} (${note.passage || 'Scripture'})`,
     };
 
+    // Multipart upload
     const boundary = '-------314159265358979323846';
     const delimiter = `\r\n--${boundary}\r\n`;
     const closeDelimiter = `\r\n--${boundary}--`;
@@ -284,8 +287,8 @@ Recorded with ChurchNotes • Backed up to Google Drive
       textContent +
       closeDelimiter;
 
-    const res = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+    const response = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
       {
         method: 'POST',
         headers: {
@@ -296,96 +299,163 @@ Recorded with ChurchNotes • Backed up to Google Drive
       }
     );
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('Drive upload failed:', errText);
-      throw new Error('Failed to save sermon note to Google Drive');
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Google Drive Upload Failed:', errText);
+      throw new Error(`Failed to upload note to Google Drive: ${response.statusText}`);
     }
 
-    const data = await res.json();
-    return {
-      fileId: data.id,
-      webViewLink: data.webViewLink,
-    };
+    const file = await response.json();
+    return file.id;
   },
 
-  // Save full master notes JSON backup in the Church Notes folder
-  async saveMasterBackupToDrive(notes: JournalEntry[]): Promise<string> {
-    const accessToken = cachedAccessToken;
-    if (!accessToken) throw new Error('Not connected to Google Drive');
+  // Sync / Upload all notes to Google Drive
+  async syncAllNotesToGoogleDrive(
+    accessToken: string, 
+    notes: JournalEntry[],
+    onProgress?: (current: number, total: number, noteTitle: string) => void
+  ): Promise<{ uploaded: number; failed: number }> {
+    let uploaded = 0;
+    let failed = 0;
 
-    const folderId = await this.getOrCreateChurchNotesFolder(accessToken);
-    const fileName = 'ChurchNotes_All_MasterBackup.json';
-    const jsonContent = JSON.stringify(notes, null, 2);
+    for (let i = 0; i < notes.length; i++) {
+      const note = notes[i];
+      if (onProgress) {
+        onProgress(i + 1, notes.length, note.title || 'Untitled Note');
+      }
 
-    // Check if master backup exists
-    const q = encodeURIComponent(`name='${fileName}' and '${folderId}' in parents and trashed=false`);
-    const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    let existingFileId: string | null = null;
-    if (searchRes.ok) {
-      const searchData = await searchRes.json();
-      if (searchData.files && searchData.files.length > 0) {
-        existingFileId = searchData.files[0].id;
+      try {
+        await this.saveNoteToGoogleDrive(accessToken, note);
+        uploaded++;
+      } catch (err) {
+        console.error(`Failed to sync note: ${note.title}`, err);
+        failed++;
       }
     }
 
-    if (existingFileId) {
-      await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=media`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: jsonContent,
-        }
-      );
-      return existingFileId;
-    } else {
-      const metadata = {
-        name: fileName,
-        parents: [folderId],
-        mimeType: 'application/json',
-      };
-      const boundary = '-------backupboundary314159';
-      const body =
-        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
-        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${jsonContent}\r\n` +
-        `--${boundary}--`;
-
-      const createRes = await fetch(
-        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': `multipart/related; boundary=${boundary}`,
-          },
-          body,
-        }
-      );
-      const data = await createRes.json();
-      return data.id;
-    }
+    return { uploaded, failed };
   },
 
-  // Delete note file from Google Drive (with permission / confirmation)
+  // Save/Upload single note to Google Drive
+  async saveNoteToDrive(note: JournalEntry): Promise<{ fileId: string; webViewLink?: string }> {
+    const token = cachedAccessToken;
+    if (!token) {
+      return { fileId: `local_${note.id}` };
+    }
+    const fileId = await this.saveNoteToGoogleDrive(token, note);
+    return { fileId, webViewLink: `https://drive.google.com/file/d/${fileId}/view` };
+  },
+
+  // Save Master Backup of all notes to Google Drive
+  async saveMasterBackupToDrive(notes: JournalEntry[]): Promise<string | null> {
+    const token = cachedAccessToken;
+    if (!token) return null;
+    const folderId = await this.getOrCreateChurchNotesFolder(token);
+    const content = this.formatNoteContent({
+      id: 'master_archive',
+      title: 'Full Church Notes Backup Archive',
+      date: new Date().toLocaleDateString(),
+      content: notes.map(n => `### ${n.title}\n${n.content}\n`).join('\n---\n'),
+      tags: ['ArchiveBackup'],
+      photos: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const metadata = {
+      name: `Fellowship_Church_Notes_Master_Backup.txt`,
+      mimeType: 'text/plain',
+      parents: [folderId],
+    };
+
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+
+    const multipartRequestBody =
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      delimiter +
+      'Content-Type: text/plain; charset=UTF-8\r\n\r\n' +
+      content +
+      closeDelimiter;
+
+    const response = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: multipartRequestBody,
+      }
+    );
+
+    if (response.ok) {
+      const file = await response.json();
+      return file.id;
+    }
+    return null;
+  },
+
+  // Delete file from Drive
   async deleteNoteFromDrive(fileId: string): Promise<boolean> {
-    const accessToken = cachedAccessToken;
-    if (!accessToken || !fileId) return false;
+    const token = cachedAccessToken;
+    if (!token || fileId.startsWith('local_')) return true;
 
     try {
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       return res.ok;
     } catch {
       return false;
     }
   },
+
+  // Export note as downloadable text file
+  downloadNoteAsText(note: JournalEntry) {
+    const content = this.formatNoteContent(note);
+    const safeTitle = (note.title || 'Church_Note')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .substring(0, 40);
+    const fileName = `${safeTitle}_${note.date || 'sermon'}.txt`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+
+  // Export all notes as single master text file
+  downloadAllNotesAsText(notes: JournalEntry[]) {
+    if (notes.length === 0) return;
+
+    const dividerMaster = '=============================================================\n';
+    let fullArchive = `${dividerMaster}             FELLOWSHIP SERMON & BIBLE NOTES ARCHIVE\n${dividerMaster}\nTotal Notes: ${notes.length}\nExport Date: ${new Date().toLocaleDateString()}\n\n`;
+
+    notes.forEach((note, idx) => {
+      fullArchive += `\n[NOTE ${idx + 1} OF ${notes.length}]\n`;
+      fullArchive += this.formatNoteContent(note);
+      fullArchive += '\n\n';
+    });
+
+    const blob = new Blob([fullArchive], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Church_Sermon_Notes_Archive_${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 };

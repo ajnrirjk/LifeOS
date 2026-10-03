@@ -355,9 +355,35 @@ class DiscordChatService {
 
   private initCaches() {
     try {
+      // 1. Check persistent Google Auth session
+      const savedGoogleUser = localStorage.getItem('lifeos_persistent_google_user');
+      if (savedGoogleUser) {
+        const parsedG = JSON.parse(savedGoogleUser);
+        if (parsedG && (parsedG.email || parsedG.displayName)) {
+          const isOwner = parsedG.email === SUPER_ADMIN_EMAIL;
+          this.currentUser = {
+            id: parsedG.uid || parsedG.email || this.currentUser.id,
+            name: isOwner ? 'Anthony Williams (Owner)' : (parsedG.displayName || parsedG.email?.split('@')[0] || 'Believer in Christ'),
+            email: parsedG.email || undefined,
+            photoURL: parsedG.photoURL || undefined,
+            isGoogleUser: true,
+            isOwner,
+            isAdmin: isOwner,
+            status: 'online',
+            role: isOwner ? 'Super Admin' : 'Google Verified',
+            roleColor: isOwner ? '#F59E0B' : '#38BDF8',
+          };
+        }
+      }
+
+      // 2. Check saved Discord user
       const savedUser = localStorage.getItem('lifeos_discord_user_v6');
       if (savedUser) {
-        this.currentUser = JSON.parse(savedUser);
+        const parsed = JSON.parse(savedUser);
+        this.currentUser = {
+          ...this.currentUser,
+          ...parsed,
+        };
       }
     } catch {}
 
@@ -365,6 +391,7 @@ class DiscordChatService {
     if (this.currentUser.email === SUPER_ADMIN_EMAIL) {
       this.currentUser.isOwner = true;
       this.currentUser.isAdmin = true;
+      this.currentUser.name = 'Anthony Williams (Owner)';
       this.currentUser.role = 'Super Admin';
       this.currentUser.roleColor = '#F59E0B';
     }
