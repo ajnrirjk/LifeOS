@@ -83,7 +83,6 @@ class ChatService {
   private broadcastChannel: BroadcastChannel | null = null;
   private listeners: Set<ChatEventListener> = new Set();
   private pollInterval: any = null;
-  private heartbeatInterval: any = null;
   private currentUser: ChatUser | null = null;
 
   // In-memory + localStorage Cache
@@ -94,10 +93,12 @@ class ChatService {
     this.initCaches();
     this.initBroadcastChannel();
     this.initCloudRelay();
+    this.fetchHistoryFromCloudRelay();
     this.initLocalSSE();
 
     // Background sync check every 3.5 seconds
     this.pollInterval = setInterval(() => {
+      this.fetchHistoryFromCloudRelay();
       this.listeners.forEach(cb => cb({ type: 'poll_tick', data: Date.now() }));
     }, 3500);
   }
@@ -147,6 +148,65 @@ class ChatService {
     }
   }
 
+  // Fetch past messages stored in the cloud relay so new tabs & devices see everything
+  private async fetchHistoryFromCloudRelay() {
+    if (typeof window === 'undefined') return;
+    try {
+      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1`);
+      if (!res.ok) return;
+      const text = await res.text();
+      const lines = text.trim().split('\n').filter(Boolean);
+      let hasNew = false;
+
+      for (const line of lines) {
+        try {
+          const raw = JSON.parse(line);
+          if (raw.event === 'message' && raw.message) {
+            let payload: any = null;
+            try {
+              payload = JSON.parse(raw.message);
+              // Handle nested payloads
+              if (payload && payload.message && typeof payload.message === 'string') {
+                try {
+                  payload = JSON.parse(payload.message);
+                } catch {}
+              }
+            } catch {
+              payload = null;
+            }
+
+            if (payload && payload.type && payload.data) {
+              if (payload.type === 'message') {
+                const msg: ChatMessage = payload.data;
+                if (!this.messagesCache.some(m => m.id === msg.id)) {
+                  this.messagesCache.push(msg);
+                  hasNew = true;
+                }
+              } else if (payload.type === 'reaction') {
+                const { messageId, reactions } = payload.data;
+                this.messagesCache = this.messagesCache.map(m =>
+                  m.id === messageId ? { ...m, reactions } : m
+                );
+                hasNew = true;
+              } else if (payload.type === 'new_channel') {
+                const chan: ChatChannel = payload.data;
+                if (!this.channelsCache.some(c => c.id === chan.id)) {
+                  this.channelsCache.push(chan);
+                  hasNew = true;
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (hasNew) {
+        this.saveCaches();
+        this.emit({ type: 'history_sync', data: Date.now() });
+      }
+    } catch {}
+  }
+
   // Universal Cloud Relay using ntfy.sh for Cross-Device & Vercel sync
   private initCloudRelay() {
     if (typeof window === 'undefined') return;
@@ -159,7 +219,19 @@ class ChatService {
         try {
           const raw = JSON.parse(event.data);
           if (raw.event === 'message' && raw.message) {
-            const payload = JSON.parse(raw.message);
+            let payload: any = null;
+            try {
+              payload = JSON.parse(raw.message);
+              // Handle single or double nested payloads
+              if (payload && payload.message && typeof payload.message === 'string') {
+                try {
+                  payload = JSON.parse(payload.message);
+                } catch {}
+              }
+            } catch {
+              payload = null;
+            }
+
             if (payload && payload.type && payload.data) {
               this.handleIncomingEvent(payload.type, payload.data, false);
             }
@@ -168,12 +240,12 @@ class ChatService {
       };
 
       sse.onerror = () => {
-        // Auto-reconnect after 4s
+        // Auto-reconnect after 3s
         if (this.cloudEventSource) {
           this.cloudEventSource.close();
           this.cloudEventSource = null;
         }
-        setTimeout(() => this.initCloudRelay(), 4000);
+        setTimeout(() => this.initCloudRelay(), 3000);
       };
     } catch {}
   }
@@ -251,20 +323,17 @@ class ChatService {
     }
 
     if (shouldBroadcast) {
-      // Broadcast to other tabs
+      // 1. Broadcast to other tabs on same machine
       try {
         this.broadcastChannel?.postMessage({ type, data });
       } catch {}
 
-      // Broadcast to cloud relay for other devices
+      // 2. Broadcast directly to cloud relay for other devices & accounts
       try {
         fetch(CLOUD_RELAY_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic: CLOUD_RELAY_TOPIC,
-            message: JSON.stringify({ type, data })
-          })
+          body: JSON.stringify({ type, data })
         }).catch(() => {});
       } catch {}
     }
@@ -309,7 +378,6 @@ class ChatService {
       if (res.ok && contentType.includes('application/json')) {
         const serverChannels = await res.json();
         if (Array.isArray(serverChannels) && serverChannels.length > 0) {
-          // Merge unique channels
           const map = new Map<string, ChatChannel>();
           this.channelsCache.forEach(c => map.set(c.id, c));
           serverChannels.forEach((c: ChatChannel) => map.set(c.id, c));
@@ -360,7 +428,6 @@ class ChatService {
       if (res.ok && contentType.includes('application/json')) {
         const serverMsgs = await res.json();
         if (Array.isArray(serverMsgs)) {
-          // Merge into cache
           const map = new Map<string, ChatMessage>();
           this.messagesCache.forEach(m => map.set(m.id, m));
           serverMsgs.forEach((m: ChatMessage) => map.set(m.id, m));

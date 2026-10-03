@@ -182,20 +182,19 @@ export const FellowshipChatApp: React.FC = () => {
             }
           });
         }
+      } else if (event.type === 'history_sync') {
+        chatService.getMessages(activeChannelId).then(setMessages).catch(() => {});
+        chatService.getChannels().then(setChannels).catch(() => {});
       } else if (event.type === 'poll_tick') {
-        // Fast background sync: reconcile messages across all devices
+        // Fast background sync: reconcile messages across all devices & tabs
         chatService.getMessages(activeChannelId).then((incoming) => {
           setMessages((prev) => {
-            // Check if there are differences
-            if (incoming.length === prev.length) {
-              // Check reactions
-              const isDifferent = incoming.some((inc, i) => {
-                const p = prev[i];
-                return !p || inc.id !== p.id || JSON.stringify(inc.reactions) !== JSON.stringify(p.reactions);
-              });
-              if (!isDifferent) return prev;
-            }
-            return incoming;
+            if (incoming.length !== prev.length) return incoming;
+            const hasChange = incoming.some((m, idx) => {
+              const p = prev[idx];
+              return !p || p.id !== m.id || JSON.stringify(p.reactions) !== JSON.stringify(m.reactions);
+            });
+            return hasChange ? incoming : prev;
           });
         }).catch(() => {});
       }
