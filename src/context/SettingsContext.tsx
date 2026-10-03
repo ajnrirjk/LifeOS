@@ -452,8 +452,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                          settings.profile.name !== 'Believer (Faith Explorer)';
 
     if (isRegistered && isCustomName) {
+      const handleSlug = settings.profile.handle ? settings.profile.handle.toLowerCase().replace(/[^a-z0-9]/g, '') : 'user';
+      const isMaster = (googleUser?.email?.toLowerCase().trim() === 'aw03102008@gmail.com') ||
+                       (settings.profile.email?.toLowerCase().trim() === 'aw03102008@gmail.com');
       const memberData: FellowshipMember = {
-        id: googleUser?.uid || settings.profile.id,
+        id: isMaster ? 'usr_master_admin_aw' : `usr_handle_${handleSlug}`,
         name: settings.profile.name,
         handle: settings.profile.handle,
         avatar: settings.profile.avatar,

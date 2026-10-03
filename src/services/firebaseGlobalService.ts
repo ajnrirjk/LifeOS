@@ -283,12 +283,11 @@ class FirebaseGlobalService {
     const isMaster = (cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase()) ||
                      cleanHandle.includes('aw03102008');
 
-    // Give each distinct handle its own stable, unique ID so devices never collide
+    // Give each distinct handle its own unique ID so devices never collide
+    const handleSlug = cleanHandle.replace(/[^a-z0-9]/g, '') || `user_${Math.random().toString(36).substring(2, 7)}`;
     const stableId = isMaster
       ? 'usr_master_admin_aw'
-      : (member.id && member.id !== 'usr_me_001')
-      ? member.id
-      : `usr_${cleanHandle.replace(/[^a-z0-9]/g, '') || Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      : `usr_handle_${handleSlug}`;
 
     const safeMember: FellowshipMember = {
       ...member,
@@ -312,12 +311,11 @@ class FirebaseGlobalService {
       }
     } catch {}
 
-    // 2. Filter out ONLY the same person (by handle or master admin email)
+    // 2. Filter out ONLY the exact same handle or master admin email
     const targetHandle = safeMember.handle.toLowerCase().trim();
     const updatedList = cloudList.filter(m => {
       if (isMaster && m.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) return false;
       if (!isMaster && m.handle?.toLowerCase().trim() === targetHandle) return false;
-      if (!isMaster && m.id === stableId) return false;
       return true;
     });
 
