@@ -42,7 +42,7 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
   ];
 
   return (
-    <header className="min-h-8 pt-[max(env(safe-area-inset-top,0px),10px)] pb-1.5 sm:pt-0 sm:pb-0 sm:h-8 bg-black/75 backdrop-blur-xl border-b border-white/10 text-white text-xs select-none flex items-center justify-between px-3 z-50 relative">
+    <header className="min-h-8 pt-[max(env(safe-area-inset-top,0px),44px)] pb-1.5 sm:pt-0 sm:pb-0 sm:h-8 bg-black/75 backdrop-blur-xl border-b border-white/10 text-white text-xs select-none flex items-center justify-between px-3 z-50 relative">
       {/* Left: LifeOS Logo, Desktop Button & Active App Name */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Apple/LifeOS Menu */}

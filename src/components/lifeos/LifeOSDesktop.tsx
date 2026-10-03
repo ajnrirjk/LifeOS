@@ -203,7 +203,7 @@ export const LifeOSDesktop: React.FC = () => {
       <div className={`flex-1 relative overflow-hidden flex flex-col ${
         !isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized
           ? 'p-0 md:p-3 pb-0 md:pb-24'
-          : 'p-2 sm:p-3 pb-20 md:pb-24'
+          : 'p-2 sm:p-3 pb-0 md:pb-24'
       }`}>
         <AnimatePresence mode="wait">
           {!isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? (
@@ -376,7 +376,7 @@ export const LifeOSDesktop: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="flex-1 flex flex-col overflow-y-auto"
+              className="flex-1 flex flex-col overflow-hidden"
             >
               <LifeOSDesktopWidgets
                 activeWidgets={desktopWidgets}

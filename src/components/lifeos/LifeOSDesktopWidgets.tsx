@@ -210,7 +210,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-col gap-3.5 sm:gap-6 p-2.5 sm:p-6 overflow-y-auto max-h-full">
+    <div className="w-full max-w-6xl mx-auto flex flex-col gap-3.5 sm:gap-6 p-2.5 sm:p-6 pb-[calc(76px+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-y-auto max-h-full">
       {/* Top Welcome & Actions Header */}
       <div className="flex items-center justify-between gap-3 select-none pb-2 border-b border-white/10">
         <div className="flex items-center gap-2">
