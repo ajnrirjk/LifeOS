@@ -1,28 +1,9 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { 
-  getFirestore, 
-  doc, 
-  collection, 
-  onSnapshot, 
-  setDoc, 
-  deleteDoc,
-  getDoc
-} from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { SystemAnnouncement, FellowshipMember, UserRole, MASTER_ADMIN_EMAIL } from '../types/settings';
+import mqtt, { MqttClient } from 'mqtt';
 
-// Active Firebase Configuration
-const activeFirebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
-};
-
-const app = getApps().length === 0 ? initializeApp(activeFirebaseConfig) : getApps()[0];
-export const db = getFirestore(app);
+// Cloud Persistence Endpoints (Global REST Store with zero API key constraints)
+const CLOUD_SETTINGS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a10342596a6e98';
+const CLOUD_MEMBERS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1034264616e99';
 
 export interface GlobalConfigPayload {
   activeAnnouncement: SystemAnnouncement | null;
@@ -33,15 +14,7 @@ export interface GlobalConfigPayload {
 }
 
 const DEFAULT_CONFIG: GlobalConfigPayload = {
-  activeAnnouncement: {
-    id: 'ann_welcome',
-    title: '🌿 Welcome to LifeOS',
-    message: 'Global synchronization is live across all devices.',
-    type: 'celebration',
-    isActive: true,
-    author: `Master Administrator (${MASTER_ADMIN_EMAIL})`,
-    timestamp: 'Just now'
-  },
+  activeAnnouncement: null,
   appVisibility: {
     faithlingo: true,
     bible_journal: true,
@@ -55,130 +28,211 @@ const DEFAULT_CONFIG: GlobalConfigPayload = {
   updatedAt: Date.now()
 };
 
-class FirebaseGlobalService {
-  private configDocRef = doc(db, 'global_system_config', 'settings');
-  private membersColRef = collection(db, 'fellowship_members');
+const MASTER_ADMIN_MEMBER: FellowshipMember = {
+  id: 'usr_master_admin_aw',
+  name: 'Anthony Williams',
+  handle: '@disciple',
+  avatar: '👑',
+  role: 'superadmin',
+  status: 'active',
+  email: MASTER_ADMIN_EMAIL,
+  lastActive: 'Online',
+  xp: 5000,
+  streak: 100,
+  warningsCount: 0,
+  notes: 'Master Administrator'
+};
 
-  // 1. Subscribe to Global System Config (Announcements & App Visibility) across all devices
-  subscribeToGlobalConfig(callback: (config: GlobalConfigPayload) => void): () => void {
-    const unsubscribeFirestore = onSnapshot(
-      this.configDocRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data() as GlobalConfigPayload;
-          callback(data);
-        } else {
-          // Initialize document in Firestore if it doesn't exist yet
-          setDoc(this.configDocRef, DEFAULT_CONFIG).catch(() => {});
-          callback(DEFAULT_CONFIG);
+class FirebaseGlobalService {
+  private configListeners: Array<(config: GlobalConfigPayload) => void> = [];
+  private membersListeners: Array<(members: FellowshipMember[]) => void> = [];
+  private cachedConfig: GlobalConfigPayload = DEFAULT_CONFIG;
+  private cachedMembers: FellowshipMember[] = [MASTER_ADMIN_MEMBER];
+  private mqttClient: MqttClient | null = null;
+  private isPollingActive = false;
+
+  constructor() {
+    this.initMqtt();
+    this.startPolling();
+  }
+
+  // 1. Initialize Real-Time WebSocket PubSub via EMQX
+  private initMqtt() {
+    if (typeof window === 'undefined') return;
+    try {
+      this.mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+        clientId: `lifeos_client_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        clean: true,
+        reconnectPeriod: 3000
+      });
+
+      this.mqttClient.on('connect', () => {
+        this.mqttClient?.subscribe('lifeos/global/settings_v3', { qos: 0 });
+        this.mqttClient?.subscribe('lifeos/global/members_v3', { qos: 0 });
+      });
+
+      this.mqttClient.on('message', (topic, payload) => {
+        try {
+          const parsed = JSON.parse(payload.toString());
+          if (topic === 'lifeos/global/settings_v3' && parsed) {
+            this.cachedConfig = {
+              ...this.cachedConfig,
+              ...parsed
+            };
+            this.notifyConfigListeners();
+          } else if (topic === 'lifeos/global/members_v3' && Array.isArray(parsed)) {
+            this.cachedMembers = parsed;
+            this.notifyMembersListeners();
+          }
+        } catch {}
+      });
+    } catch {
+      // Fallback to HTTP polling if WebSocket is blocked
+    }
+  }
+
+  // 2. High-Frequency Cloud Polling Loop (ensures sync even if WebSockets reconnect)
+  private startPolling() {
+    if (this.isPollingActive || typeof window === 'undefined') return;
+    this.isPollingActive = true;
+
+    // Initial fetch
+    this.fetchCloudSettings();
+    this.fetchCloudMembers();
+
+    // Poll cloud every 2.5 seconds
+    setInterval(() => {
+      this.fetchCloudSettings();
+      this.fetchCloudMembers();
+    }, 2500);
+  }
+
+  private async fetchCloudSettings() {
+    try {
+      const res = await fetch(CLOUD_SETTINGS_URL, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data) {
+          const incoming = json.data as GlobalConfigPayload;
+          if (
+            JSON.stringify(incoming.activeAnnouncement) !== JSON.stringify(this.cachedConfig.activeAnnouncement) ||
+            JSON.stringify(incoming.appVisibility) !== JSON.stringify(this.cachedConfig.appVisibility)
+          ) {
+            this.cachedConfig = incoming;
+            this.notifyConfigListeners();
+          }
         }
-      },
-      (error) => {
-        console.error('Firestore global config listener error:', error);
       }
-    );
+    } catch {}
+  }
+
+  private async fetchCloudMembers() {
+    try {
+      const res = await fetch(CLOUD_MEMBERS_URL, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.members && Array.isArray(json.data.members)) {
+          const incoming = json.data.members as FellowshipMember[];
+          if (incoming.length !== this.cachedMembers.length || JSON.stringify(incoming) !== JSON.stringify(this.cachedMembers)) {
+            this.cachedMembers = incoming;
+            this.notifyMembersListeners();
+          }
+        }
+      }
+    } catch {}
+  }
+
+  private notifyConfigListeners() {
+    this.configListeners.forEach(cb => cb(this.cachedConfig));
+  }
+
+  private notifyMembersListeners() {
+    this.membersListeners.forEach(cb => cb(this.cachedMembers));
+  }
+
+  // 3. Subscribe to Global Announcements & App Visibility
+  subscribeToGlobalConfig(callback: (config: GlobalConfigPayload) => void): () => void {
+    this.configListeners.push(callback);
+    callback(this.cachedConfig);
+    this.fetchCloudSettings().then(() => callback(this.cachedConfig));
 
     return () => {
-      unsubscribeFirestore();
+      this.configListeners = this.configListeners.filter(cb => cb !== callback);
     };
   }
 
-  // 2. Publish Global Announcement to all devices
+  // 4. Publish Global Announcement to all devices
   async publishAnnouncement(announcement: SystemAnnouncement | null) {
-    const payload = {
+    const nextConfig: GlobalConfigPayload = {
+      ...this.cachedConfig,
       activeAnnouncement: announcement || null,
       updatedAt: Date.now()
     };
+    this.cachedConfig = nextConfig;
+    this.notifyConfigListeners();
 
+    // A. Push over instant WebSocket
     try {
-      await setDoc(this.configDocRef, payload, { merge: true });
-    } catch (err) {
-      console.error('Error saving announcement to Firestore:', err);
-    }
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/settings_v3', JSON.stringify(nextConfig));
+      }
+    } catch {}
 
-    // Secondary backup sync to server API
+    // B. Save to Global Cloud REST Store
     try {
-      await fetch('/api/global/broadcast', {
-        method: 'POST',
+      await fetch(CLOUD_SETTINGS_URL, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(announcement ? {
-          title: announcement.title,
-          message: announcement.message,
-          type: announcement.type,
-          author: announcement.author || `Master Administrator (${MASTER_ADMIN_EMAIL})`,
-          isActive: true
-        } : { isActive: false })
-      }).catch(() => {});
+        body: JSON.stringify({
+          name: 'LifeOS Global System Config',
+          data: nextConfig
+        })
+      });
     } catch {}
   }
 
-  // 3. Update Global App Visibility Feature Flags across all devices
+  // 5. Update Global App Visibility Feature Flags across all devices
   async updateAppVisibility(appVisibility: Record<string, boolean>) {
-    const payload = {
+    const nextConfig: GlobalConfigPayload = {
+      ...this.cachedConfig,
       appVisibility,
       updatedAt: Date.now()
     };
+    this.cachedConfig = nextConfig;
+    this.notifyConfigListeners();
 
+    // A. Push over instant WebSocket
     try {
-      await setDoc(this.configDocRef, payload, { merge: true });
-    } catch (err) {
-      console.error('Error saving app visibility to Firestore:', err);
-    }
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/settings_v3', JSON.stringify(nextConfig));
+      }
+    } catch {}
 
-    // Secondary backup sync to server API
+    // B. Save to Global Cloud REST Store
     try {
-      await fetch('/api/global/app-visibility', {
-        method: 'POST',
+      await fetch(CLOUD_SETTINGS_URL, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appVisibility })
-      }).catch(() => {});
+        body: JSON.stringify({
+          name: 'LifeOS Global System Config',
+          data: nextConfig
+        })
+      });
     } catch {}
   }
 
-  // 4. Subscribe to Real Fellowship Members Roster across all devices
+  // 6. Subscribe to Real Fellowship Members Roster across all devices
   subscribeToFellowshipMembers(callback: (members: FellowshipMember[]) => void): () => void {
-    const unsubscribeFirestore = onSnapshot(
-      this.membersColRef,
-      (snapshot) => {
-        const list: FellowshipMember[] = [];
-        snapshot.forEach((d) => {
-          const m = d.data() as FellowshipMember;
-          list.push({ ...m, id: d.id });
-        });
-
-        if (list.length > 0) {
-          callback(list);
-        } else {
-          // If collection is empty, seed with Master Administrator
-          const masterAdminMember: FellowshipMember = {
-            id: 'usr_master_admin_aw',
-            name: 'Master Administrator',
-            handle: '@aw03102008',
-            avatar: '👑',
-            role: 'superadmin',
-            status: 'active',
-            email: MASTER_ADMIN_EMAIL,
-            lastActive: 'Online',
-            xp: 5000,
-            streak: 100,
-            warningsCount: 0,
-            notes: 'Master Administrator'
-          };
-          setDoc(doc(db, 'fellowship_members', masterAdminMember.id), masterAdminMember).catch(() => {});
-          callback([masterAdminMember]);
-        }
-      },
-      (error) => {
-        console.error('Firestore members listener error:', error);
-      }
-    );
+    this.membersListeners.push(callback);
+    callback(this.cachedMembers);
+    this.fetchCloudMembers().then(() => callback(this.cachedMembers));
 
     return () => {
-      unsubscribeFirestore();
+      this.membersListeners = this.membersListeners.filter(cb => cb !== callback);
     };
   }
 
-  // 5. Register or update a real user when they open LifeOS and put their name in
+  // 7. Register or update a real user when they open LifeOS and put their name in
   async registerMember(member: FellowshipMember) {
     const memberId = member.id || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const isMaster = (member.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
@@ -193,43 +247,82 @@ class FirebaseGlobalService {
       lastActive: 'Just now'
     };
 
-    try {
-      await setDoc(doc(db, 'fellowship_members', memberId), safeMember, { merge: true });
-    } catch (err) {
-      console.error('Error saving member to Firestore:', err);
+    // Update locally and in memory
+    const existingIndex = this.cachedMembers.findIndex(m => m.id === memberId);
+    let nextMembers: FellowshipMember[];
+    if (existingIndex >= 0) {
+      nextMembers = [...this.cachedMembers];
+      nextMembers[existingIndex] = safeMember;
+    } else {
+      nextMembers = [safeMember, ...this.cachedMembers];
     }
+    this.cachedMembers = nextMembers;
+    this.notifyMembersListeners();
 
+    // A. Push over instant WebSocket
     try {
-      await fetch('/api/fellowship/register', {
-        method: 'POST',
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(nextMembers));
+      }
+    } catch {}
+
+    // B. Save to Global Cloud REST Store
+    try {
+      await fetch(CLOUD_MEMBERS_URL, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(safeMember)
-      }).catch(() => {});
+        body: JSON.stringify({
+          name: 'LifeOS Global Fellowship Roster',
+          data: {
+            members: nextMembers,
+            updatedAt: Date.now()
+          }
+        })
+      });
     } catch {}
   }
 
-  // 6. Moderate Fellowship Member (role, status, delete)
+  // 8. Moderate Fellowship Member (role, status, delete) across all devices
   async moderateMember(memberId: string, updates: { role?: UserRole; status?: 'active' | 'muted' | 'banned'; action?: string }) {
+    let nextMembers: FellowshipMember[];
     if (updates.action === 'delete') {
-      try {
-        await deleteDoc(doc(db, 'fellowship_members', memberId));
-      } catch (err) {
-        console.error('Error deleting member from Firestore:', err);
-      }
+      nextMembers = this.cachedMembers.filter(m => m.id !== memberId);
     } else {
-      try {
-        await setDoc(doc(db, 'fellowship_members', memberId), updates, { merge: true });
-      } catch (err) {
-        console.error('Error moderating member in Firestore:', err);
-      }
+      nextMembers = this.cachedMembers.map(m => {
+        if (m.id === memberId) {
+          return {
+            ...m,
+            role: updates.role || m.role,
+            status: updates.status || m.status
+          };
+        }
+        return m;
+      });
     }
 
+    this.cachedMembers = nextMembers;
+    this.notifyMembersListeners();
+
+    // A. Push over instant WebSocket
     try {
-      await fetch('/api/fellowship/moderate', {
-        method: 'POST',
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(nextMembers));
+      }
+    } catch {}
+
+    // B. Save to Global Cloud REST Store
+    try {
+      await fetch(CLOUD_MEMBERS_URL, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, ...updates })
-      }).catch(() => {});
+        body: JSON.stringify({
+          name: 'LifeOS Global Fellowship Roster',
+          data: {
+            members: nextMembers,
+            updatedAt: Date.now()
+          }
+        })
+      });
     } catch {}
   }
 }

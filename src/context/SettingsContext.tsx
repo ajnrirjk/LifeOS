@@ -411,58 +411,29 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Load Global Config & Real Fellowship Members on mount and listen to updates across all devices
   useEffect(() => {
-    // 1. Live Firestore & MQTT Subscription for Global Announcements & App Visibility
+    // 1. Live Cloud & WebSocket Subscription for Global Announcements & App Visibility
     const unsubGlobalConfig = firebaseGlobalService.subscribeToGlobalConfig((config) => {
       if (config) {
         setSettings(prev => ({
           ...prev,
-          activeAnnouncement: config.activeAnnouncement !== undefined ? config.activeAnnouncement : prev.activeAnnouncement,
-          appVisibility: config.appVisibility ? { ...prev.appVisibility, ...config.appVisibility } : prev.appVisibility,
+          activeAnnouncement: config.activeAnnouncement !== undefined ? config.activeAnnouncement : null,
+          appVisibility: config.appVisibility ? { ...config.appVisibility } : prev.appVisibility,
           maintenanceMode: config.maintenanceMode !== undefined ? config.maintenanceMode : prev.maintenanceMode,
           maintenanceMessage: config.maintenanceMessage || prev.maintenanceMessage
         }));
       }
     });
 
-    // 2. Live Firestore & MQTT Subscription for Real Fellowship Members Roster
+    // 2. Live Cloud & WebSocket Subscription for Real Fellowship Members Roster
     const unsubMembers = firebaseGlobalService.subscribeToFellowshipMembers((realList) => {
       if (Array.isArray(realList) && realList.length > 0) {
         setMembers(realList);
       }
     });
 
-    // 3. Redundant fallback fetch from local/Cloud Run server
-    const fetchServerFallback = async () => {
-      try {
-        const [configRes, membersRes] = await Promise.all([
-          fetch('/api/global/config').then(r => r.ok ? r.json() : null).catch(() => null),
-          fetch('/api/fellowship/members').then(r => r.ok ? r.json() : null).catch(() => null)
-        ]);
-        if (configRes) {
-          setSettings(prev => ({
-            ...prev,
-            activeAnnouncement: configRes.activeAnnouncement !== undefined ? configRes.activeAnnouncement : prev.activeAnnouncement,
-            appVisibility: configRes.appVisibility ? { ...prev.appVisibility, ...configRes.appVisibility } : prev.appVisibility
-          }));
-        }
-        if (membersRes?.members && Array.isArray(membersRes.members) && membersRes.members.length > 0) {
-          setMembers(prev => {
-            const map = new Map<string, FellowshipMember>();
-            prev.forEach(m => map.set(m.id, m));
-            membersRes.members.forEach((m: FellowshipMember) => map.set(m.id, m));
-            return Array.from(map.values());
-          });
-        }
-      } catch {}
-    };
-
-    fetchServerFallback();
-    const pollInterval = setInterval(fetchServerFallback, 10000);
-
     return () => {
       unsubGlobalConfig();
       unsubMembers();
-      clearInterval(pollInterval);
     };
   }, []);
 
