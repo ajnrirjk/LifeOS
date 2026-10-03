@@ -10,6 +10,7 @@ import {
 } from '../types/settings';
 import { sounds } from '../services/soundEffects';
 import { googleDriveService } from '../services/googleDriveService';
+import { firebaseGlobalService } from '../services/firebaseGlobalService';
 
 interface GoogleUserInfo {
   uid: string;
@@ -410,79 +411,59 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAuditLogs(prev => [newLog, ...prev.slice(0, 99)]);
   };
 
-  // Load Global Config & Real Fellowship Members on mount and listen to updates
+  // Load Global Config & Real Fellowship Members on mount and listen to updates across all devices
   useEffect(() => {
-    // 1. Fetch Global System Config
-    const fetchGlobalConfig = async () => {
+    // 1. Live Firestore & MQTT Subscription for Global Announcements & App Visibility
+    const unsubGlobalConfig = firebaseGlobalService.subscribeToGlobalConfig((config) => {
+      if (config) {
+        setSettings(prev => ({
+          ...prev,
+          activeAnnouncement: config.activeAnnouncement !== undefined ? config.activeAnnouncement : prev.activeAnnouncement,
+          appVisibility: config.appVisibility ? { ...prev.appVisibility, ...config.appVisibility } : prev.appVisibility,
+          maintenanceMode: config.maintenanceMode !== undefined ? config.maintenanceMode : prev.maintenanceMode,
+          maintenanceMessage: config.maintenanceMessage || prev.maintenanceMessage
+        }));
+      }
+    });
+
+    // 2. Live Firestore & MQTT Subscription for Real Fellowship Members Roster
+    const unsubMembers = firebaseGlobalService.subscribeToFellowshipMembers((realList) => {
+      if (Array.isArray(realList) && realList.length > 0) {
+        setMembers(realList);
+      }
+    });
+
+    // 3. Redundant fallback fetch from local/Cloud Run server
+    const fetchServerFallback = async () => {
       try {
-        const res = await fetch('/api/global/config');
-        if (res.ok) {
-          const data = await res.json();
-          if (data) {
-            setSettings(prev => ({
-              ...prev,
-              activeAnnouncement: data.activeAnnouncement ?? prev.activeAnnouncement,
-              appVisibility: data.appVisibility ? { ...prev.appVisibility, ...data.appVisibility } : prev.appVisibility,
-              maintenanceMode: data.maintenanceMode ?? prev.maintenanceMode,
-              maintenanceMessage: data.maintenanceMessage ?? prev.maintenanceMessage
-            }));
-          }
+        const [configRes, membersRes] = await Promise.all([
+          fetch('/api/global/config').then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch('/api/fellowship/members').then(r => r.ok ? r.json() : null).catch(() => null)
+        ]);
+        if (configRes) {
+          setSettings(prev => ({
+            ...prev,
+            activeAnnouncement: configRes.activeAnnouncement !== undefined ? configRes.activeAnnouncement : prev.activeAnnouncement,
+            appVisibility: configRes.appVisibility ? { ...prev.appVisibility, ...configRes.appVisibility } : prev.appVisibility
+          }));
+        }
+        if (membersRes?.members && Array.isArray(membersRes.members) && membersRes.members.length > 0) {
+          setMembers(prev => {
+            const map = new Map<string, FellowshipMember>();
+            prev.forEach(m => map.set(m.id, m));
+            membersRes.members.forEach((m: FellowshipMember) => map.set(m.id, m));
+            return Array.from(map.values());
+          });
         }
       } catch {}
     };
 
-    // 2. Fetch Real Fellowship Members
-    const fetchRealMembers = async () => {
-      try {
-        const res = await fetch('/api/fellowship/members');
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.members && Array.isArray(data.members) && data.members.length > 0) {
-            setMembers(data.members);
-          }
-        }
-      } catch {}
-    };
-
-    fetchGlobalConfig();
-    fetchRealMembers();
-
-    // 3. Connect to SSE Stream for instant global updates
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource('/api/chat/stream');
-      eventSource.addEventListener('global_config_updated', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data) {
-            setSettings(prev => ({
-              ...prev,
-              activeAnnouncement: data.activeAnnouncement,
-              appVisibility: data.appVisibility ? { ...prev.appVisibility, ...data.appVisibility } : prev.appVisibility,
-              maintenanceMode: data.maintenanceMode ?? prev.maintenanceMode
-            }));
-          }
-        } catch {}
-      });
-
-      eventSource.addEventListener('fellowship_members_updated', (e: MessageEvent) => {
-        try {
-          const list = JSON.parse(e.data);
-          if (Array.isArray(list) && list.length > 0) {
-            setMembers(list);
-          }
-        } catch {}
-      });
-    } catch {}
-
-    // Polling fallback every 10s
-    const pollInterval = setInterval(() => {
-      fetchGlobalConfig();
-      fetchRealMembers();
-    }, 10000);
+    fetchServerFallback();
+    const pollInterval = setInterval(fetchServerFallback, 10000);
 
     return () => {
-      if (eventSource) eventSource.close();
+      unsubGlobalConfig();
+      unsubMembers();
       clearInterval(pollInterval);
     };
   }, []);
@@ -490,18 +471,21 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Update real user in backend registry whenever profile changes
   useEffect(() => {
     if (settings.profile.name && settings.profile.name !== 'Believer (Faith Explorer)') {
-      fetch('/api/fellowship/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: googleUser?.uid || settings.profile.id,
-          name: settings.profile.name,
-          handle: settings.profile.handle,
-          avatar: settings.profile.avatar,
-          email: googleUser?.email || settings.profile.email,
-          photoURL: googleUser?.photoURL || settings.profile.photoURL
-        })
-      }).catch(() => {});
+      const memberData: FellowshipMember = {
+        id: googleUser?.uid || settings.profile.id,
+        name: settings.profile.name,
+        handle: settings.profile.handle,
+        avatar: settings.profile.avatar,
+        role: settings.profile.role,
+        status: 'active',
+        email: googleUser?.email || settings.profile.email,
+        photoURL: googleUser?.photoURL || settings.profile.photoURL,
+        lastActive: 'Just now',
+        xp: 100,
+        streak: 1,
+        warningsCount: 0
+      };
+      firebaseGlobalService.registerMember(memberData);
     }
   }, [settings.profile.name, settings.profile.handle, settings.profile.avatar, googleUser]);
 
@@ -527,25 +511,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateMemberRole = async (memberId: string, role: UserRole) => {
     setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role } : m));
     logAuditEvent('User Role Changed', `Member ${memberId} assigned new role: ${role}`, 'admin');
-    try {
-      await fetch('/api/fellowship/moderate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, role })
-      });
-    } catch {}
+    await firebaseGlobalService.moderateMember(memberId, { role });
   };
 
   const updateMemberStatus = async (memberId: string, status: 'active' | 'muted' | 'banned') => {
     setMembers(prev => prev.map(m => m.id === memberId ? { ...m, status } : m));
     logAuditEvent('User Moderated', `Member ${memberId} status set to: ${status}`, 'moderation');
-    try {
-      await fetch('/api/fellowship/moderate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, status })
-      });
-    } catch {}
+    await firebaseGlobalService.moderateMember(memberId, { status });
   };
 
   const addMember = async (member: Omit<FellowshipMember, 'id'>) => {
@@ -555,25 +527,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setMembers(prev => [newMember, ...prev]);
     logAuditEvent('New Member Added', `Registered believer: ${member.name} (${member.role})`, 'admin');
-    try {
-      await fetch('/api/fellowship/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newMember)
-      });
-    } catch {}
+    await firebaseGlobalService.registerMember(newMember);
   };
 
   const deleteMember = async (memberId: string) => {
     setMembers(prev => prev.filter(m => m.id !== memberId));
     logAuditEvent('Member Removed', `Removed believer account ID: ${memberId}`, 'admin');
-    try {
-      await fetch('/api/fellowship/moderate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, action: 'delete' })
-      });
-    } catch {}
+    await firebaseGlobalService.moderateMember(memberId, { action: 'delete' });
   };
 
   const setAnnouncement = async (announcement: SystemAnnouncement | null) => {
@@ -584,20 +544,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       logAuditEvent('Announcement Cleared', 'Dismissed broadcast', 'admin');
     }
 
-    // Transmit to all global devices via server API
-    try {
-      await fetch('/api/global/broadcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(announcement ? {
-          title: announcement.title,
-          message: announcement.message,
-          type: announcement.type,
-          author: announcement.author || 'Master Administrator',
-          isActive: true
-        } : { isActive: false })
-      });
-    } catch {}
+    // Transmit to all global devices via Firestore, MQTT, and server API
+    await firebaseGlobalService.publishAnnouncement(announcement);
   };
 
   const toggleMaintenanceMode = (enabled: boolean, message?: string) => {
@@ -624,14 +572,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
     logAuditEvent('App Feature Flag Toggled', `App: ${appId}`, 'admin');
 
-    // Transmit feature flag update to all devices
-    try {
-      await fetch('/api/global/app-visibility', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appVisibility: nextAppVisibility })
-      });
-    } catch {}
+    // Transmit feature flag update to all devices via Firestore, MQTT, and API
+    await firebaseGlobalService.updateAppVisibility(nextAppVisibility);
   };
 
   const exportBackup = () => {

@@ -39,6 +39,40 @@
         "lastMessageTime": { "type": "number" }
       },
       "required": ["name", "serverId", "createdAt"]
+    },
+    "GlobalSystemConfig": {
+      "title": "GlobalSystemConfig",
+      "description": "Global broadcasts, announcements, and application feature flags across all devices",
+      "type": "object",
+      "properties": {
+        "activeAnnouncement": { "type": "object" },
+        "appVisibility": { "type": "object" },
+        "maintenanceMode": { "type": "boolean" },
+        "maintenanceMessage": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      }
+    },
+    "FellowshipMember": {
+      "title": "FellowshipMember",
+      "description": "Real active believer profile in the global fellowship roster",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "handle": { "type": "string", "maxLength": 100 },
+        "avatar": { "type": "string", "maxLength": 32 },
+        "photoURL": { "type": "string", "maxLength": 1000 },
+        "role": { "type": "string", "enum": ["user", "moderator", "admin", "superadmin"] },
+        "status": { "type": "string", "enum": ["active", "muted", "banned"] },
+        "email": { "type": "string", "maxLength": 256 },
+        "lastActive": { "type": "string", "maxLength": 64 },
+        "xp": { "type": "number" },
+        "streak": { "type": "number" },
+        "warningsCount": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "isOnline": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "handle", "role"]
     }
   },
   "firestore": {
@@ -49,6 +83,14 @@
     "/fellowship_channels/{channelId}": {
       "schema": "ChatChannel",
       "description": "Fellowship channels and topics"
+    },
+    "/global_system_config/{configId}": {
+      "schema": "GlobalSystemConfig",
+      "description": "Global device announcements and app visibility flags"
+    },
+    "/fellowship_members/{memberId}": {
+      "schema": "FellowshipMember",
+      "description": "Real registered members in fellowship community"
     }
   }
 }

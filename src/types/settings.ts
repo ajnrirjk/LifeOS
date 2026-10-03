@@ -34,6 +34,7 @@ export interface FellowshipMember {
   name: string;
   handle: string;
   avatar: string;
+  photoURL?: string;
   role: UserRole;
   status: 'active' | 'muted' | 'banned' | 'pending';
   lastActive: string;
@@ -41,6 +42,9 @@ export interface FellowshipMember {
   streak: number;
   warningsCount: number;
   notes?: string;
+  email?: string;
+  isOnline?: boolean;
+  createdAt?: number;
 }
 
 export interface SystemAnnouncement {

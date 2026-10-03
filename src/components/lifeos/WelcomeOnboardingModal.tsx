@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useSettings } from '../../context/SettingsContext';
 import { useApp } from '../../context/AppContext';
 import { sounds } from '../../services/soundEffects';
+import { firebaseGlobalService } from '../../services/firebaseGlobalService';
 import { Sparkles, ArrowRight, Shield, Check } from 'lucide-react';
 
 const AVATAR_OPTIONS = ['🕊️', '✝️', '👑', '📖', '🧔🏻‍♂️', '👩🏼', '🌟', '🌿', '🕯️', '🛡️', '⛪', '🐑'];
@@ -52,12 +53,22 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
         streak: userStats?.streak || 1
       };
 
-      // Register with global fellowship backend
-      await fetch('/api/fellowship/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(() => {});
+      // Register with global Firestore and backend
+      await firebaseGlobalService.registerMember({
+        id: userId,
+        name: finalName,
+        handle: finalHandle,
+        avatar: selectedAvatar,
+        role: 'user',
+        status: 'active',
+        email: googleUser?.email || settings.profile.email || '',
+        photoURL: googleUser?.photoURL || undefined,
+        lastActive: 'Just now',
+        xp: userStats?.xp || 0,
+        streak: userStats?.streak || 1,
+        warningsCount: 0,
+        notes: bio.trim()
+      });
 
       updateProfile({
         name: finalName,

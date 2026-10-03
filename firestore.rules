@@ -30,6 +30,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Global System Configuration (Announcements & App Marketplace flags)
+    match /global_system_config/{configId} {
+      allow read: if true;
+      allow create, update: if isValidId(configId);
+      allow delete: if false;
+    }
+
+    // Fellowship Real Members Roster
+    match /fellowship_members/{memberId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(memberId);
+    }
+
     // Default safety net
     match /{document=**} {
       allow read, write: if false;
