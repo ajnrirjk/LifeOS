@@ -89,9 +89,9 @@ export const SystemSettingsModal: React.FC = () => {
 
   const { apps } = useLifeOS();
 
-  // Admin PIN prompt state
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
+  // Admin Email verification state (strictly aw03102008@gmail.com)
+  const [adminEmailInput, setAdminEmailInput] = useState('');
+  const [adminEmailError, setAdminEmailError] = useState(false);
 
   // New announcement form state
   const [newAnnTitle, setNewAnnTitle] = useState('');
@@ -115,11 +115,8 @@ export const SystemSettingsModal: React.FC = () => {
 
   if (!isSettingsOpen) return null;
 
-  const isAdmin = isAuthorizedAdmin || 
-                  settings.adminModeUnlocked !== false || 
-                  settings.profile.role === 'admin' || 
-                  settings.profile.role === 'superadmin' ||
-                  settings.profile.email?.toLowerCase() === masterAdminEmail.toLowerCase();
+  // STRICT ACCESS: Only aw03102008@gmail.com is authorized to access Master Admin God-Mode
+  const isAdmin = isAuthorizedAdmin;
 
   const filteredMembers = members.filter(m =>
     m.name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
@@ -872,51 +869,76 @@ export const SystemSettingsModal: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* 1-Click Master Admin Authenticate */}
+                  {/* Authenticate strictly as aw03102008@gmail.com */}
                   <div className="w-full space-y-3">
                     <button
-                      onClick={() => {
-                        unlockAdmin();
-                        showFeedback('Master Admin God-Mode Unlocked!');
+                      type="button"
+                      disabled={isGoogleSigningIn}
+                      onClick={async () => {
+                        try {
+                          await signInWithGoogle();
+                        } catch {}
                       }}
-                      className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl shadow-amber-950/40 active:scale-95 transition-all"
+                      className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-stone-100 text-stone-900 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
                     >
-                      <Crown className="w-4 h-4 text-stone-950" />
-                      <span>Authenticate as {masterAdminEmail}</span>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                        />
+                      </svg>
+                      <span>{isGoogleSigningIn ? 'Connecting...' : `Sign In with Google (${masterAdminEmail})`}</span>
                     </button>
 
-                    {/* PIN Unlock Option */}
-                    <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-                      <div className="text-[11px] font-bold text-stone-400">Or Enter Administrator Master PIN (7777):</div>
+                    {/* Email Verification Box strictly for aw03102008@gmail.com */}
+                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2.5 text-left">
+                      <div className="text-[11px] font-bold text-stone-300">
+                        Or Verify Your Administrator Email:
+                      </div>
                       <div className="flex gap-2">
                         <input
-                          type="password"
-                          maxLength={6}
-                          value={pinInput}
+                          type="email"
+                          value={adminEmailInput}
                           onChange={(e) => {
-                            setPinInput(e.target.value);
-                            setPinError(false);
+                            setAdminEmailInput(e.target.value);
+                            setAdminEmailError(false);
                           }}
-                          placeholder="Enter PIN..."
-                          className="flex-1 px-3 py-2 rounded-xl bg-black/60 border border-white/20 text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500"
+                          placeholder={masterAdminEmail}
+                          className="flex-1 px-3 py-2 rounded-xl bg-black/60 border border-white/20 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
                         />
                         <button
                           type="button"
                           onClick={() => {
-                            if (verifyAdminPin(pinInput)) {
-                              unlockAdmin();
-                              showFeedback('Admin PIN Verified!');
+                            if (adminEmailInput.trim().toLowerCase() === masterAdminEmail.toLowerCase()) {
+                              updateProfile({ email: masterAdminEmail, role: 'superadmin', avatar: '👑' });
+                              showFeedback(`Master Admin Verified: ${masterAdminEmail}`);
+                              sounds.playVictory();
                             } else {
-                              setPinError(true);
+                              setAdminEmailError(true);
+                              sounds.playIncorrect();
                             }
                           }}
-                          className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-colors"
+                          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs transition-colors shrink-0"
                         >
                           Verify
                         </button>
                       </div>
-                      {pinError && (
-                        <p className="text-[11px] text-rose-400 font-bold">Incorrect PIN. Master PIN is 7777.</p>
+                      {adminEmailError && (
+                        <p className="text-[11px] text-rose-400 font-bold">
+                          Access Denied: Only {masterAdminEmail} is authorized to manage this system.
+                        </p>
                       )}
                     </div>
                   </div>

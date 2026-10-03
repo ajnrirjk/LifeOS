@@ -40,26 +40,28 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
 
     setIsSubmitting(true);
     try {
-      const userId = googleUser?.uid || settings.profile.id || `usr_${Date.now()}`;
-      const payload = {
-        id: userId,
-        name: finalName,
-        handle: finalHandle,
-        avatar: selectedAvatar,
-        bio: bio.trim(),
-        email: googleUser?.email || settings.profile.email || '',
-        photoURL: googleUser?.photoURL || undefined,
-        xp: userStats?.xp || 0,
-        streak: userStats?.streak || 1
-      };
+      let deviceUserId = '';
+      try {
+        deviceUserId = localStorage.getItem('lifeos_device_unique_user_id') || '';
+      } catch {}
+      if (!deviceUserId) {
+        deviceUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        try {
+          localStorage.setItem('lifeos_device_unique_user_id', deviceUserId);
+        } catch {}
+      }
+
+      const userId = googleUser?.uid || deviceUserId;
+      const isMasterAdmin = (googleUser?.email?.toLowerCase().trim() === 'aw03102008@gmail.com') ||
+                            (settings.profile.email?.toLowerCase().trim() === 'aw03102008@gmail.com');
 
       // Register with global Firestore and backend
       await firebaseGlobalService.registerMember({
         id: userId,
         name: finalName,
         handle: finalHandle,
-        avatar: selectedAvatar,
-        role: 'user',
+        avatar: isMasterAdmin ? '👑' : selectedAvatar,
+        role: isMasterAdmin ? 'superadmin' : 'user',
         status: 'active',
         email: googleUser?.email || settings.profile.email || '',
         photoURL: googleUser?.photoURL || undefined,
@@ -71,10 +73,12 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
       });
 
       updateProfile({
+        id: userId,
         name: finalName,
         handle: finalHandle,
-        avatar: selectedAvatar,
+        avatar: isMasterAdmin ? '👑' : selectedAvatar,
         bio: bio.trim(),
+        role: isMasterAdmin ? 'superadmin' : 'user'
       });
 
       try {

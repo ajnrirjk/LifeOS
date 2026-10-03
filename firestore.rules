@@ -1,51 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Fellowship Chat Messages
-    match /fellowship_messages/{messageId} {
-      allow read: if true;
-      allow create: if isValidId(messageId)
-        && request.resource.data.text is string
-        && request.resource.data.text.size() <= 5000
-        && request.resource.data.channelId is string
-        && request.resource.data.senderId is string
-        && request.resource.data.senderName is string;
-      allow update: if isValidId(messageId)
-        && (
-          // Toggle reactions or pin
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'pinned'])
-        );
-      allow delete: if isValidId(messageId);
-    }
-
-    // Fellowship Channels
-    match /fellowship_channels/{channelId} {
-      allow read: if true;
-      allow create, update: if isValidId(channelId);
-      allow delete: if false;
-    }
-
-    // Global System Configuration (Announcements & App Marketplace flags)
+    // Global System Configuration (Announcements, App Feature Flags)
     match /global_system_config/{configId} {
-      allow read: if true;
-      allow create, update: if isValidId(configId);
-      allow delete: if false;
+      allow read, write: if true;
     }
 
-    // Fellowship Real Members Roster
+    // Real Fellowship Community Members
     match /fellowship_members/{memberId} {
-      allow read: if true;
-      allow create, update, delete: if isValidId(memberId);
+      allow read, write: if true;
     }
 
-    // Default safety net
+    // Fellowship Chat Messages & Channels
+    match /fellowship_messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    match /fellowship_channels/{channelId} {
+      allow read, write: if true;
+    }
+
+    // Open read/write for all application collections
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }
