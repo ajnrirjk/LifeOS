@@ -564,7 +564,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const totalUnreadDMs = dmChannels.reduce((sum, dm) => sum + (unreadCounts[dm.id] || 0), 0);
 
   return (
-    <div className="relative flex h-full w-full bg-[#1e1f22] text-[#dbdee1] font-sans antialiased select-none overflow-hidden rounded-none md:rounded-2xl shadow-none md:shadow-2xl border-0 md:border md:border-white/10">
+    <div className="relative flex h-full w-full bg-[#1e1f22] text-[#dbdee1] font-sans antialiased select-none overflow-hidden rounded-none border-0 shadow-none">
       {/* ========================================================================= */}
       {/* MOBILE OVERLAY BACKDROPS                                                  */}
       {/* ========================================================================= */}

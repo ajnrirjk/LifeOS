@@ -45,7 +45,7 @@ const FaithLingoWindowContent: React.FC = () => {
       {activeLesson ? (
         <LessonModal lesson={activeLesson} onClose={() => setActiveLesson(null)} />
       ) : (
-        <div className="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full">
+        <div className="flex-1 flex flex-col md:flex-row w-full h-full">
           <Navigation />
           <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-100px)]">
             {currentTab === 'learn' && <StudyPathView />}
@@ -202,20 +202,18 @@ export const LifeOSDesktop: React.FC = () => {
       {/* Desktop Workspace / Active App Window / Desktop Widgets */}
       <div className={`flex-1 relative overflow-hidden flex flex-col ${
         !isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized
-          ? 'p-0 md:p-3 pb-0 md:pb-24'
+          ? 'p-0 pb-0'
           : 'p-2 sm:p-3 pb-0 md:pb-24'
       }`}>
         <AnimatePresence mode="wait">
           {!isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? (
             <motion.div
               key={`window-${activeApp.id}`}
-              initial={{ opacity: 0, scale: 0.95, y: 14 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 360, mass: 0.7 }}
-              className={`flex-1 flex flex-col rounded-none md:rounded-3xl bg-amber-50/95 dark:bg-slate-950/95 backdrop-blur-xl border-0 md:border md:border-white/20 shadow-none md:shadow-2xl overflow-hidden transition-all duration-300 ${
-                !activeWindowState.isMaximized ? 'md:max-w-6xl md:max-h-[84vh] md:mx-auto md:my-auto md:w-full' : 'w-full h-full'
-              }`}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="flex-1 flex flex-col bg-amber-50/95 dark:bg-slate-950/95 backdrop-blur-xl overflow-hidden w-full h-full rounded-none border-0 shadow-none m-0 p-0"
             >
               {/* Desktop Window Titlebar with macOS traffic lights & Windows-style actions */}
               <div className="hidden md:flex h-9 px-4 bg-stone-100/90 dark:bg-slate-900/90 border-b border-stone-200/80 dark:border-slate-800 items-center justify-between select-none shrink-0">
