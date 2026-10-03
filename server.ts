@@ -1177,6 +1177,9 @@ app.post('/api/meet/join', (req: Request, res: Response) => {
   });
 });
 
+// Pending WebRTC signals queue for HTTP polling reliability
+const pendingSignals: Map<string, Array<{ senderId: string; targetId: string; signalData: any; type: string; timestamp: number }>> = new Map();
+
 // 5. Relay WebRTC Signal (Offer, Answer, ICE Candidate) between peers
 app.post('/api/meet/signal', (req: Request, res: Response) => {
   const { roomId, senderId, targetId, signalData, type } = req.body;
@@ -1200,7 +1203,43 @@ app.post('/api/meet/signal', (req: Request, res: Response) => {
     }
   });
 
+  // Also push to HTTP poll queue for guaranteed retrieval
+  const queueKey = `${roomId}_${targetId}`;
+  if (!pendingSignals.has(queueKey)) {
+    pendingSignals.set(queueKey, []);
+  }
+  pendingSignals.get(queueKey)!.push({
+    senderId,
+    targetId,
+    signalData,
+    type,
+    timestamp: Date.now()
+  });
+
   return res.json({ success: true, delivered });
+});
+
+// 5b. HTTP Polling endpoint for WebRTC signals (Guaranteed cross-device relay)
+app.get('/api/meet/signals', (req: Request, res: Response) => {
+  const roomId = String(req.query.roomId || '');
+  const userId = String(req.query.userId || '');
+  if (!roomId || !userId) {
+    return res.json({ signals: [], participants: [] });
+  }
+
+  const queueKey = `${roomId}_${userId}`;
+  const signals = pendingSignals.get(queueKey) || [];
+  pendingSignals.set(queueKey, []); // Clear fetched signals
+
+  const room = meetingRooms.get(roomId);
+  if (room && room.participants[userId]) {
+    room.participants[userId].lastSeen = Date.now();
+  }
+
+  return res.json({
+    signals,
+    participants: room ? Object.values(room.participants) : []
+  });
 });
 
 // 6. Update Participant State (Mute mic, camera off, screen share, raise hand)

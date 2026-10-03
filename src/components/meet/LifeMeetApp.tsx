@@ -297,6 +297,10 @@ export const LifeMeetApp: React.FC = () => {
       } else if (type === 'peer_joined') {
         sounds.playCorrect();
         setParticipants(data.participants || []);
+      } else if (type === 'participants_updated') {
+        if (Array.isArray(data.participants)) {
+          setParticipants(data.participants);
+        }
       } else if (type === 'peer_left') {
         setParticipants(data.participants || []);
       } else if (type === 'peer_state_changed') {

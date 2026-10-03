@@ -364,8 +364,58 @@ class MeetService {
     });
 
     this.eventSource.onerror = () => {
-      console.warn('Meet SSE stream disconnected, reconnecting...');
+      console.warn('Meet SSE stream disconnected, relying on HTTP polling signals...');
     };
+
+    // HTTP Polling backup interval for robust cross-device signaling (every 1.5 seconds)
+    const pollInterval = setInterval(async () => {
+      if (!this.currentRoomId || !this.currentUser || !this.eventSource) {
+        clearInterval(pollInterval);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/meet/signals?roomId=${encodeURIComponent(this.currentRoomId)}&userId=${encodeURIComponent(this.currentUser.id)}`);
+        if (res.ok) {
+          const { signals, participants } = await res.json();
+          if (Array.isArray(participants) && participants.length > 0) {
+            this.emit('participants_updated', { participants });
+          }
+          if (Array.isArray(signals)) {
+            for (const sig of signals) {
+              await this.handleIncomingSignal(sig);
+            }
+          }
+        }
+      } catch {}
+    }, 1500);
+  }
+
+  private async handleIncomingSignal(sig: { senderId: string; signalData: any; type: string }) {
+    const { senderId, signalData, type } = sig;
+    if (senderId === this.currentUser?.id) return;
+
+    let pc = this.peerConnections.get(senderId);
+    if (!pc) {
+      pc = this.createPeerConnection(senderId, false);
+      this.emit('peer_joined', { peer: { id: senderId }, participants: [] });
+    }
+
+    try {
+      if (type === 'offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        this.sendSignal(senderId, answer, 'answer');
+      } else if (type === 'answer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+      } else if (type === 'ice') {
+        if (signalData) {
+          await pc.addIceCandidate(new RTCIceCandidate(signalData));
+        }
+      }
+    } catch (err) {
+      console.warn('Error handling incoming WebRTC signal:', err);
+    }
   }
 
   // Create RTCPeerConnection for a remote peer
