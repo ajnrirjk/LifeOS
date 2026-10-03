@@ -967,48 +967,120 @@ interface ServerMeetingRoom {
   messages: MeetingChatMessage[];
 }
 
-// In-memory meeting rooms with default active public lounges
-const meetingRooms: Map<string, ServerMeetingRoom> = new Map([
-  [
-    'fellowship-prayer-room',
-    {
-      id: 'fellowship-prayer-room',
-      title: 'Global Prayer & Worship Room',
-      hostId: 'system',
-      createdAt: Date.now(),
-      isPublic: true,
-      prayerFocus: 'Praying for global revival, peace, and church unity',
-      participants: {},
-      messages: []
+// File-backed shared storage for meeting rooms & WebRTC signals across devices and instances
+const STORE_PATH = path.join('/tmp', 'lifeos_meeting_store.json');
+
+function getStoredStore(): { rooms: Map<string, ServerMeetingRoom>; signals: Map<string, any[]> } {
+  const rooms = new Map<string, ServerMeetingRoom>([
+    [
+      'fellowship-prayer-room',
+      {
+        id: 'fellowship-prayer-room',
+        title: 'Global Prayer & Worship Room',
+        hostId: 'system',
+        createdAt: Date.now(),
+        isPublic: true,
+        prayerFocus: 'Praying for global revival, peace, and church unity',
+        participants: {},
+        messages: []
+      }
+    ],
+    [
+      'sunday-sermon-lounge',
+      {
+        id: 'sunday-sermon-lounge',
+        title: 'Sunday Sermon Discussion Call',
+        hostId: 'system',
+        createdAt: Date.now(),
+        isPublic: true,
+        prayerFocus: 'Reviewing sermon notes and scripture application',
+        participants: {},
+        messages: []
+      }
+    ],
+    [
+      'bible-study-meet',
+      {
+        id: 'bible-study-meet',
+        title: 'Scripture Deep Dive Lounge',
+        hostId: 'system',
+        createdAt: Date.now(),
+        isPublic: true,
+        prayerFocus: 'Book of Romans verse-by-verse discussion',
+        participants: {},
+        messages: []
+      }
+    ]
+  ]);
+  const signals = new Map<string, any[]>();
+
+  try {
+    if (fs.existsSync(STORE_PATH)) {
+      const raw = fs.readFileSync(STORE_PATH, 'utf-8');
+      const data = JSON.parse(raw);
+      if (data.rooms) {
+        Object.entries(data.rooms).forEach(([k, v]) => {
+          rooms.set(k, v as ServerMeetingRoom);
+        });
+      }
+      if (data.signals) {
+        Object.entries(data.signals).forEach(([k, v]) => {
+          signals.set(k, v as any[]);
+        });
+      }
     }
-  ],
-  [
-    'sunday-sermon-lounge',
-    {
-      id: 'sunday-sermon-lounge',
-      title: 'Sunday Sermon Discussion Call',
-      hostId: 'system',
-      createdAt: Date.now(),
-      isPublic: true,
-      prayerFocus: 'Reviewing sermon notes and scripture application',
-      participants: {},
-      messages: []
+  } catch {}
+
+  return { rooms, signals };
+}
+
+const initialStore = getStoredStore();
+const meetingRooms: Map<string, ServerMeetingRoom> = initialStore.rooms;
+const pendingSignals: Map<string, any[]> = initialStore.signals;
+
+function persistStore() {
+  try {
+    const roomsObj: Record<string, ServerMeetingRoom> = {};
+    meetingRooms.forEach((r, k) => { roomsObj[k] = r; });
+    const signalsObj: Record<string, any[]> = {};
+    pendingSignals.forEach((s, k) => { signalsObj[k] = s; });
+    fs.writeFileSync(STORE_PATH, JSON.stringify({ rooms: roomsObj, signals: signalsObj }), 'utf-8');
+  } catch {}
+}
+
+function syncStoreFromDisk() {
+  try {
+    if (fs.existsSync(STORE_PATH)) {
+      const raw = fs.readFileSync(STORE_PATH, 'utf-8');
+      const data = JSON.parse(raw);
+      if (data.rooms) {
+        Object.entries(data.rooms).forEach(([k, v]) => {
+          if (!meetingRooms.has(k)) {
+            meetingRooms.set(k, v as ServerMeetingRoom);
+          } else {
+            // Merge participants
+            const existing = meetingRooms.get(k)!;
+            const incoming = v as ServerMeetingRoom;
+            existing.participants = { ...incoming.participants, ...existing.participants };
+            if (incoming.messages && incoming.messages.length > existing.messages.length) {
+              existing.messages = incoming.messages;
+            }
+          }
+        });
+      }
+      if (data.signals) {
+        Object.entries(data.signals).forEach(([k, v]) => {
+          const arr = v as any[];
+          if (!pendingSignals.has(k)) {
+            pendingSignals.set(k, arr);
+          } else {
+            pendingSignals.set(k, [...pendingSignals.get(k)!, ...arr]);
+          }
+        });
+      }
     }
-  ],
-  [
-    'bible-study-meet',
-    {
-      id: 'bible-study-meet',
-      title: 'Scripture Deep Dive Lounge',
-      hostId: 'system',
-      createdAt: Date.now(),
-      isPublic: true,
-      prayerFocus: 'Book of Romans verse-by-verse discussion',
-      participants: {},
-      messages: []
-    }
-  ]
-]);
+  } catch {}
+}
 
 const meetingClients: Map<string, { res: Response; roomId: string; userId: string }> = new Map();
 
@@ -1052,6 +1124,7 @@ setInterval(() => {
 
 // 1. List active/public meeting rooms
 app.get('/api/meet/rooms', (_req: Request, res: Response) => {
+  syncStoreFromDisk();
   const list = Array.from(meetingRooms.values()).map(r => ({
     id: r.id,
     title: r.title,
@@ -1074,6 +1147,7 @@ app.get('/api/meet/rooms', (_req: Request, res: Response) => {
 
 // 2. Get details for a specific meeting room
 app.get('/api/meet/rooms/:roomId', (req: Request, res: Response) => {
+  syncStoreFromDisk();
   const { roomId } = req.params;
   const room = meetingRooms.get(roomId);
   if (!room) {
@@ -1093,6 +1167,7 @@ app.get('/api/meet/rooms/:roomId', (req: Request, res: Response) => {
 
 // 3. Create a new meeting room
 app.post('/api/meet/rooms', (req: Request, res: Response) => {
+  syncStoreFromDisk();
   const { title, hostId, isPublic, prayerFocus, customCode } = req.body;
   
   // Format clean room code (Google Meet style e.g. "praise-room-777" or "abc-defg-hij")
@@ -1114,11 +1189,13 @@ app.post('/api/meet/rooms', (req: Request, res: Response) => {
   };
 
   meetingRooms.set(cleanCode, room);
+  persistStore();
   return res.json(room);
 });
 
 // 4. Join a meeting room
 app.post('/api/meet/join', (req: Request, res: Response) => {
+  syncStoreFromDisk();
   const { roomId, user, isAudioMuted = false, isVideoMuted = false } = req.body;
   if (!roomId || !user || !user.id) {
     return res.status(400).json({ error: 'roomId and user (with id, name) are required' });
@@ -1156,6 +1233,7 @@ app.post('/api/meet/join', (req: Request, res: Response) => {
   };
 
   room.participants[user.id] = participant;
+  persistStore();
 
   // Broadcast to other participants in this room
   broadcastToMeetingRoom(roomId, 'peer_joined', {
@@ -1177,11 +1255,9 @@ app.post('/api/meet/join', (req: Request, res: Response) => {
   });
 });
 
-// Pending WebRTC signals queue for HTTP polling reliability
-const pendingSignals: Map<string, Array<{ senderId: string; targetId: string; signalData: any; type: string; timestamp: number }>> = new Map();
-
 // 5. Relay WebRTC Signal (Offer, Answer, ICE Candidate) between peers
 app.post('/api/meet/signal', (req: Request, res: Response) => {
+  syncStoreFromDisk();
   const { roomId, senderId, targetId, signalData, type } = req.body;
   if (!roomId || !senderId || !targetId || !signalData) {
     return res.status(400).json({ error: 'Missing roomId, senderId, targetId, or signalData' });
@@ -1216,11 +1292,13 @@ app.post('/api/meet/signal', (req: Request, res: Response) => {
     timestamp: Date.now()
   });
 
+  persistStore();
   return res.json({ success: true, delivered });
 });
 
 // 5b. HTTP Polling endpoint for WebRTC signals (Guaranteed cross-device relay)
 app.get('/api/meet/signals', (req: Request, res: Response) => {
+  syncStoreFromDisk();
   const roomId = String(req.query.roomId || '');
   const userId = String(req.query.userId || '');
   if (!roomId || !userId) {
@@ -1236,6 +1314,7 @@ app.get('/api/meet/signals', (req: Request, res: Response) => {
     room.participants[userId].lastSeen = Date.now();
   }
 
+  persistStore();
   return res.json({
     signals,
     participants: room ? Object.values(room.participants) : []
@@ -1244,6 +1323,7 @@ app.get('/api/meet/signals', (req: Request, res: Response) => {
 
 // 6. Update Participant State (Mute mic, camera off, screen share, raise hand)
 app.post('/api/meet/state', (req: Request, res: Response) => {
+  syncStoreFromDisk();
   const { roomId, userId, updates } = req.body;
   if (!roomId || !userId || !updates) {
     return res.status(400).json({ error: 'roomId, userId, and updates are required' });
@@ -1260,6 +1340,8 @@ app.post('/api/meet/state', (req: Request, res: Response) => {
     lastSeen: Date.now()
   };
 
+  persistStore();
+
   broadcastToMeetingRoom(roomId, 'peer_state_changed', {
     userId,
     updates,
@@ -1272,6 +1354,7 @@ app.post('/api/meet/state', (req: Request, res: Response) => {
 
 // 7. Send In-Call Chat Message
 app.post('/api/meet/chat', (req: Request, res: Response) => {
+  syncStoreFromDisk();
   const { roomId, senderId, senderName, senderPhoto, text } = req.body;
   if (!roomId || !text || !text.trim()) {
     return res.status(400).json({ error: 'roomId and text are required' });
@@ -1296,6 +1379,7 @@ app.post('/api/meet/chat', (req: Request, res: Response) => {
     room.messages.splice(0, room.messages.length - 200);
   }
 
+  persistStore();
   broadcastToMeetingRoom(roomId, 'chat_message', msg);
   return res.json(msg);
 });
