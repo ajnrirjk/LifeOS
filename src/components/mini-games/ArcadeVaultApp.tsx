@@ -159,7 +159,7 @@ export const ArcadeVaultApp: React.FC = () => {
   // If a specific mini game is launched, render its game screen
   if (activeGame) {
     return (
-      <div className="min-h-full bg-stone-950 text-white flex flex-col justify-center py-4">
+      <div className="min-h-full bg-stone-950 text-white flex flex-col justify-center items-center py-2 px-2 sm:px-4 overflow-x-hidden">
         {activeGame === 'flappy_dove' && (
           <FlappyDoveGame
             highScore={stats.highScores.flappy_dove}

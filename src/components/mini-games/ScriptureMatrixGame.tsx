@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { sounds } from '../../services/soundEffects';
-import { Play, RotateCcw, Volume2, VolumeX, Award, ArrowLeft, Sparkles, Brain } from 'lucide-react';
+import { Play, RotateCcw, Volume2, VolumeX, Award, ArrowLeft } from 'lucide-react';
 
 interface ScriptureMatrixGameProps {
   onGameOver?: (score: number, coinsEarned: number) => void;
@@ -9,10 +9,10 @@ interface ScriptureMatrixGameProps {
 }
 
 const PADS = [
-  { id: 0, label: 'FAITH', color: 'from-emerald-500 to-teal-600', glow: 'shadow-emerald-500/50', border: 'border-emerald-400', noteFreq: 523.25 }, // C5
-  { id: 1, label: 'HOPE', color: 'from-blue-500 to-indigo-600', glow: 'shadow-blue-500/50', border: 'border-blue-400', noteFreq: 659.25 }, // E5
-  { id: 2, label: 'LOVE', color: 'from-rose-500 to-red-600', glow: 'shadow-rose-500/50', border: 'border-rose-400', noteFreq: 783.99 }, // G5
-  { id: 3, label: 'PEACE', color: 'from-amber-500 to-yellow-500', glow: 'shadow-amber-500/50', border: 'border-amber-400', noteFreq: 1046.50 }, // C6
+  { id: 0, label: 'FAITH', emoji: '🕊️', color: 'from-emerald-500 to-teal-600', glow: 'shadow-emerald-500/50', border: 'border-emerald-400', noteFreq: 523.25 },
+  { id: 1, label: 'HOPE', emoji: '⚓', color: 'from-blue-500 to-indigo-600', glow: 'shadow-blue-500/50', border: 'border-blue-400', noteFreq: 659.25 },
+  { id: 2, label: 'LOVE', emoji: '❤️', color: 'from-rose-500 to-red-600', glow: 'shadow-rose-500/50', border: 'border-rose-400', noteFreq: 783.99 },
+  { id: 3, label: 'PEACE', emoji: '🌿', color: 'from-amber-500 to-yellow-500', glow: 'shadow-amber-500/50', border: 'border-amber-400', noteFreq: 1046.50 },
 ];
 
 export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGameOver, onBack, highScore }) => {
@@ -24,7 +24,6 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
   const [currentHighScore, setCurrentHighScore] = useState(highScore);
   const [soundMuted, setSoundMuted] = useState(false);
 
-  // Play crystal synth tone
   const playTone = (freq: number) => {
     if (soundMuted || typeof window === 'undefined') return;
     try {
@@ -89,7 +88,6 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
       const nextIndex = playerIndex + 1;
 
       if (nextIndex === sequence.length) {
-        // Round Completed!
         const nextScore = sequence.length;
         setScore(nextScore);
         if (!soundMuted) sounds.playCorrect();
@@ -105,7 +103,6 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
         setPlayerIndex(nextIndex);
       }
     } else {
-      // Mistake!
       if (!soundMuted) sounds.playIncorrect();
       setGameState('gameover');
 
@@ -118,8 +115,8 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-3 sm:p-6 w-full max-w-lg mx-auto select-none">
-      <div className="w-full flex items-center justify-between mb-3 text-stone-200">
+    <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full max-w-4xl mx-auto select-none">
+      <div className="w-full flex items-center justify-between mb-2 text-stone-200">
         <button
           onClick={() => {
             sounds.playTap();
@@ -146,10 +143,10 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
         </div>
       </div>
 
-      <div className="relative w-full aspect-square max-h-[460px] rounded-3xl overflow-hidden shadow-2xl border-2 border-indigo-500/30 bg-stone-950 p-6 flex flex-col items-center justify-center">
+      <div className="relative w-full aspect-[16/9] max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-indigo-500/30 bg-stone-950 p-6 flex flex-col items-center justify-center">
         {/* Live HUD */}
         {gameState !== 'idle' && (
-          <div className="absolute top-4 left-0 right-0 flex justify-between px-6 pointer-events-none z-10">
+          <div className="absolute top-4 left-0 right-0 flex justify-between px-8 pointer-events-none z-10">
             <div className="px-3.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white font-black text-lg shadow-lg">
               Round: {sequence.length}
             </div>
@@ -159,8 +156,8 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
           </div>
         )}
 
-        {/* 4 Glowing Crystal Sound Pads */}
-        <div className="grid grid-cols-2 gap-4 w-full h-full max-w-[340px] max-h-[340px]">
+        {/* 4 Glowing Landscape Crystal Sound Pads */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full max-w-2xl h-44 sm:h-52 z-0">
           {PADS.map((pad) => {
             const isLit = activePad === pad.id;
             return (
@@ -168,14 +165,14 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
                 key={pad.id}
                 onClick={() => handlePadPress(pad.id)}
                 disabled={gameState !== 'player'}
-                className={`rounded-3xl bg-gradient-to-tr ${pad.color} flex flex-col items-center justify-center font-black text-white text-lg tracking-widest transition-all duration-100 shadow-xl relative overflow-hidden border-2 ${
+                className={`rounded-3xl bg-gradient-to-tr ${pad.color} flex flex-col items-center justify-center font-black text-white tracking-widest transition-all duration-100 shadow-xl relative overflow-hidden border-2 ${
                   isLit
                     ? `scale-95 brightness-150 ring-4 ring-white ${pad.glow} ${pad.border}`
-                    : 'opacity-75 hover:opacity-100 active:scale-95 border-white/10'
+                    : 'opacity-80 hover:opacity-100 active:scale-95 border-white/10'
                 }`}
               >
-                <div className="text-2xl mb-1 drop-shadow">
-                  {pad.id === 0 ? '🕊️' : pad.id === 1 ? '⚓' : pad.id === 2 ? '❤️' : '🌿'}
+                <div className="text-3xl mb-1 drop-shadow">
+                  {pad.emoji}
                 </div>
                 <span className="text-xs sm:text-sm font-black drop-shadow">{pad.label}</span>
               </button>
@@ -186,19 +183,19 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
         {/* Idle Start Overlay */}
         {gameState === 'idle' && (
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center text-white z-20">
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-3xl shadow-xl shadow-indigo-500/30 mb-3 animate-pulse">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-3xl shadow-xl shadow-indigo-500/30 mb-2 animate-pulse">
               🧠
             </div>
             <h2 className="text-2xl font-black tracking-tight mb-1 bg-gradient-to-r from-indigo-200 via-white to-purple-300 bg-clip-text text-transparent">
               Scripture Memory Matrix
             </h2>
-            <p className="text-xs text-indigo-200/80 max-w-xs mb-6">
-              Watch the crystal harmonic sound pads flash in sequence, then replay the melody pattern without missing a beat!
+            <p className="text-xs text-indigo-200/80 max-w-md mb-4">
+              Watch the widescreen harmonic sound pads flash in sequence, then repeat the melody pattern!
             </p>
 
             <button
               onClick={startGame}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black text-sm shadow-xl shadow-indigo-500/40 flex items-center gap-2 active:scale-95 transition-all"
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black text-sm shadow-xl shadow-indigo-500/40 flex items-center gap-2 active:scale-95 transition-all"
             >
               <Play className="w-4 h-4 fill-white" />
               <span>START MEMORY TEST</span>
@@ -209,14 +206,14 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
         {/* Game Over Overlay */}
         {gameState === 'gameover' && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white z-20 animate-in fade-in duration-200">
-            <div className="text-4xl mb-2">💎</div>
-            <h3 className="text-xl font-black text-white mb-1">Sequence Interrupted</h3>
-            <div className="bg-white/10 rounded-2xl p-4 w-full max-w-xs mb-4 border border-white/15">
-              <div className="flex justify-between items-center py-1 border-b border-white/10">
+            <div className="text-3xl mb-1">💎</div>
+            <h3 className="text-xl font-black text-white mb-2">Sequence Interrupted</h3>
+            <div className="bg-white/10 rounded-2xl p-3 w-full max-w-xs mb-3 border border-white/15">
+              <div className="flex justify-between items-center py-0.5 border-b border-white/10">
                 <span className="text-xs text-stone-300">Rounds Mastered</span>
                 <span className="text-lg font-black text-indigo-400">{score}</span>
               </div>
-              <div className="flex justify-between items-center pt-1">
+              <div className="flex justify-between items-center pt-0.5">
                 <span className="text-xs text-stone-300">Best Memory</span>
                 <span className="text-sm font-black text-white">{currentHighScore}</span>
               </div>
@@ -224,7 +221,7 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
 
             <button
               onClick={startGame}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black text-sm shadow-xl shadow-indigo-500/40 flex items-center gap-2 active:scale-95 transition-all"
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black text-sm shadow-xl shadow-indigo-500/40 flex items-center gap-2 active:scale-95 transition-all"
             >
               <RotateCcw className="w-4 h-4" />
               <span>REPLAY MELODY</span>
@@ -233,7 +230,7 @@ export const ScriptureMatrixGame: React.FC<ScriptureMatrixGameProps> = ({ onGame
         )}
       </div>
 
-      <p className="text-[11px] text-stone-400 mt-3 text-center">
+      <p className="text-[11px] text-stone-400 mt-2 text-center">
         🎵 Each crystal pad rings with a distinct harmonic pitch (C, E, G, High C) to test both visual & audio memory!
       </p>
     </div>

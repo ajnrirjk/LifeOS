@@ -29,14 +29,14 @@ interface FallingPiece {
 }
 
 const BLOCK_COLORS = [
-  '#f59e0b', // amber
-  '#10b981', // emerald
-  '#06b6d4', // cyan
-  '#3b82f6', // blue
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#f43f5e', // rose
-  '#eab308', // yellow
+  '#f59e0b',
+  '#10b981',
+  '#06b6d4',
+  '#3b82f6',
+  '#8b5cf6',
+  '#ec4899',
+  '#f43f5e',
+  '#eab308',
 ];
 
 export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, onBack, highScore }) => {
@@ -49,14 +49,14 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
 
   const stateRef = useRef({
     stack: [] as Block[],
-    currentBlock: { x: 0, y: 0, width: 200, height: 26, color: '#f59e0b', vx: 3.5, direction: 1 },
+    currentBlock: { x: 0, y: 0, width: 220, height: 24, color: '#f59e0b', vx: 4.0, direction: 1 },
     fallingPieces: [] as FallingPiece[],
     cameraY: 0,
     targetCameraY: 0,
     score: 0,
     combo: 0,
     coinsEarned: 0,
-    blockHeight: 26,
+    blockHeight: 24,
     running: false,
     particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; color: string }>
   });
@@ -64,23 +64,23 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
   const startGame = () => {
     sounds.playTap();
     const s = stateRef.current;
-    const initialWidth = 190;
+    const initialWidth = 220;
     const baseBlock: Block = {
-      x: (380 - initialWidth) / 2,
-      y: 420,
+      x: (720 - initialWidth) / 2,
+      y: 330,
       width: initialWidth,
-      height: 26,
+      height: 24,
       color: '#6366f1'
     };
 
     s.stack = [baseBlock];
     s.currentBlock = {
       x: 0,
-      y: 420 - 26,
+      y: 330 - 24,
       width: initialWidth,
-      height: 26,
+      height: 24,
       color: BLOCK_COLORS[1],
-      vx: 3.8,
+      vx: 4.0,
       direction: 1
     };
     s.fallingPieces = [];
@@ -120,7 +120,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
     const topBlock = s.stack[s.stack.length - 1];
 
     const diff = current.x - topBlock.x;
-    const tolerance = 4; // Perfect drop threshold
+    const tolerance = 4;
 
     let newWidth = current.width - Math.abs(diff);
     let newX = current.x;
@@ -133,7 +133,6 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
       s.score += 2 + s.combo;
       if (!soundMuted) sounds.playLevelComplete();
 
-      // Golden celebratory sparkles
       for (let i = 0; i < 15; i++) {
         s.particles.push({
           x: newX + Math.random() * newWidth,
@@ -145,13 +144,11 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         });
       }
     } else if (newWidth > 0) {
-      // Normal Drop with Slicing!
       s.combo = 0;
       s.score += 1;
       if (!soundMuted) sounds.playTap();
 
       if (diff > 0) {
-        // Cut off right piece
         newX = current.x;
         const fallingWidth = diff;
         s.fallingPieces.push({
@@ -166,7 +163,6 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
           vRot: 0.05
         });
       } else {
-        // Cut off left piece
         newX = topBlock.x;
         const fallingWidth = -diff;
         s.fallingPieces.push({
@@ -182,7 +178,6 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         });
       }
     } else {
-      // Complete Miss!
       s.fallingPieces.push({
         x: current.x,
         y: current.y,
@@ -198,7 +193,6 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
       return;
     }
 
-    // Add new placed block to stack
     const placedBlock: Block = {
       x: newX,
       y: current.y,
@@ -211,18 +205,15 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
     setScore(s.score);
     setCombo(s.combo);
 
-    // Speed increases with height
-    const nextSpeed = Math.min(7.5, 3.8 + s.score * 0.12);
+    const nextSpeed = Math.min(8.5, 4.0 + s.score * 0.12);
     const nextColor = BLOCK_COLORS[(s.stack.length) % BLOCK_COLORS.length];
 
-    // Scroll camera up if stack goes above mid-screen
-    if (placedBlock.y - s.cameraY < 240) {
-      s.targetCameraY = 240 - placedBlock.y;
+    if (placedBlock.y - s.cameraY < 180) {
+      s.targetCameraY = 180 - placedBlock.y;
     }
 
-    // Spawn next moving block
     s.currentBlock = {
-      x: Math.random() > 0.5 ? 0 : 380 - newWidth,
+      x: Math.random() > 0.5 ? 0 : 720 - newWidth,
       y: placedBlock.y - s.blockHeight,
       width: newWidth,
       height: s.blockHeight,
@@ -245,10 +236,8 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
       const width = canvas.width;
       const height = canvas.height;
 
-      // Smooth camera interpolation
       s.cameraY += (s.targetCameraY - s.cameraY) * 0.1;
 
-      // Dark futuristic cyberpunk sky gradient
       const grad = ctx.createLinearGradient(0, 0, 0, height);
       grad.addColorStop(0, '#09090b');
       grad.addColorStop(0.6, '#1e1b4b');
@@ -256,9 +245,9 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
 
-      // Starfield / celestial particles in background
+      // Starfield
       ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 35; i++) {
         const sx = ((i * 47) % width);
         const sy = ((i * 73 + s.cameraY * 0.3) % height);
         ctx.fillRect(sx, sy, 1.5, 1.5);
@@ -267,7 +256,6 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
       ctx.save();
       ctx.translate(0, s.cameraY);
 
-      // Update Moving Block
       if (s.running) {
         const cur = s.currentBlock;
         cur.x += cur.vx * cur.direction;
@@ -288,10 +276,8 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         ctx.shadowBlur = idx === s.stack.length - 1 ? 12 : 4;
         ctx.fillRect(b.x, b.y, b.width, b.height);
 
-        // Highlight top sheen
         ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.fillRect(b.x, b.y, b.width, 3);
-        // Shadow base
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.fillRect(b.x, b.y + b.height - 3, b.width, 3);
       });
@@ -308,7 +294,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         ctx.fillRect(cur.x, cur.y, cur.width, 3);
       }
 
-      // Update & Render Falling Sliced Pieces
+      // Render Falling Pieces
       for (let i = s.fallingPieces.length - 1; i >= 0; i--) {
         const p = s.fallingPieces[i];
         p.vy += 0.4;
@@ -330,7 +316,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         }
       }
 
-      // Render Sparkle Particles
+      // Render Sparkles
       for (let i = s.particles.length - 1; i >= 0; i--) {
         const pt = s.particles[i];
         pt.x += pt.vx;
@@ -376,8 +362,8 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
   }, [gameState, dropBlock]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-3 sm:p-6 w-full max-w-lg mx-auto select-none">
-      <div className="w-full flex items-center justify-between mb-3 text-stone-200">
+    <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full max-w-4xl mx-auto select-none">
+      <div className="w-full flex items-center justify-between mb-2 text-stone-200">
         <button
           onClick={() => {
             sounds.playTap();
@@ -408,17 +394,17 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         onClick={() => {
           if (gameState === 'playing') dropBlock();
         }}
-        className="relative w-full aspect-[4/5] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl border-2 border-violet-500/30 bg-stone-950 cursor-pointer touch-none"
+        className="relative w-full aspect-[16/9] max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-violet-500/30 bg-stone-950 cursor-pointer touch-none"
       >
         <canvas
           ref={canvasRef}
-          width={380}
-          height={480}
+          width={720}
+          height={380}
           className="w-full h-full object-cover"
         />
 
         {gameState === 'playing' && (
-          <div className="absolute top-4 left-0 right-0 flex justify-between px-5 pointer-events-none">
+          <div className="absolute top-4 left-0 right-0 flex justify-between px-6 pointer-events-none">
             <div className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white font-black text-xl shadow-lg">
               <span>{score}</span>
             </div>
@@ -433,14 +419,14 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
 
         {gameState === 'idle' && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center text-white">
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-violet-600 to-fuchsia-500 flex items-center justify-center text-3xl shadow-xl shadow-violet-500/30 mb-3 animate-pulse">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-violet-600 to-fuchsia-500 flex items-center justify-center text-3xl shadow-xl shadow-violet-500/30 mb-2 animate-pulse">
               🧱
             </div>
             <h2 className="text-2xl font-black tracking-tight mb-1 bg-gradient-to-r from-violet-200 via-white to-fuchsia-300 bg-clip-text text-transparent">
               Tower of Babel Stacker
             </h2>
-            <p className="text-xs text-violet-200/80 max-w-xs mb-6">
-              Tap precisely when the block aligns with the tower below. Slice off overhanging edges and aim for flawless perfection combos!
+            <p className="text-xs text-violet-200/80 max-w-md mb-4">
+              Tap precisely when the moving block aligns with the tower below. Slice off overhanging edges and aim for flawless perfection combos!
             </p>
 
             <button
@@ -448,7 +434,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
                 e.stopPropagation();
                 startGame();
               }}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-black text-sm shadow-xl shadow-violet-600/40 flex items-center gap-2 active:scale-95 transition-all"
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-black text-sm shadow-xl shadow-violet-600/40 flex items-center gap-2 active:scale-95 transition-all"
             >
               <Play className="w-4 h-4 fill-white" />
               <span>START STACKING</span>
@@ -458,18 +444,18 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
 
         {gameState === 'gameover' && (
           <div className="absolute inset-0 bg-black/75 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white animate-in fade-in duration-200">
-            <div className="text-4xl mb-2">🏛️</div>
-            <h3 className="text-xl font-black text-white mb-1">Tower Reached</h3>
-            <div className="bg-white/10 rounded-2xl p-4 w-full max-w-xs mb-4 border border-white/15">
-              <div className="flex justify-between items-center py-1 border-b border-white/10">
+            <div className="text-3xl mb-1">🏛️</div>
+            <h3 className="text-xl font-black text-white mb-2">Tower Reached</h3>
+            <div className="bg-white/10 rounded-2xl p-3 w-full max-w-xs mb-3 border border-white/15">
+              <div className="flex justify-between items-center py-0.5 border-b border-white/10">
                 <span className="text-xs text-stone-300">Floors Stacked</span>
                 <span className="text-lg font-black text-violet-400">{score}</span>
               </div>
-              <div className="flex justify-between items-center py-1 border-b border-white/10">
+              <div className="flex justify-between items-center py-0.5 border-b border-white/10">
                 <span className="text-xs text-stone-300">Max Combo</span>
                 <span className="text-sm font-black text-yellow-300">x{combo}</span>
               </div>
-              <div className="flex justify-between items-center pt-1">
+              <div className="flex justify-between items-center pt-0.5">
                 <span className="text-xs text-stone-300">All-Time High</span>
                 <span className="text-sm font-black text-white">{currentHighScore}</span>
               </div>
@@ -480,7 +466,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
                 e.stopPropagation();
                 startGame();
               }}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-black text-sm shadow-xl shadow-violet-600/40 flex items-center gap-2 active:scale-95 transition-all"
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-black text-sm shadow-xl shadow-violet-600/40 flex items-center gap-2 active:scale-95 transition-all"
             >
               <RotateCcw className="w-4 h-4" />
               <span>TRY AGAIN</span>
@@ -489,7 +475,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
         )}
       </div>
 
-      <p className="text-[11px] text-stone-400 mt-3 text-center">
+      <p className="text-[11px] text-stone-400 mt-2 text-center">
         ⚡ Match the block within 4px of the top edge to trigger a golden harmony combo & score bonus!
       </p>
     </div>

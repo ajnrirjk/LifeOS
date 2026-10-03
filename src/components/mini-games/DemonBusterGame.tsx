@@ -48,7 +48,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
   const [soundMuted, setSoundMuted] = useState(false);
 
   const stateRef = useRef({
-    player: { x: 190, y: 410, width: 36, height: 36, vx: 0 },
+    player: { x: 360, y: 320, width: 36, height: 36, vx: 0 },
     bullets: [] as Bullet[],
     enemies: [] as Enemy[],
     powerups: [] as PowerUp[],
@@ -67,22 +67,21 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
   const startGame = () => {
     sounds.playTap();
     const s = stateRef.current;
-    s.player = { x: 190, y: 410, width: 36, height: 36, vx: 0 };
+    s.player = { x: 360, y: 320, width: 36, height: 36, vx: 0 };
     s.bullets = [];
     s.enemies = [];
     s.powerups = [];
     s.particles = [];
     s.score = 0;
     s.lives = 3;
-    s.shieldTimer = 120; // 2s spawn shield
+    s.shieldTimer = 120;
     s.tripleTimer = 0;
     s.frame = 0;
     s.running = true;
 
-    // Stars
-    s.stars = Array.from({ length: 40 }).map(() => ({
-      x: Math.random() * 380,
-      y: Math.random() * 480,
+    s.stars = Array.from({ length: 60 }).map(() => ({
+      x: Math.random() * 720,
+      y: Math.random() * 380,
       speed: 0.5 + Math.random() * 2,
       size: 1 + Math.random() * 2
     }));
@@ -109,7 +108,6 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
     if (onGameOver) onGameOver(finalScore, tokens);
   }, [currentHighScore, onGameOver, soundMuted]);
 
-  // Main game loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -123,11 +121,9 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
       const width = canvas.width;
       const height = canvas.height;
 
-      // Dark Cosmic Deep Space Background
       ctx.fillStyle = '#05050d';
       ctx.fillRect(0, 0, width, height);
 
-      // Starfield background
       ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
       s.stars.forEach((st) => {
         if (s.running) {
@@ -140,7 +136,6 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
       if (s.running) {
         s.frame++;
 
-        // Powerup Timers
         if (s.shieldTimer > 0) {
           s.shieldTimer--;
           if (s.shieldTimer === 0) setShieldActive(false);
@@ -150,24 +145,22 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
           if (s.tripleTimer === 0) setTripleActive(false);
         }
 
-        // Touch / Keyboard Movement
         if (s.touchX !== null) {
           const dx = s.touchX - s.player.x;
           s.player.x += dx * 0.18;
         } else {
-          if (s.keys.left) s.player.x -= 5.5;
-          if (s.keys.right) s.player.x += 5.5;
+          if (s.keys.left) s.player.x -= 6.5;
+          if (s.keys.right) s.player.x += 6.5;
         }
-        // Boundaries
-        s.player.x = Math.max(20, Math.min(width - 20, s.player.x));
+        s.player.x = Math.max(25, Math.min(width - 25, s.player.x));
 
-        // Auto Fire Lasers every 9 frames
-        if (s.frame % 9 === 0) {
+        // Auto Fire Lasers every 8 frames
+        if (s.frame % 8 === 0) {
           if (s.tripleTimer > 0) {
             s.bullets.push(
-              { x: s.player.x - 10, y: s.player.y - 12, vx: -1.2, vy: -10, power: 1, color: '#38bdf8' },
+              { x: s.player.x - 12, y: s.player.y - 12, vx: -1.5, vy: -10, power: 1, color: '#38bdf8' },
               { x: s.player.x, y: s.player.y - 16, vx: 0, vy: -11, power: 1.5, color: '#facc15' },
-              { x: s.player.x + 10, y: s.player.y - 12, vx: 1.2, vy: -10, power: 1, color: '#38bdf8' }
+              { x: s.player.x + 12, y: s.player.y - 12, vx: 1.5, vy: -10, power: 1, color: '#38bdf8' }
             );
           } else {
             s.bullets.push({
@@ -182,12 +175,12 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
         }
 
         // Spawn Enemies
-        if (s.frame % 40 === 0) {
+        if (s.frame % 35 === 0) {
           const isShadow = Math.random() > 0.4;
           s.enemies.push({
             x: 30 + Math.random() * (width - 60),
             y: -20,
-            vx: (Math.random() - 0.5) * 2,
+            vx: (Math.random() - 0.5) * 2.2,
             vy: 1.8 + Math.random() * 1.5,
             hp: isShadow ? 2 : 1,
             maxHp: isShadow ? 2 : 1,
@@ -197,15 +190,15 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
           });
         }
 
-        // Spawn Boss every 600 frames
-        if (s.frame % 600 === 0 && s.frame > 0) {
+        // Spawn Boss every 500 frames
+        if (s.frame % 500 === 0 && s.frame > 0) {
           s.enemies.push({
             x: width / 2,
             y: -40,
-            vx: 1.5,
+            vx: 1.8,
             vy: 0.8,
-            hp: 20,
-            maxHp: 20,
+            hp: 24,
+            maxHp: 24,
             radius: 28,
             type: 'boss',
             color: '#dc2626'
@@ -223,13 +216,12 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
           }
         }
 
-        // Update Enemies & Bullet Collisions
+        // Update Enemies
         for (let i = s.enemies.length - 1; i >= 0; i--) {
           const e = s.enemies[i];
           e.x += e.vx;
           e.y += e.vy;
 
-          // Bounce horizontal
           if (e.x < e.radius || e.x > width - e.radius) {
             e.vx *= -1;
           }
@@ -242,7 +234,6 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
               e.hp -= b.power;
               s.bullets.splice(j, 1);
 
-              // Hit spark
               s.particles.push({
                 x: b.x,
                 y: b.y,
@@ -256,15 +247,13 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
             }
           }
 
-          // Enemy Death
           if (e.hp <= 0) {
             if (!soundMuted) sounds.playCoinSound();
             const pts = e.type === 'boss' ? 50 : e.type === 'shadow' ? 5 : 2;
             s.score += pts;
             setScore(s.score);
 
-            // Spawn powerup chance (15%)
-            if (Math.random() < 0.18 || e.type === 'boss') {
+            if (Math.random() < 0.2 || e.type === 'boss') {
               const types: Array<'shield' | 'triple' | 'bomb'> = ['shield', 'triple', 'bomb'];
               const chosen = types[Math.floor(Math.random() * types.length)];
               s.powerups.push({
@@ -276,7 +265,6 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
               });
             }
 
-            // Explosion sparks
             for (let k = 0; k < (e.type === 'boss' ? 30 : 12); k++) {
               s.particles.push({
                 x: e.x,
@@ -296,16 +284,14 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
           const pDist = Math.hypot(s.player.x - e.x, s.player.y - e.y);
           if (pDist < e.radius + 14) {
             if (s.shieldTimer > 0) {
-              // Shield absorbs enemy!
               e.hp = 0;
             } else {
               s.lives--;
               setLives(s.lives);
               s.enemies.splice(i, 1);
 
-              // Hurt feedback
               if (!soundMuted) sounds.playIncorrect();
-              s.shieldTimer = 90; // Invincibility flash
+              s.shieldTimer = 90;
               setShieldActive(true);
 
               if (s.lives <= 0) {
@@ -315,7 +301,6 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
             }
           }
 
-          // Escaped enemy offscreen
           if (e.y > height + 30) {
             s.enemies.splice(i, 1);
           }
@@ -330,13 +315,12 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
           if (pDist < 25) {
             if (!soundMuted) sounds.playLevelComplete();
             if (p.type === 'shield') {
-              s.shieldTimer = 300; // 5 seconds
+              s.shieldTimer = 300;
               setShieldActive(true);
             } else if (p.type === 'triple') {
-              s.tripleTimer = 360; // 6 seconds
+              s.tripleTimer = 360;
               setTripleActive(true);
             } else if (p.type === 'bomb') {
-              // Clear all enemies
               s.enemies.forEach((en) => {
                 s.score += 2;
                 for (let k = 0; k < 8; k++) {
@@ -379,7 +363,6 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
         ctx.shadowBlur = 12;
 
         if (e.type === 'dart') {
-          // Flaming dart / arrow
           ctx.fillStyle = '#ef4444';
           ctx.beginPath();
           ctx.moveTo(0, e.radius);
@@ -388,22 +371,18 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
           ctx.closePath();
           ctx.fill();
         } else if (e.type === 'shadow') {
-          // Shadow demon orb
           ctx.fillStyle = '#9333ea';
           ctx.beginPath();
           ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
           ctx.fill();
-          // Red menacing eyes
           ctx.fillStyle = '#f87171';
           ctx.fillRect(-6, -3, 3, 3);
           ctx.fillRect(3, -3, 3, 3);
         } else {
-          // Giant Boss
           ctx.fillStyle = '#b91c1c';
           ctx.beginPath();
           ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
           ctx.fill();
-          // Boss Health bar
           ctx.fillStyle = 'rgba(0,0,0,0.5)';
           ctx.fillRect(-24, -e.radius - 12, 48, 6);
           ctx.fillStyle = '#22c55e';
@@ -441,11 +420,10 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
         ctx.globalAlpha = 1;
       }
 
-      // Render Player (Warrior Vessel / Cross Shield)
+      // Render Player (Warrior Vessel)
       ctx.save();
       ctx.translate(s.player.x, s.player.y);
 
-      // Shield Aura
       if (s.shieldTimer > 0) {
         ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 3;
@@ -456,7 +434,6 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
         ctx.stroke();
       }
 
-      // Ship body
       ctx.shadowColor = '#60a5fa';
       ctx.shadowBlur = 12;
       ctx.fillStyle = '#ffffff';
@@ -468,7 +445,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
       ctx.closePath();
       ctx.fill();
 
-      // Golden Cross on center
+      // Golden Cross
       ctx.fillStyle = '#f59e0b';
       ctx.fillRect(-2, -8, 4, 14);
       ctx.fillRect(-6, -4, 12, 4);
@@ -491,14 +468,13 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
     return () => cancelAnimationFrame(animId);
   }, [endGame, soundMuted]);
 
-  // Touch Drag Movement
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (gameState !== 'playing') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0];
-    const relX = ((touch.clientX - rect.left) / rect.width) * 380;
+    const relX = ((touch.clientX - rect.left) / rect.width) * 720;
     stateRef.current.touchX = relX;
   };
 
@@ -507,11 +483,10 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const relX = ((e.clientX - rect.left) / rect.width) * 380;
+    const relX = ((e.clientX - rect.left) / rect.width) * 720;
     stateRef.current.touchX = relX;
   };
 
-  // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') stateRef.current.keys.left = true;
@@ -531,8 +506,8 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
   }, [gameState]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-3 sm:p-6 w-full max-w-lg mx-auto select-none">
-      <div className="w-full flex items-center justify-between mb-3 text-stone-200">
+    <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full max-w-4xl mx-auto select-none">
+      <div className="w-full flex items-center justify-between mb-2 text-stone-200">
         <button
           onClick={() => {
             sounds.playTap();
@@ -563,17 +538,17 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
         onTouchMove={handleTouchMove}
         onMouseMove={handleMouseMove}
         onTouchEnd={() => { stateRef.current.touchX = null; }}
-        className="relative w-full aspect-[4/5] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl border-2 border-cyan-500/30 bg-stone-950 cursor-crosshair touch-none"
+        className="relative w-full aspect-[16/9] max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-cyan-500/30 bg-stone-950 cursor-crosshair touch-none"
       >
         <canvas
           ref={canvasRef}
-          width={380}
-          height={480}
+          width={720}
+          height={380}
           className="w-full h-full object-cover"
         />
 
         {gameState === 'playing' && (
-          <div className="absolute top-4 left-0 right-0 flex justify-between px-5 pointer-events-none">
+          <div className="absolute top-4 left-0 right-0 flex justify-between px-6 pointer-events-none">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white font-black text-lg shadow-lg">
                 <span>{score}</span>
@@ -602,14 +577,14 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
 
         {gameState === 'idle' && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center text-white">
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-3xl shadow-xl shadow-cyan-500/30 mb-3 animate-pulse">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-3xl shadow-xl shadow-cyan-500/30 mb-2 animate-pulse">
               ⚔️
             </div>
             <h2 className="text-2xl font-black tracking-tight mb-1 bg-gradient-to-r from-cyan-200 via-white to-blue-300 bg-clip-text text-transparent">
               Armor of God: Demon Buster
             </h2>
-            <p className="text-xs text-cyan-200/80 max-w-xs mb-6">
-              Drag finger or use arrow keys to pilot the holy vessel. Extinguish fiery darts and pick up the Shield of Faith & Sword of the Spirit!
+            <p className="text-xs text-cyan-200/80 max-w-md mb-4">
+              Drag finger or use arrow keys across widescreen space. Extinguish fiery darts and pick up Shield of Faith & Holy Lightning!
             </p>
 
             <button
@@ -617,7 +592,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
                 e.stopPropagation();
                 startGame();
               }}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-sm shadow-xl shadow-cyan-500/40 flex items-center gap-2 active:scale-95 transition-all"
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-sm shadow-xl shadow-cyan-500/40 flex items-center gap-2 active:scale-95 transition-all"
             >
               <Play className="w-4 h-4 fill-white" />
               <span>ENGAGE BATTLE</span>
@@ -627,14 +602,14 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
 
         {gameState === 'gameover' && (
           <div className="absolute inset-0 bg-black/75 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white animate-in fade-in duration-200">
-            <div className="text-4xl mb-2">🛡️</div>
-            <h3 className="text-xl font-black text-white mb-1">Battle Concluded</h3>
-            <div className="bg-white/10 rounded-2xl p-4 w-full max-w-xs mb-4 border border-white/15">
-              <div className="flex justify-between items-center py-1 border-b border-white/10">
+            <div className="text-3xl mb-1">🛡️</div>
+            <h3 className="text-xl font-black text-white mb-2">Battle Concluded</h3>
+            <div className="bg-white/10 rounded-2xl p-3 w-full max-w-xs mb-3 border border-white/15">
+              <div className="flex justify-between items-center py-0.5 border-b border-white/10">
                 <span className="text-xs text-stone-300">Spirits Vanquished</span>
                 <span className="text-lg font-black text-cyan-400">{score}</span>
               </div>
-              <div className="flex justify-between items-center pt-1">
+              <div className="flex justify-between items-center pt-0.5">
                 <span className="text-xs text-stone-300">Personal Best</span>
                 <span className="text-sm font-black text-white">{currentHighScore}</span>
               </div>
@@ -645,7 +620,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
                 e.stopPropagation();
                 startGame();
               }}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-sm shadow-xl shadow-cyan-500/40 flex items-center gap-2 active:scale-95 transition-all"
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-sm shadow-xl shadow-cyan-500/40 flex items-center gap-2 active:scale-95 transition-all"
             >
               <RotateCcw className="w-4 h-4" />
               <span>RETRY MISSION</span>
@@ -654,7 +629,7 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
         )}
       </div>
 
-      <p className="text-[11px] text-stone-400 mt-3 text-center">
+      <p className="text-[11px] text-stone-400 mt-2 text-center">
         🛡️ Collect glowing powerups: Shield of Faith for invincibility and Holy Lightning for triple laser spread!
       </p>
     </div>
