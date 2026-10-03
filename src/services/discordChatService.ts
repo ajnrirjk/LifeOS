@@ -212,6 +212,61 @@ export const DEFAULT_CHANNELS: ChatChannel[] = [
   },
 ];
 
+export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
+  {
+    id: 'msg_seed_1',
+    channelId: 'general',
+    serverId: 'server_fellowship',
+    text: 'Welcome everyone to Fellowship Chat! 🕊️\n\n"Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another." — **Hebrews 10:24-25**',
+    senderId: 'pastor_david',
+    senderName: 'Pastor David',
+    senderRole: 'Pastor',
+    senderRoleColor: '#8B5CF6',
+    isGoogleUser: true,
+    createdAt: Date.now() - 3600000 * 5,
+    reactions: { '🙏': ['Pastor David', 'Sister Sarah'], '❤️': ['Deacon Marcus', 'Sister Sarah'] },
+    embed: {
+      title: '📖 Welcome to Fellowship Hub',
+      description: 'Real-time text messaging across all devices (phones, computers, tablets) with zero login required. You can also connect your Google account anytime!',
+      color: '#10B981',
+      author: 'Fellowship Ministry',
+      footer: 'Grace and Peace be with you all',
+    }
+  },
+  {
+    id: 'msg_seed_2',
+    channelId: 'general',
+    serverId: 'server_fellowship',
+    text: 'Glory to God! The real-time messaging is super fast now. Text on your phone or computer and it pops up instantly! ✨',
+    senderId: 'sister_sarah',
+    senderName: 'Sister Sarah',
+    senderRole: 'Moderator',
+    senderRoleColor: '#3B82F6',
+    isGoogleUser: true,
+    createdAt: Date.now() - 3600000 * 3,
+    reactions: { '🙌': ['Pastor David', 'Sister Sarah', 'Deacon Marcus'] },
+  },
+  {
+    id: 'msg_seed_3',
+    channelId: 'prayer-chain',
+    serverId: 'server_fellowship',
+    text: 'Please pray for my mother as she undergoes surgery this week. Standing firm on Jehovah Rapha for full restoration! 🙏',
+    senderId: 'brother_marcus',
+    senderName: 'Deacon Marcus',
+    senderRole: 'Deacon',
+    senderRoleColor: '#10B981',
+    isGoogleUser: true,
+    createdAt: Date.now() - 3600000 * 2,
+    reactions: { '🙏': ['Pastor David', 'Sister Sarah'] },
+    attachment: {
+      type: 'verse',
+      title: 'Jeremiah 30:17',
+      content: '“For I will restore health to you, and your wounds I will heal, declares the LORD.”',
+      reference: 'Jeremiah 30:17 (ESV)'
+    }
+  }
+];
+
 export const DEFAULT_MEMBERS: ActiveChatMember[] = [
   {
     id: 'pastor_david',
@@ -466,6 +521,10 @@ class DiscordChatService {
       this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
       this.saveCaches();
       this.emit({ type: 'delete_message', data });
+    } else if (type === 'purge_all') {
+      this.messagesCache = DEFAULT_SEED_MESSAGES;
+      this.saveCaches();
+      this.emit({ type: 'purge_all', data: this.messagesCache });
     } else if (type === 'typing') {
       this.emit({ type: 'typing', data });
     }
@@ -882,6 +941,24 @@ class DiscordChatService {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
         JSON.stringify({ type: 'delete_message', data: payload })
+      );
+    }
+  }
+
+  // Purge all chat messages across the system (Super Admin only)
+  public purgeAllMessages() {
+    this.messagesCache = DEFAULT_SEED_MESSAGES;
+    this.saveCaches();
+    this.emit({ type: 'purge_all', data: this.messagesCache });
+
+    try {
+      this.broadcastChannel?.postMessage({ type: 'purge_all', data: this.messagesCache });
+    } catch {}
+
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        MQTT_TOPIC_MESSAGES,
+        JSON.stringify({ type: 'purge_all', data: {} })
       );
     }
   }
