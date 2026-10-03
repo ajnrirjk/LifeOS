@@ -5,13 +5,20 @@
 
 class SoundEffectsService {
   private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
   public enabled: boolean = true;
+  public volume: number = 0.85;
+  public hapticsEnabled: boolean = true;
+  public narratorEnabled: boolean = true;
 
   private initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+        this.masterGain.connect(this.ctx.destination);
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -19,13 +26,66 @@ class SoundEffectsService {
     }
   }
 
+  public getDestination(): AudioNode {
+    this.initCtx();
+    if (this.masterGain) {
+      this.masterGain.gain.setValueAtTime(this.volume, this.ctx!.currentTime);
+      return this.masterGain;
+    }
+    return this.ctx?.destination || ({} as any);
+  }
+
+  setVolume(vol: number) {
+    this.volume = Math.max(0, Math.min(1, vol));
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+    }
+  }
+
+  setEnabled(enabled: boolean) {
+    this.enabled = enabled;
+  }
+
+  setHapticsEnabled(enabled: boolean) {
+    this.hapticsEnabled = enabled;
+  }
+
+  setNarratorEnabled(enabled: boolean) {
+    this.narratorEnabled = enabled;
+  }
+
+  triggerHaptic(pattern: number | number[] = 15) {
+    if (!this.hapticsEnabled) return;
+    try {
+      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate(pattern);
+      }
+    } catch {}
+  }
+
+  speak(text: string) {
+    if (!this.narratorEnabled || !this.enabled) return;
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.volume = this.volume;
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch {}
+  }
+
   // Cheerful chime on correct answer
   playCorrect() {
     if (!this.enabled) return;
+    this.triggerHaptic([10, 40, 15]);
     try {
       this.initCtx();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
+      const dest = this.getDestination();
 
       // Note 1 (E5)
       const osc1 = this.ctx.createOscillator();
@@ -35,7 +95,7 @@ class SoundEffectsService {
       gain1.gain.setValueAtTime(0.18, now);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
       osc1.connect(gain1);
-      gain1.connect(this.ctx.destination);
+      gain1.connect(dest);
       osc1.start(now);
       osc1.stop(now + 0.25);
 
@@ -47,7 +107,7 @@ class SoundEffectsService {
       gain2.gain.setValueAtTime(0.2, now + 0.08);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
       osc2.connect(gain2);
-      gain2.connect(this.ctx.destination);
+      gain2.connect(dest);
       osc2.start(now + 0.08);
       osc2.stop(now + 0.38);
 
@@ -59,21 +119,21 @@ class SoundEffectsService {
       gain3.gain.setValueAtTime(0.22, now + 0.16);
       gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
       osc3.connect(gain3);
-      gain3.connect(this.ctx.destination);
+      gain3.connect(dest);
       osc3.start(now + 0.16);
       osc3.stop(now + 0.48);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   // Gentle low tone on incorrect answer (supportive, not harsh)
   playIncorrect() {
     if (!this.enabled) return;
+    this.triggerHaptic([40, 30, 40]);
     try {
       this.initCtx();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
+      const dest = this.getDestination();
 
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
@@ -83,21 +143,21 @@ class SoundEffectsService {
       gain.gain.setValueAtTime(0.18, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
       osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(dest);
       osc.start(now);
       osc.stop(now + 0.3);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   // Discord & iMessage style message incoming notification sound
   playMessageNotification() {
     if (!this.enabled) return;
+    this.triggerHaptic(20);
     try {
       this.initCtx();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
+      const dest = this.getDestination();
 
       // First Pop tone (G5)
       const osc1 = this.ctx.createOscillator();
@@ -108,7 +168,7 @@ class SoundEffectsService {
       gain1.gain.setValueAtTime(0.25, now);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
       osc1.connect(gain1);
-      gain1.connect(this.ctx.destination);
+      gain1.connect(dest);
       osc1.start(now);
       osc1.stop(now + 0.12);
 
@@ -121,21 +181,21 @@ class SoundEffectsService {
       gain2.gain.setValueAtTime(0.28, now + 0.08);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
       osc2.connect(gain2);
-      gain2.connect(this.ctx.destination);
+      gain2.connect(dest);
       osc2.start(now + 0.08);
       osc2.stop(now + 0.28);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   // Purge / wipe sound effect
   playPurgeSound() {
     if (!this.enabled) return;
+    this.triggerHaptic(50);
     try {
       this.initCtx();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
+      const dest = this.getDestination();
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = 'sawtooth';
@@ -144,7 +204,7 @@ class SoundEffectsService {
       gain.gain.setValueAtTime(0.2, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
       osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(dest);
       osc.start(now);
       osc.stop(now + 0.45);
     } catch {}
@@ -153,10 +213,12 @@ class SoundEffectsService {
   // Tap button click
   playTap() {
     if (!this.enabled) return;
+    this.triggerHaptic(10);
     try {
       this.initCtx();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
+      const dest = this.getDestination();
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = 'sine';
@@ -165,21 +227,21 @@ class SoundEffectsService {
       gain.gain.setValueAtTime(0.08, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
       osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(dest);
       osc.start(now);
       osc.stop(now + 0.06);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   // Fanfare / victory sound on completing lesson
   playVictory() {
     if (!this.enabled) return;
+    this.triggerHaptic([20, 60, 20, 60, 40]);
     try {
       this.initCtx();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
+      const dest = this.getDestination();
       const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
       notes.forEach((freq, idx) => {
         const osc = this.ctx!.createOscillator();
@@ -191,13 +253,11 @@ class SoundEffectsService {
         gain.gain.setValueAtTime(0.2, startTime);
         gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
         osc.connect(gain);
-        gain.connect(this.ctx!.destination);
+        gain.connect(dest);
         osc.start(startTime);
         osc.stop(startTime + duration);
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   // Realistic cute cat meow (default)

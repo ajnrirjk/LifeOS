@@ -134,14 +134,39 @@ export const LifeOSDesktop: React.FC = () => {
 
   const activeApp = apps.find(a => a.id === activeAppId);
   const activeWindowState = openWindows[activeAppId];
-  const { announcement, setAnnouncement } = useSettings();
+  const { announcement, setAnnouncement, settings, updateSettings } = useSettings();
+
+  const themeWallpaper = {
+    dark: wallpaperClasses,
+    light: 'bg-gradient-to-b from-amber-50 via-sky-50 to-stone-100 text-stone-900',
+    amoled: 'bg-black text-white'
+  }[settings.themeMode || 'dark'] || wallpaperClasses;
 
   return (
-    <div className={`h-[100dvh] w-full flex flex-col overflow-hidden relative select-none ${wallpaperClasses}`}>
+    <div className={`h-[100dvh] w-full flex flex-col overflow-hidden relative select-none ${themeWallpaper} ${
+      settings.fastingModeActive ? 'sepia-[0.3] contrast-[0.95] brightness-[0.92]' : ''
+    }`}>
       {/* Top System Menu Bar (Desktop always; Mobile only on Desktop/Widgets view) */}
       <div className={!isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? 'hidden md:block' : 'block'}>
         <LifeOSTopBar onOpenPrivacy={() => setIsPrivacyModalOpen(true)} />
       </div>
+
+      {/* Fasting & Solitude Mode Ribbon */}
+      {settings.fastingModeActive && (
+        <div className="bg-gradient-to-r from-amber-950/90 via-stone-900/90 to-amber-950/90 border-b border-amber-500/40 px-3 py-1 flex items-center justify-between text-[11px] text-amber-200 z-40 shrink-0">
+          <div className="flex items-center gap-2">
+            <span>🕯️</span>
+            <span className="font-extrabold">Fasting & Solitude Mode Active:</span>
+            <span className="text-stone-300">Atmosphere dimmed to candlelight • Focused on quiet reflection & prayer.</span>
+          </div>
+          <button
+            onClick={() => updateSettings({ fastingModeActive: false })}
+            className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold"
+          >
+            End Solitude
+          </button>
+        </div>
+      )}
 
       {/* Global Broadcast Announcement Ribbon (If active) */}
       {announcement && (

@@ -327,6 +327,44 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  // Apply Audio Settings to Synthesizer Engine
+  useEffect(() => {
+    sounds.setEnabled(settings.soundFxEnabled);
+    sounds.setVolume(settings.masterVolume / 100);
+    sounds.setHapticsEnabled(settings.hapticFeedbackEnabled);
+    sounds.setNarratorEnabled(settings.narratorVoiceEnabled);
+  }, [settings.soundFxEnabled, settings.masterVolume, settings.hapticFeedbackEnabled, settings.narratorVoiceEnabled]);
+
+  // Apply Font Scale to Root HTML Document
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      if (settings.fontScale === 'compact') root.style.fontSize = '13.5px';
+      else if (settings.fontScale === 'normal') root.style.fontSize = '16px';
+      else if (settings.fontScale === 'large') root.style.fontSize = '18px';
+      else if (settings.fontScale === 'senior') root.style.fontSize = '20px';
+    }
+  }, [settings.fontScale]);
+
+  // Apply Theme Mode & Accent Palette to Root Document
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      root.classList.remove('theme-dark', 'theme-light', 'theme-amoled');
+      root.classList.add(`theme-${settings.themeMode}`);
+
+      if (settings.themeMode === 'light') {
+        root.classList.remove('dark');
+      } else {
+        root.classList.add('dark');
+      }
+
+      root.setAttribute('data-accent', settings.accentColor);
+      root.setAttribute('data-theme', settings.themeMode);
+      root.setAttribute('data-fasting', settings.fastingModeActive ? 'true' : 'false');
+    }
+  }, [settings.themeMode, settings.accentColor, settings.fastingModeActive]);
+
   // Persist settings
   useEffect(() => {
     try {
@@ -435,10 +473,24 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const exportBackup = () => {
     try {
+      // Gather all app states from localStorage
+      const faithStats = localStorage.getItem('faithlingo_stats');
+      const faithHistory = localStorage.getItem('faithlingo_history');
+      const journalNotes = localStorage.getItem('lifeos_bible_journal_entries');
+      const chatMessages = localStorage.getItem('lifeos_fellowship_messages_cache');
+      const arcadeScores = localStorage.getItem('lifeos_game_vault_scores');
+
       const data = {
         settings,
         members,
         auditLogs,
+        appData: {
+          faithlingoStats: faithStats ? JSON.parse(faithStats) : null,
+          faithlingoHistory: faithHistory ? JSON.parse(faithHistory) : null,
+          journalNotes: journalNotes ? JSON.parse(journalNotes) : null,
+          chatMessages: chatMessages ? JSON.parse(chatMessages) : null,
+          arcadeScores: arcadeScores ? JSON.parse(arcadeScores) : null
+        },
         exportedAt: new Date().toISOString(),
         version: 'LifeOS-2.0'
       };
@@ -446,7 +498,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `lifeos_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `lifeos_complete_backup_${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
       sounds.playVictory();
@@ -462,6 +514,25 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (parsed.settings) setSettings(parsed.settings);
       if (Array.isArray(parsed.members)) setMembers(parsed.members);
       if (Array.isArray(parsed.auditLogs)) setAuditLogs(parsed.auditLogs);
+
+      if (parsed.appData) {
+        if (parsed.appData.faithlingoStats) {
+          localStorage.setItem('faithlingo_stats', JSON.stringify(parsed.appData.faithlingoStats));
+        }
+        if (parsed.appData.faithlingoHistory) {
+          localStorage.setItem('faithlingo_history', JSON.stringify(parsed.appData.faithlingoHistory));
+        }
+        if (parsed.appData.journalNotes) {
+          localStorage.setItem('lifeos_bible_journal_entries', JSON.stringify(parsed.appData.journalNotes));
+        }
+        if (parsed.appData.chatMessages) {
+          localStorage.setItem('lifeos_fellowship_messages_cache', JSON.stringify(parsed.appData.chatMessages));
+        }
+        if (parsed.appData.arcadeScores) {
+          localStorage.setItem('lifeos_game_vault_scores', JSON.stringify(parsed.appData.arcadeScores));
+        }
+      }
+
       sounds.playVictory();
       logAuditEvent('System Backup Restored', 'Successfully imported JSON configuration', 'system');
       return true;
@@ -475,6 +546,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.removeItem('lifeos_system_settings_v1');
     localStorage.removeItem('lifeos_fellowship_roster_v1');
     localStorage.removeItem('lifeos_audit_logs_v1');
+    localStorage.removeItem('faithlingo_stats');
+    localStorage.removeItem('faithlingo_history');
+    localStorage.removeItem('lifeos_bible_journal_entries');
+    localStorage.removeItem('lifeos_fellowship_messages_cache');
+    localStorage.removeItem('lifeos_game_vault_scores');
     setSettings(DEFAULT_SETTINGS);
     setMembers(INITIAL_MEMBERS);
     setAuditLogs(INITIAL_LOGS);

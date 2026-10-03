@@ -1,44 +1,46 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLifeOS } from '../../context/LifeOSContext';
+import { useSettings } from '../../context/SettingsContext';
 import { sounds } from '../../services/soundEffects';
 import { ChevronDown, ChevronUp, MoveHorizontal, LayoutGrid, X, Search, Sparkles } from 'lucide-react';
 
 export const LifeOSDock: React.FC = () => {
   const { apps, activeAppId, openWindows, launchApp, isDesktopView, showDesktop, minimizeApp } = useLifeOS();
+  const { settings, updateSettings } = useSettings();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isAppDrawerOpen, setIsAppDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [dockPosition, setDockPosition] = useState<'center' | 'right'>(() => {
-    try {
-      return (localStorage.getItem('lifeos_dock_position') as 'center' | 'right') || 'center';
-    } catch {
-      return 'center';
-    }
-  });
 
-  // Desktop Pinned apps
-  const desktopDockApps = apps.filter(a => a.id === 'faithlingo' || a.id === 'bible_journal' || a.isPinned);
+  const currentDockPosition = settings.dockPosition || 'center';
+
+  // Desktop Pinned apps respecting settings feature flags
+  const desktopDockApps = apps.filter(a => {
+    const isVisible = settings.appVisibility[a.id] !== false;
+    return isVisible && (a.id === 'faithlingo' || a.id === 'bible_journal' || a.isPinned);
+  });
 
   const handlePositionToggle = () => {
     sounds.playTap();
-    const next = dockPosition === 'center' ? 'right' : 'center';
-    setDockPosition(next);
-    try {
-      localStorage.setItem('lifeos_dock_position', next);
-    } catch {}
+    const positions: ('left' | 'center' | 'right')[] = ['left', 'center', 'right'];
+    const nextIdx = (positions.indexOf(currentDockPosition) + 1) % positions.length;
+    updateSettings({ dockPosition: positions[nextIdx] });
   };
 
   const positionClasses = {
+    left: 'bottom-2.5 left-6',
     center: 'bottom-2.5 left-1/2 -translate-x-1/2',
-    right: 'bottom-2.5 right-4',
-  }[dockPosition];
+    right: 'bottom-2.5 right-6',
+  }[currentDockPosition];
 
-  const filteredApps = apps.filter(app =>
-    app.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    app.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    app.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredApps = apps.filter(app => {
+    const isVisible = settings.appVisibility[app.id] !== false;
+    return isVisible && (
+      app.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      app.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      app.category.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   return (
     <>
@@ -158,13 +160,13 @@ export const LifeOSDock: React.FC = () => {
             {/* Divider */}
             <div className="h-5 w-px bg-white/20 mx-0.5 shrink-0" />
 
-            {/* Move Position: Toggle Center vs Corner */}
+            {/* Move Position: Toggle Left / Center / Right */}
             <motion.button
               whileHover={{ scale: 1.15 }}
               whileTap={{ scale: 0.9 }}
               onClick={handlePositionToggle}
               className="p-1.5 rounded-xl hover:bg-white/15 text-white/70 hover:text-white transition-colors shrink-0"
-              title={dockPosition === 'center' ? 'Move Dock to Bottom Right Corner' : 'Move Dock to Bottom Center'}
+              title={`Dock Position: ${currentDockPosition.toUpperCase()} (Click to cycle)`}
             >
               <MoveHorizontal className="w-3.5 h-3.5" />
             </motion.button>

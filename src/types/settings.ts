@@ -62,7 +62,7 @@ export interface UserSettings {
   accentColor: ThemeAccent;
   fontScale: FontScale;
   reducedMotion: boolean;
-  dockPosition: 'center' | 'corner' | 'autohide';
+  dockPosition: 'center' | 'left' | 'right';
   desktopGlassEffect: boolean;
 
   // Audio & Haptics
