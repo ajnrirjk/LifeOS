@@ -36,7 +36,8 @@
         "nsis",
         "portable"
       ],
-      "icon": "public/icon-512.png"
+      "icon": "public/icon-512.png",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
