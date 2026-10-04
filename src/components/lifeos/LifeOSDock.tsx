@@ -6,13 +6,11 @@ import { sounds } from '../../services/soundEffects';
 import { ChevronDown, ChevronUp, MoveHorizontal, LayoutGrid, X, Search, Sparkles } from 'lucide-react';
 
 export const LifeOSDock: React.FC = () => {
-  const { apps, activeAppId, openWindows, launchApp, isDesktopView, showDesktop, minimizeApp } = useLifeOS();
+  const { apps, activeAppId, openWindows, launchApp, isDesktopView, showDesktop, minimizeApp, setIsLaunchpadOpen } = useLifeOS();
   const { settings, updateSettings } = useSettings();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
-  const [isAppDrawerOpen, setIsAppDrawerOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const currentDockPosition = settings.dockPosition || 'center';
 
@@ -38,15 +36,6 @@ export const LifeOSDock: React.FC = () => {
   // In app mode, auto-tuck unless hovered or explicitly pinned
   const isDockExpanded = isDesktopView || isPinned || isHovered || !isCollapsed;
   const isTuckedInApp = !isDesktopView && !isPinned && !isHovered;
-
-  const filteredApps = apps.filter(app => {
-    const isVisible = settings.appVisibility[app.id] !== false;
-    return isVisible && (
-      app.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.category.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  });
 
   return (
     <>
@@ -102,7 +91,7 @@ export const LifeOSDock: React.FC = () => {
                 transition={{ type: 'spring', stiffness: 400, damping: 22 }}
                 onClick={() => {
                   sounds.playTap();
-                  setIsAppDrawerOpen(true);
+                  setIsLaunchpadOpen(true);
                 }}
                 className="w-11 h-11 rounded-xl flex items-center justify-center text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 transition-all"
                 title="All Apps Drawer"
@@ -261,7 +250,7 @@ export const LifeOSDock: React.FC = () => {
           <button
             onClick={() => {
               sounds.playTap();
-              setIsAppDrawerOpen(true);
+              setIsLaunchpadOpen(true);
             }}
             className="flex flex-col items-center justify-center gap-0.5 py-1 px-2.5 rounded-2xl text-amber-300 hover:text-amber-200 bg-amber-500/15 border border-amber-500/30 min-w-[56px] min-h-[46px] active:scale-95 transition-all"
             title="Open All Apps Drawer"
@@ -337,100 +326,6 @@ export const LifeOSDock: React.FC = () => {
         </div>
       </nav>
 
-      {/* MOBILE ALL APPS DRAWER MODAL */}
-      <AnimatePresence>
-        {isAppDrawerOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="md:hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex flex-col justify-end p-2 pb-[max(1rem,env(safe-area-inset-bottom))]"
-          >
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-              className="w-full bg-stone-900/95 border border-white/20 rounded-3xl p-4 shadow-2xl max-h-[85vh] flex flex-col"
-            >
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-700 flex items-center justify-center text-lg">
-                    🌿
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white">LifeOS App Drawer</h3>
-                    <p className="text-[10px] text-stone-400 font-bold">All applications, games & spiritual tools</p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setIsAppDrawerOpen(false)}
-                  className="p-1.5 rounded-xl bg-stone-800 text-stone-300 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Search Bar */}
-              <div className="my-3 relative">
-                <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search apps, games & tools..."
-                  className="w-full bg-stone-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {/* Grid of Apps */}
-              <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-2 gap-2.5">
-                {/* Desktop Option */}
-                <button
-                  onClick={() => {
-                    sounds.playTap();
-                    setIsAppDrawerOpen(false);
-                    showDesktop();
-                  }}
-                  className="p-3 rounded-2xl bg-stone-950 border border-emerald-500/30 hover:border-emerald-400 flex items-start gap-2.5 text-left transition-all active:scale-95"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-700 flex items-center justify-center text-xl shrink-0 shadow-md">
-                    🌿
-                  </div>
-                  <div className="overflow-hidden">
-                    <h4 className="text-xs font-black text-white">LifeOS Desktop</h4>
-                    <p className="text-[10px] text-stone-400 line-clamp-1">Widgets & Command Center</p>
-                  </div>
-                </button>
-
-                {filteredApps.map((app) => (
-                  <button
-                    key={app.id}
-                    onClick={() => {
-                      sounds.playTap();
-                      setIsAppDrawerOpen(false);
-                      launchApp(app.id);
-                    }}
-                    className="p-3 rounded-2xl bg-stone-950 border border-white/10 hover:border-white/30 flex items-start gap-2.5 text-left transition-all active:scale-95"
-                  >
-                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${app.color} flex items-center justify-center text-xl shrink-0 shadow-md`}>
-                      {app.emoji}
-                    </div>
-                    <div className="overflow-hidden">
-                      <div className="flex items-center gap-1">
-                        <h4 className="text-xs font-black text-white truncate">{app.title}</h4>
-                      </div>
-                      <p className="text-[10px] text-stone-400 line-clamp-1">{app.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </>
   );
 };

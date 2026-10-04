@@ -235,14 +235,13 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
           </div>
         </div>
 
-        {/* Center: Clean Symmetrical Live Date/Time Capsule (Desktop) */}
-        <div className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-stone-300 tracking-wide select-none shadow-sm backdrop-blur-md">
-          <Clock className="w-3.5 h-3.5 text-stone-400" />
-          <span>{timeStr}</span>
-        </div>
-
-        {/* Right: Google Auth, Admin God Mode, Settings, Privacy */}
+        {/* Right: Date/Time Capsule, Google Auth, Admin God Mode, Settings, Privacy */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Live System Date & Time Capsule - on right side, completely clear of open apps */}
+          <div className="hidden sm:flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-semibold select-none shadow-sm transition-colors">
+            <Clock className="w-3.5 h-3.5 text-stone-400" />
+            <span>{timeStr}</span>
+          </div>
           {/* Google User Avatar / Sign-In Button */}
           {googleUser ? (
             <button
