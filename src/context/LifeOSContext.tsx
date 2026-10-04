@@ -60,9 +60,26 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (saved) {
         const parsed = JSON.parse(saved);
         const filtered = Array.isArray(parsed) ? parsed : [];
-        const systemIds = new Set(filtered.map((a: LifeOSApp) => a.id));
+        const defaultMap = new Map(DEFAULT_LIFEOS_APPS.map(d => [d.id, d]));
+        const updated = filtered.map((a: LifeOSApp) => {
+          const sys = defaultMap.get(a.id);
+          if (sys) {
+            return {
+              ...a,
+              title: sys.title,
+              emoji: sys.emoji,
+              iconName: sys.iconName,
+              category: sys.category,
+              type: sys.type,
+              color: sys.color,
+              description: sys.description
+            };
+          }
+          return a;
+        });
+        const systemIds = new Set(updated.map((a: LifeOSApp) => a.id));
         const missingSystem = DEFAULT_LIFEOS_APPS.filter(d => !systemIds.has(d.id));
-        return [...filtered, ...missingSystem];
+        return [...updated, ...missingSystem];
       }
       return DEFAULT_LIFEOS_APPS;
     } catch {

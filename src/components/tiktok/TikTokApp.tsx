@@ -85,21 +85,33 @@ export const TikTokApp: React.FC = () => {
   // ── Stream Mode State ──────────────────────────────────────────────────────
   const [videos, setVideos] = useState<TikTokVideo[]>(() => {
     try {
-      const saved = localStorage.getItem('lifeos_tiktok_videos_v2');
-      if (saved) return JSON.parse(saved);
+      const saved = localStorage.getItem('lifeos_tiktok_videos_v3');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasInvalid = parsed.some(
+            (v: any) => v.tiktokId === '7106594312292453678' || String(v.tiktokId).includes('1234567890')
+          );
+          if (!hasInvalid) return parsed;
+        }
+      }
     } catch {}
     return TIKTOK_CURATED_VIDEOS;
   });
 
-  const [activeVideo, setActiveVideo] = useState<TikTokVideo>(
-    () => videos[0] || TIKTOK_CURATED_VIDEOS[0]
-  );
+  const [activeVideo, setActiveVideo] = useState<TikTokVideo>(() => {
+    const first = videos[0] || TIKTOK_CURATED_VIDEOS[0];
+    if (first.tiktokId === '7106594312292453678' || String(first.tiktokId).includes('1234567890')) {
+      return TIKTOK_CURATED_VIDEOS[0];
+    }
+    return first;
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
 
   const [likedIds, setLikedIds] = useState<Set<string>>(() => {
     try {
-      const s = localStorage.getItem('lifeos_tiktok_likes_v2');
+      const s = localStorage.getItem('lifeos_tiktok_likes_v3');
       if (s) return new Set(JSON.parse(s));
     } catch {}
     return new Set();
@@ -107,7 +119,7 @@ export const TikTokApp: React.FC = () => {
 
   const [savedIds, setSavedIds] = useState<Set<string>>(() => {
     try {
-      const s = localStorage.getItem('lifeos_tiktok_saved_ids_v2');
+      const s = localStorage.getItem('lifeos_tiktok_saved_ids_v3');
       if (s) return new Set(JSON.parse(s));
     } catch {}
     return new Set();
@@ -127,19 +139,19 @@ export const TikTokApp: React.FC = () => {
   // ── LocalStorage Sync ──────────────────────────────────────────────────────
   useEffect(() => {
     try {
-      localStorage.setItem('lifeos_tiktok_videos_v2', JSON.stringify(videos));
+      localStorage.setItem('lifeos_tiktok_videos_v3', JSON.stringify(videos));
     } catch {}
   }, [videos]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('lifeos_tiktok_saved_ids_v2', JSON.stringify(Array.from(savedIds)));
+      localStorage.setItem('lifeos_tiktok_saved_ids_v3', JSON.stringify(Array.from(savedIds)));
     } catch {}
   }, [savedIds]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('lifeos_tiktok_likes_v2', JSON.stringify(Array.from(likedIds)));
+      localStorage.setItem('lifeos_tiktok_likes_v3', JSON.stringify(Array.from(likedIds)));
     } catch {}
   }, [likedIds]);
 
@@ -436,7 +448,7 @@ export const TikTokApp: React.FC = () => {
               }`}
             >
               {/* Responsive Video Container */}
-              <div className="w-full flex justify-center bg-black/60 rounded-2xl sm:rounded-3xl p-2 sm:p-4 border border-white/10 shadow-2xl">
+              <div className="w-full flex justify-center bg-black/60 rounded-2xl sm:rounded-3xl p-2 sm:p-4 border border-white/10 shadow-2xl relative">
                 <div
                   className="w-full max-w-md rounded-2xl overflow-hidden bg-black border border-white/15 shadow-2xl relative"
                   style={{ aspectRatio: '9/16', maxHeight: '68vh' }}
@@ -444,7 +456,7 @@ export const TikTokApp: React.FC = () => {
                   {activeVideo?.tiktokId ? (
                     <iframe
                       key={activeVideo.tiktokId}
-                      src={`https://www.tiktok.com/player/v1/${activeVideo.tiktokId}`}
+                      src={`https://www.tiktok.com/player/v1/${activeVideo.tiktokId}?autoplay=0&music_info=1&description=1`}
                       title={activeVideo.title}
                       className="w-full h-full border-0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
