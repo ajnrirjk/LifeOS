@@ -149,6 +149,20 @@ class TTSService {
       this.notify();
     }
   }
+
+  public isSpeaking(): boolean {
+    return this.isPlaying;
+  }
+
+  public getState(): TTSState {
+    return {
+      isPlaying: this.isPlaying,
+      isPaused: this.isPaused,
+      rate: this.rate,
+      currentWordIndex: 0,
+      text: this.currentText
+    };
+  }
 }
 
 export const tts = new TTSService();

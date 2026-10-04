@@ -17,21 +17,16 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { tts, TTSState } from '../services/ttsService';
+import { sesameVoice } from '../services/sesameVoiceService';
+import { AiPrayerService, PrayerResponse } from '../services/aiPrayerService';
 import { sounds } from '../services/soundEffects';
 import { MascotGrace } from './MascotGrace';
-
-interface PrayerResponse {
-  prayer: string;
-  reflection: string;
-  scriptureEncouragement: string;
-  actionStep?: string;
-}
 
 export const AiPrayerCompanion: React.FC = () => {
   const { prayerJournal, addPrayerJournalItem, togglePrayerAnswered, todayHighlight } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'create' | 'journal'>('create');
-  const [selectedMood, setSelectedMood] = useState<'anxious' | 'grateful' | 'guidance' | 'healing' | 'strength'>('anxious');
+  const [selectedMood, setSelectedMood] = useState<string>('anxious');
   const [userPrompt, setUserPrompt] = useState('');
   const [selectedVerseRef, setSelectedVerseRef] = useState(todayHighlight.reference);
   const [selectedVerseText, setSelectedVerseText] = useState(todayHighlight.text);
@@ -50,7 +45,7 @@ export const AiPrayerCompanion: React.FC = () => {
   });
 
   useEffect(() => {
-    const unsub = tts.subscribe(setTtsState);
+    const unsub = sesameVoice.subscribe(setTtsState);
     return () => unsub();
   }, []);
 
@@ -60,9 +55,11 @@ export const AiPrayerCompanion: React.FC = () => {
     { id: 'guidance', label: 'Seeking Wisdom & Direction', emoji: '🧭', prompt: 'I have difficult decisions ahead and need the guidance of the Holy Spirit.' },
     { id: 'healing', label: 'Healing & Comfort in Grief', emoji: '🌿', prompt: 'Please comfort my hurting heart and bring physical and spiritual restoration.' },
     { id: 'strength', label: 'Strength for the Weary', emoji: '⚡', prompt: 'My energy is drained; please renew my strength through Christ Jesus.' },
+    { id: 'family', label: 'Family & Loved Ones', emoji: '🏡', prompt: 'Please bless, protect, and guide my family in love and holy unity.' },
+    { id: 'forgiveness', label: 'Forgiveness & Grace', emoji: '🤍', prompt: 'Help me release resentment and forgive as Christ has forgiven me.' },
   ] as const;
 
-  const handleSelectMood = (mood: typeof selectedMood, defaultText: string) => {
+  const handleSelectMood = (mood: string, defaultText: string) => {
     sounds.playTap();
     setSelectedMood(mood);
     if (!userPrompt) {
@@ -74,32 +71,27 @@ export const AiPrayerCompanion: React.FC = () => {
     sounds.playTap();
     setIsLoading(true);
     setIsSaved(false);
-    tts.stop();
+    sesameVoice.stop();
 
     try {
-      const res = await fetch('/api/prayer-companion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userPrompt || moodChips.find(m => m.id === selectedMood)?.prompt,
-          category: selectedMood,
-          mood: selectedMood,
-          verseReference: selectedVerseRef,
-          verseText: selectedVerseText
-        })
+      const activePrompt = userPrompt || moodChips.find(m => m.id === selectedMood)?.prompt;
+      const data = await AiPrayerService.generatePrayer({
+        message: activePrompt,
+        mood: selectedMood,
+        verseReference: selectedVerseRef,
+        verseText: selectedVerseText
       });
-
-      const data = await res.json();
       setCurrentResponse(data);
       sounds.playCorrect();
     } catch (err) {
       console.error('Prayer companion error:', err);
-      setCurrentResponse({
-        prayer: "Lord Jesus, You know our every need before we even speak. Be our strength and peace today.",
-        reflection: "Cast all your anxiety upon Him, for He cares for you.",
-        scriptureEncouragement: "Philippians 4:6-7",
-        actionStep: "Rest quietly in God's presence for two minutes."
+      const fallback = AiPrayerService.generateOfflinePrayer({
+        message: userPrompt,
+        mood: selectedMood,
+        verseReference: selectedVerseRef,
+        verseText: selectedVerseText
       });
+      setCurrentResponse(fallback);
     } finally {
       setIsLoading(false);
     }
@@ -108,8 +100,12 @@ export const AiPrayerCompanion: React.FC = () => {
   const handleAudioToggle = () => {
     sounds.playTap();
     if (!currentResponse) return;
-    const narrationText = `Prayer: ${currentResponse.prayer}. Reflection: ${currentResponse.reflection}. Scripture: ${currentResponse.scriptureEncouragement}`;
-    tts.toggle(narrationText);
+    if (ttsState.isPlaying) {
+      sesameVoice.stop();
+    } else {
+      const narrationText = `Prayer: ${currentResponse.prayer}. Reflection: ${currentResponse.reflection}. Scripture Anchor: ${currentResponse.scriptureEncouragement}`;
+      sesameVoice.speak(narrationText);
+    }
   };
 
   const handleSaveToJournal = () => {

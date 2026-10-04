@@ -91,8 +91,12 @@ const DEFAULT_SETTINGS: UserSettings = {
   soundFxEnabled: true,
   narratorVoiceEnabled: true,
   hapticFeedbackEnabled: true,
+  geminiApiKey: typeof window !== 'undefined' ? (localStorage.getItem('lifeos_gemini_api_key') || '') : '',
+  sesameApiKey: typeof window !== 'undefined' ? (localStorage.getItem('lifeos_sesame_api_key') || '') : '',
+  sesameVoiceId: typeof window !== 'undefined' ? (localStorage.getItem('lifeos_sesame_voice_id') || 'david-pastoral') : 'david-pastoral',
+  sesameEnabled: true,
   dailyReadingMinutesGoal: 15,
-  preferredTranslation: 'WEB',
+  preferredTranslation: 'NIV',
   prayerReminderEnabled: true,
   prayerReminderTime: '08:00',
   fastingModeActive: false,
@@ -351,6 +355,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     try {
       localStorage.setItem('lifeos_system_settings_v1', JSON.stringify(settings));
+      if (settings.sesameApiKey !== undefined) localStorage.setItem('lifeos_sesame_api_key', settings.sesameApiKey);
+      if (settings.sesameVoiceId) localStorage.setItem('lifeos_sesame_voice_id', settings.sesameVoiceId);
+      if (settings.geminiApiKey !== undefined) localStorage.setItem('lifeos_gemini_api_key', settings.geminiApiKey);
     } catch {}
   }, [settings]);
 

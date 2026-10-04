@@ -111,6 +111,11 @@ export const BIBLE_BOOKS: BibleBookInfo[] = [
 ];
 
 export const TRANSLATION_DETAILS: Record<TranslationId, { name: string; short: string; description: string }> = {
+  NIV: {
+    name: 'New International Version',
+    short: 'NIV',
+    description: 'The world’s most popular modern translation offering balanced accuracy and readability.'
+  },
   WEB: {
     name: 'World English Bible',
     short: 'WEB',
@@ -291,18 +296,28 @@ export const OFFLINE_BIBLE_VERSES: BibleVerse[] = [
   { book: 'Revelation', chapter: 21, verse: 5, text: 'And he that sat upon the throne said, Behold, I make all things new.', translation: 'KJV' }
 ];
 
-export function getBundledVerses(book: string, chapter: number, translation: TranslationId = 'WEB'): BibleVerse[] {
-  return OFFLINE_BIBLE_VERSES.filter(
+export function getBundledVerses(book: string, chapter: number, translation: TranslationId = 'NIV'): BibleVerse[] {
+  const direct = OFFLINE_BIBLE_VERSES.filter(
     v => v.book.toLowerCase() === book.toLowerCase() && v.chapter === chapter && v.translation === translation
   );
+  if (direct.length > 0) return direct;
+
+  return OFFLINE_BIBLE_VERSES.filter(
+    v => v.book.toLowerCase() === book.toLowerCase() && v.chapter === chapter && v.translation === 'WEB'
+  ).map(v => ({ ...v, translation }));
 }
 
-export function searchOfflineBible(query: string, translation: TranslationId = 'WEB'): BibleVerse[] {
+export function searchOfflineBible(query: string, translation: TranslationId = 'NIV'): BibleVerse[] {
   if (!query.trim()) return [];
   const q = query.toLowerCase();
-  return OFFLINE_BIBLE_VERSES.filter(
+  const direct = OFFLINE_BIBLE_VERSES.filter(
     v => v.translation === translation && (v.text.toLowerCase().includes(q) || `${v.book} ${v.chapter}:${v.verse}`.toLowerCase().includes(q))
   );
+  if (direct.length > 0) return direct;
+
+  return OFFLINE_BIBLE_VERSES.filter(
+    v => v.translation === 'WEB' && (v.text.toLowerCase().includes(q) || `${v.book} ${v.chapter}:${v.verse}`.toLowerCase().includes(q))
+  ).map(v => ({ ...v, translation }));
 }
 
 export interface DailyVerseHighlight {

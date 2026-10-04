@@ -1,4 +1,4 @@
-export type TranslationId = 'WEB' | 'KJV' | 'BBE';
+export type TranslationId = 'NIV' | 'WEB' | 'KJV' | 'BBE';
 
 export interface BibleVerse {
   book: string;

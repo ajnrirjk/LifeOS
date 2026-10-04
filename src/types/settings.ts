@@ -75,6 +75,12 @@ export interface UserSettings {
   narratorVoiceEnabled: boolean;
   hapticFeedbackEnabled: boolean;
 
+  // AI & Voice Services (Sesame & Gemini)
+  geminiApiKey?: string;
+  sesameApiKey?: string;
+  sesameVoiceId?: string;
+  sesameEnabled?: boolean;
+
   // Spiritual Goals
   dailyReadingMinutesGoal: number;
   preferredTranslation: string;
