@@ -59,7 +59,7 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const saved = localStorage.getItem('lifeos_apps_v5');
       if (saved) {
         const parsed = JSON.parse(saved);
-        const filtered = Array.isArray(parsed) ? parsed.filter((a: any) => a.id !== 'tiktok') : [];
+        const filtered = Array.isArray(parsed) ? parsed : [];
         const systemIds = new Set(filtered.map((a: LifeOSApp) => a.id));
         const missingSystem = DEFAULT_LIFEOS_APPS.filter(d => !systemIds.has(d.id));
         return [...filtered, ...missingSystem];

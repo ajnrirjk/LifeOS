@@ -8,6 +8,7 @@ import { LifeMeetApp } from '../meet/LifeMeetApp';
 import { CatFighterApp } from '../cat-fighter/CatFighterApp';
 import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
+import { TikTokApp } from '../tiktok/TikTokApp';
 import { AppStudio } from './AppStudio';
 import { CustomAppRunner } from './CustomAppRunner';
 
@@ -63,6 +64,7 @@ export const LifeOSAppContentRenderer: React.FC<LifeOSAppContentRendererProps> =
       {appId === 'mini_cats' && <CatFighterApp />}
       {appId === 'mini_games' && <ArcadeVaultApp />}
       {appId === 'youtube' && <YouTubeApp />}
+      {appId === 'tiktok' && <TikTokApp />}
       {appId === 'app_studio' && <AppStudio />}
       {appId !== 'faithlingo' &&
         appId !== 'bible_journal' &&
@@ -71,6 +73,7 @@ export const LifeOSAppContentRenderer: React.FC<LifeOSAppContentRendererProps> =
         appId !== 'mini_cats' &&
         appId !== 'mini_games' &&
         appId !== 'youtube' &&
+        appId !== 'tiktok' &&
         appId !== 'app_studio' && (
           <CustomAppRunner app={app} />
         )}

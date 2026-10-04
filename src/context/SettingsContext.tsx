@@ -119,7 +119,8 @@ const DEFAULT_SETTINGS: UserSettings = {
     fellowship_chat: true,
     mini_cats: true,
     mini_games: true,
-    youtube: true
+    youtube: true,
+    tiktok: true
   },
   debugTelemetryEnabled: false
 };

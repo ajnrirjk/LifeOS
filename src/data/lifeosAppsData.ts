@@ -84,6 +84,18 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     description: 'Watch worship streams, BibleProject videos, lofi study beats, and any YouTube video.',
     isPinned: true,
     isSystem: true
+  },
+  {
+    id: 'tiktok',
+    title: 'TikFeed',
+    emoji: '🎵',
+    iconName: 'Music2',
+    category: 'Learning',
+    type: 'tiktok',
+    color: 'from-stone-700 via-emerald-700 to-teal-700',
+    description: 'Trending TikTok videos — dance, comedy, food, sports, tech, music & faith content.',
+    isPinned: true,
+    isSystem: true
   }
 ];
 

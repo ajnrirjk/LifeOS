@@ -11,6 +11,142 @@ export interface YouTubeVideo {
   description: string;
 }
 
+export interface TikTokVideo {
+  id: string;
+  tiktokId: string;
+  title: string;
+  creator: string;
+  creatorHandle: string;
+  views: string;
+  likes: string;
+  timestamp: string;
+  category: 'Trending' | 'Comedy' | 'Dance' | 'Food' | 'Sports' | 'Music' | 'Life Hacks' | 'Tech' | 'Faith';
+  description: string;
+}
+
+export const TIKTOK_CURATED_VIDEOS: TikTokVideo[] = [
+  {
+    id: 'tt_1',
+    tiktokId: '7106594312292453678',
+    title: 'Viral Dance Challenge 2024',
+    creator: 'Charli D\'Amelio',
+    creatorHandle: '@charlidamelio',
+    views: '92M',
+    likes: '8.1M',
+    timestamp: '2 months ago',
+    category: 'Dance',
+    description: 'The most viral dance challenge taking over TikTok right now!'
+  },
+  {
+    id: 'tt_2',
+    tiktokId: '7212651994439124270',
+    title: 'POV: You Found The Best Life Hack',
+    creator: 'Khaby Lame',
+    creatorHandle: '@khaby.lame',
+    views: '148M',
+    likes: '18M',
+    timestamp: '3 months ago',
+    category: 'Life Hacks',
+    description: 'Khaby reacts to overly complicated life hacks with his signature silence and simplicity.'
+  },
+  {
+    id: 'tt_3',
+    tiktokId: '7238612345678901234',
+    title: 'Gordon Ramsay Roasts TikTok Recipes',
+    creator: 'Gordon Ramsay',
+    creatorHandle: '@gordongram',
+    views: '55M',
+    likes: '4.2M',
+    timestamp: '1 month ago',
+    category: 'Food',
+    description: 'The legendary chef reacts to the most chaotic TikTok cooking trends.'
+  },
+  {
+    id: 'tt_4',
+    tiktokId: '7195023456789012345',
+    title: 'Insane Basketball Trick Shots 🏀',
+    creator: 'Dude Perfect',
+    creatorHandle: '@dudeperfect',
+    views: '83M',
+    likes: '6.9M',
+    timestamp: '4 months ago',
+    category: 'Sports',
+    description: 'Dude Perfect breaks world records with impossible basketball trick shots on TikTok.'
+  },
+  {
+    id: 'tt_5',
+    tiktokId: '7301234567890123456',
+    title: 'This Prank Had Me Dead 💀',
+    creator: 'Zach King',
+    creatorHandle: '@zachking',
+    views: '211M',
+    likes: '22M',
+    timestamp: '5 months ago',
+    category: 'Comedy',
+    description: 'Zach King\'s mind-bending magic illusions and pranks that break the internet.'
+  },
+  {
+    id: 'tt_6',
+    tiktokId: '7187651234567890123',
+    title: 'Aesthetic Morning Routine ☀️',
+    creator: 'Bella Poarch',
+    creatorHandle: '@bellapoarch',
+    views: '41M',
+    likes: '3.8M',
+    timestamp: '6 months ago',
+    category: 'Life Hacks',
+    description: 'A satisfying, aesthetic morning routine that went completely viral across TikTok.'
+  },
+  {
+    id: 'tt_7',
+    tiktokId: '7265432187654321098',
+    title: 'iPhone 16 Pro vs Android - Which is BETTER? 📱',
+    creator: 'Marques Brownlee',
+    creatorHandle: '@mkbhd',
+    views: '29M',
+    likes: '2.4M',
+    timestamp: '2 months ago',
+    category: 'Tech',
+    description: 'MKBHD breaks down the iPhone 16 Pro vs the latest Android flagships in 60 seconds.'
+  },
+  {
+    id: 'tt_8',
+    tiktokId: '7112345678901234567',
+    title: 'This Song Goes So Hard 🔥',
+    creator: 'Olivia Rodrigo',
+    creatorHandle: '@oliviarodrigo',
+    views: '76M',
+    likes: '7.3M',
+    timestamp: '8 months ago',
+    category: 'Music',
+    description: 'Behind-the-scenes snippet of Olivia\'s latest track going mega-viral on TikTok.'
+  },
+  {
+    id: 'tt_9',
+    tiktokId: '7334521678901234567',
+    title: 'This Will Change How You See The World',
+    creator: 'MrBeast',
+    creatorHandle: '@mrbeast',
+    views: '134M',
+    likes: '15M',
+    timestamp: '3 weeks ago',
+    category: 'Trending',
+    description: 'MrBeast drops a mind-blowing TikTok that everyone is talking about.'
+  },
+  {
+    id: 'tt_10',
+    tiktokId: '7289012345678901234',
+    title: 'God\'s Grace - Morning Devotional 🙏',
+    creator: 'Sadie Robertson',
+    creatorHandle: '@sadierobertson',
+    views: '18M',
+    likes: '2.1M',
+    timestamp: '1 month ago',
+    category: 'Faith',
+    description: 'A powerful 60-second morning devotional about trusting God\'s plan for your life.'
+  }
+];
+
 export const YOUTUBE_CURATED_VIDEOS: YouTubeVideo[] = [
   {
     id: 'yt_1',
