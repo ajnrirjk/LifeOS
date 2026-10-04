@@ -76,3 +76,14 @@ export type LifeOSWallpaper =
   | 'sunset_peaks'
   | 'cyber_neon'
   | 'custom';
+
+export type SplitRatioPreset = '50-50' | '70-30' | '30-70';
+
+export interface SplitScreenState {
+  isSplit: boolean;
+  primaryAppId: string;
+  secondaryAppId: string;
+  splitRatio: number; // e.g. 50 (50%), 70 (70%), 30 (30%), range 20 to 80
+  preset: SplitRatioPreset;
+  activePane: 'primary' | 'secondary';
+}

@@ -4,67 +4,18 @@ import { useLifeOS } from '../../context/LifeOSContext';
 import { LifeOSTopBar } from './LifeOSTopBar';
 import { LifeOSDock } from './LifeOSDock';
 import { LaunchpadModal } from './LaunchpadModal';
-import { AppStudio } from './AppStudio';
-import { CustomAppRunner } from './CustomAppRunner';
-import { BibleJournalApp } from '../journal/BibleJournalApp';
-import { HeaderStats } from '../HeaderStats';
-import { Navigation } from '../Navigation';
-import { StudyPathView } from '../StudyPathView';
-import { BibleReader } from '../BibleReader';
-import { ReadingPlansView } from '../ReadingPlansView';
-import { AiPrayerCompanion } from '../AiPrayerCompanion';
-import { LeaderboardView } from '../LeaderboardView';
-import { ShopModal } from '../ShopModal';
-import { DailyWidget } from '../DailyWidget';
-import { LessonModal } from '../LessonModal';
+import { LifeOSSplitPaneView } from './LifeOSSplitPaneView';
+import { LifeOSAppContentRenderer } from './LifeOSAppContentRenderer';
 import { LifeOSDesktopWidgets } from './LifeOSDesktopWidgets';
 import { AddWidgetModal } from './AddWidgetModal';
-import { FellowshipChatApp } from '../chat/FellowshipChatApp';
-import { DiscordFellowshipApp } from '../chat/DiscordFellowshipApp';
-import { CatFighterApp } from '../cat-fighter/CatFighterApp';
-import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
-import { YouTubeApp } from '../youtube/YouTubeApp';
-import { LifeMeetApp } from '../meet/LifeMeetApp';
 import { LifeMeetFloatingPiP } from '../meet/LifeMeetFloatingPiP';
-import { useApp } from '../../context/AppContext';
 import { useSettings } from '../../context/SettingsContext';
-import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft, Megaphone } from 'lucide-react';
+import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft, Megaphone, Columns2 } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 import { LifeOSGodModeBar } from '../admin/LifeOSGodModeBar';
 import { MASTER_ADMIN_EMAIL } from '../../types/settings';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { WelcomeOnboardingModal } from './WelcomeOnboardingModal';
-
-// Renders the full flagship FaithLingo app inside its LifeOS window
-const FaithLingoWindowContent: React.FC = () => {
-  const { currentTab, fontSize, activeLesson, setActiveLesson } = useApp();
-
-  const fontMultiplierClass = 
-    fontSize === 'xlarge' ? 'text-lg' :
-    fontSize === 'large' ? 'text-base' : 'text-sm';
-
-  return (
-    <div className={`flex flex-col flex-1 h-full overflow-y-auto ${fontMultiplierClass} transition-colors duration-200 pb-20 md:pb-0`}>
-      <HeaderStats />
-      {activeLesson ? (
-        <LessonModal lesson={activeLesson} onClose={() => setActiveLesson(null)} />
-      ) : (
-        <div className="flex-1 flex flex-col md:flex-row w-full h-full">
-          <Navigation />
-          <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-100px)]">
-            {currentTab === 'learn' && <StudyPathView />}
-            {currentTab === 'bible' && <BibleReader />}
-            {currentTab === 'plans' && <ReadingPlansView />}
-            {currentTab === 'prayer' && <AiPrayerCompanion />}
-            {currentTab === 'leaderboard' && <LeaderboardView />}
-          </main>
-        </div>
-      )}
-      <ShopModal />
-      <DailyWidget isModal={true} />
-    </div>
-  );
-};
 
 export const LifeOSDesktop: React.FC = () => {
   const {
@@ -81,7 +32,12 @@ export const LifeOSDesktop: React.FC = () => {
     desktopWidgets,
     addDesktopWidget,
     removeDesktopWidget,
-    resetDesktopWidgets
+    resetDesktopWidgets,
+    splitScreen,
+    enterSplitScreen,
+    exitSplitScreen,
+    toggleSplitScreen,
+    setSplitPreset
   } = useLifeOS();
 
   const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
@@ -137,20 +93,51 @@ export const LifeOSDesktop: React.FC = () => {
     return () => window.removeEventListener('hashchange', checkMeetRoute);
   }, [launchApp]);
 
-  // Keyboard shortcuts (Escape key minimizes active window to desktop dashboard)
+  // Keyboard shortcuts (Escape, Alt+[, Alt+], Alt+Enter)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
+
+      // Escape key minimizes active window or exits split screen to desktop dashboard
       if (e.key === 'Escape') {
-        const activeTag = document.activeElement?.tagName.toLowerCase();
-        if (activeTag === 'input' || activeTag === 'textarea') return;
-        if (!isDesktopView && activeAppId) {
-          minimizeApp(activeAppId);
+        if (!isDesktopView) {
+          if (splitScreen.isSplit) {
+            exitSplitScreen();
+          } else if (activeAppId) {
+            minimizeApp(activeAppId);
+          }
         }
+      }
+
+      // Alt + [ : Snap active window to Left 50%
+      if (e.altKey && (e.key === '[' || e.code === 'BracketLeft')) {
+        e.preventDefault();
+        sounds.playTap();
+        const curApp = activeAppId || 'faithlingo';
+        const companion = apps.find(a => a.id !== curApp)?.id || 'bible_journal';
+        enterSplitScreen(curApp, companion, '50-50');
+      }
+
+      // Alt + ] : Snap active window to Right 50%
+      if (e.altKey && (e.key === ']' || e.code === 'BracketRight')) {
+        e.preventDefault();
+        sounds.playTap();
+        const curApp = activeAppId || 'bible_journal';
+        const companion = apps.find(a => a.id !== curApp)?.id || 'faithlingo';
+        enterSplitScreen(companion, curApp, '50-50');
+      }
+
+      // Alt + Enter : Toggle Split Screen / Full Screen Maximized
+      if (e.altKey && e.key === 'Enter') {
+        e.preventDefault();
+        sounds.playTap();
+        toggleSplitScreen();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDesktopView, activeAppId, minimizeApp]);
+  }, [isDesktopView, activeAppId, splitScreen, minimizeApp, enterSplitScreen, exitSplitScreen, toggleSplitScreen, apps]);
 
   const [windowSnap, setWindowSnap] = useState<'maximize' | 'left' | 'right' | 'center'>('maximize');
   const [isSnapMenuOpen, setIsSnapMenuOpen] = useState(false);
@@ -188,7 +175,7 @@ export const LifeOSDesktop: React.FC = () => {
       settings.fastingModeActive ? 'sepia-[0.3] contrast-[0.95] brightness-[0.92]' : ''
     }`}>
       {/* Top System Menu Bar (Desktop always; Mobile only on Desktop/Widgets view) */}
-      <div className={!isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? 'hidden md:block' : 'block'}>
+      <div className={!isDesktopView && ((activeApp && activeWindowState && !activeWindowState.isMinimized) || splitScreen.isSplit) ? 'hidden md:block' : 'block'}>
         <LifeOSTopBar onOpenPrivacy={() => setIsPrivacyModalOpen(true)} />
       </div>
 
@@ -229,14 +216,25 @@ export const LifeOSDesktop: React.FC = () => {
         </div>
       )}
 
-      {/* Desktop Workspace / Active App Window / Desktop Widgets */}
+      {/* Desktop Workspace / Active App Window / Split-Screen Dual Canvas / Desktop Widgets */}
       <div className={`flex-1 relative overflow-hidden flex flex-col ${
-        !isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized
+        !isDesktopView && (splitScreen.isSplit || (activeApp && activeWindowState && !activeWindowState.isMinimized))
           ? 'p-0 pb-0'
           : 'p-2 sm:p-3 pb-0 md:pb-24'
       }`}>
         <AnimatePresence mode="wait">
-          {!isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? (
+          {!isDesktopView && splitScreen.isSplit ? (
+            <motion.div
+              key="lifeos-split-screen-canvas"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="w-full h-full flex-1 overflow-hidden"
+            >
+              <LifeOSSplitPaneView />
+            </motion.div>
+          ) : !isDesktopView && activeApp && activeWindowState && !activeWindowState.isMinimized ? (
             <motion.div
               key={`window-${activeApp.id}`}
               initial={{ opacity: 0, scale: 0.98 }}
@@ -293,7 +291,7 @@ export const LifeOSDesktop: React.FC = () => {
                         setIsSnapMenuOpen(!isSnapMenuOpen);
                       }}
                       className="w-3.5 h-3.5 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-[9px] text-white opacity-90 transition-all shadow-sm group"
-                      title="Window Snap Layouts"
+                      title="Window Snap & Split Layouts"
                     >
                       <Maximize2 className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </motion.button>
@@ -317,56 +315,125 @@ export const LifeOSDesktop: React.FC = () => {
                       sounds.playTap();
                       setIsSnapMenuOpen(!isSnapMenuOpen);
                     }}
-                    className={`p-1 px-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1 ${
+                    className={`p-1 px-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1.5 ${
                       isSnapMenuOpen ? 'bg-emerald-600 text-white' : 'hover:bg-stone-200 dark:hover:bg-slate-800 text-stone-400 hover:text-white'
                     }`}
-                    title="Snap layouts (Left, Right, Center, Full)"
+                    title="Snap layouts & Split-Screen"
                   >
+                    <Columns2 className="w-3.5 h-3.5" />
                     <span>🗖 Snap</span>
                   </button>
 
                   {/* Snap Layout Dropdown Menu */}
                   {isSnapMenuOpen && (
-                    <div className="absolute top-8 right-0 w-44 bg-stone-900/98 border border-white/20 rounded-2xl shadow-2xl p-2 z-50 text-xs text-stone-200 space-y-1 backdrop-blur-xl">
-                      <div className="text-[10px] font-black uppercase text-stone-400 px-2 py-0.5">
-                        Snap Window
+                    <div className="absolute top-8 right-0 w-64 bg-stone-900/98 border border-white/20 rounded-2xl shadow-2xl p-2.5 z-50 text-xs text-stone-200 space-y-2 backdrop-blur-2xl">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[10px] font-black uppercase text-stone-400">Snap & Split Layouts</span>
+                        <span className="text-[10px] text-amber-400 font-mono">Alt+[ / Alt+]</span>
                       </div>
-                      <button
-                        onClick={() => { sounds.playTap(); setWindowSnap('maximize'); setIsSnapMenuOpen(false); }}
-                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
-                          windowSnap === 'maximize' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
-                        }`}
-                      >
-                        <span>🗖 Full Screen</span>
-                        {windowSnap === 'maximize' && <span>✓</span>}
-                      </button>
-                      <button
-                        onClick={() => { sounds.playTap(); setWindowSnap('left'); setIsSnapMenuOpen(false); }}
-                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
-                          windowSnap === 'left' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
-                        }`}
-                      >
-                        <span>◧ Snap Left (50%)</span>
-                        {windowSnap === 'left' && <span>✓</span>}
-                      </button>
-                      <button
-                        onClick={() => { sounds.playTap(); setWindowSnap('right'); setIsSnapMenuOpen(false); }}
-                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
-                          windowSnap === 'right' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
-                        }`}
-                      >
-                        <span>◨ Snap Right (50%)</span>
-                        {windowSnap === 'right' && <span>✓</span>}
-                      </button>
-                      <button
-                        onClick={() => { sounds.playTap(); setWindowSnap('center'); setIsSnapMenuOpen(false); }}
-                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
-                          windowSnap === 'center' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
-                        }`}
-                      >
-                        <span>▣ Centered Glass</span>
-                        {windowSnap === 'center' && <span>✓</span>}
-                      </button>
+
+                      {/* Single Window Snapping */}
+                      <div className="space-y-1">
+                        <button
+                          onClick={() => { sounds.playTap(); setWindowSnap('maximize'); setIsSnapMenuOpen(false); }}
+                          className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
+                            windowSnap === 'maximize' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
+                          }`}
+                        >
+                          <span>🗖 Full Screen</span>
+                          {windowSnap === 'maximize' && <span>✓</span>}
+                        </button>
+                        <button
+                          onClick={() => { sounds.playTap(); setWindowSnap('center'); setIsSnapMenuOpen(false); }}
+                          className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
+                            windowSnap === 'center' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
+                          }`}
+                        >
+                          <span>▣ Centered Glass View</span>
+                          {windowSnap === 'center' && <span>✓</span>}
+                        </button>
+                      </div>
+
+                      {/* Split Screen Dual Window Presets */}
+                      <div className="pt-1.5 border-t border-white/10 space-y-1">
+                        <div className="text-[10px] font-black uppercase text-emerald-400 px-1 py-0.5">
+                          Dual-App Split Presets
+                        </div>
+                        <button
+                          onClick={() => {
+                            sounds.playTap();
+                            setIsSnapMenuOpen(false);
+                            const companion = apps.find(a => a.id !== activeApp.id)?.id || 'bible_journal';
+                            enterSplitScreen(activeApp.id, companion, '50-50');
+                          }}
+                          className="w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors"
+                        >
+                          <span>◧ Split Left 50%</span>
+                          <span className="text-[10px] text-stone-400 font-mono">50 / 50</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            sounds.playTap();
+                            setIsSnapMenuOpen(false);
+                            const companion = apps.find(a => a.id !== activeApp.id)?.id || 'bible_journal';
+                            enterSplitScreen(companion, activeApp.id, '50-50');
+                          }}
+                          className="w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors"
+                        >
+                          <span>◨ Split Right 50%</span>
+                          <span className="text-[10px] text-stone-400 font-mono">50 / 50</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            sounds.playTap();
+                            setIsSnapMenuOpen(false);
+                            const companion = apps.find(a => a.id !== activeApp.id)?.id || 'bible_journal';
+                            enterSplitScreen(activeApp.id, companion, '70-30');
+                          }}
+                          className="w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors"
+                        >
+                          <span>◫ Focus Split (Current 70%)</span>
+                          <span className="text-[10px] text-stone-400 font-mono">70 / 30</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            sounds.playTap();
+                            setIsSnapMenuOpen(false);
+                            const companion = apps.find(a => a.id !== activeApp.id)?.id || 'bible_journal';
+                            enterSplitScreen(companion, activeApp.id, '30-70');
+                          }}
+                          className="w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors"
+                        >
+                          <span>◫ Companion Split (Current 70%)</span>
+                          <span className="text-[10px] text-stone-400 font-mono">30 / 70</span>
+                        </button>
+                      </div>
+
+                      {/* Quick Companion App Picker */}
+                      <div className="pt-1.5 border-t border-white/10">
+                        <div className="text-[10px] font-black uppercase text-stone-400 px-1 py-0.5 mb-1">
+                          Pick Second App to Dock:
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto pr-1">
+                          {apps
+                            .filter(a => a.id !== activeApp.id)
+                            .map(companion => (
+                              <button
+                                key={companion.id}
+                                onClick={() => {
+                                  sounds.playTap();
+                                  setIsSnapMenuOpen(false);
+                                  enterSplitScreen(activeApp.id, companion.id, '50-50');
+                                }}
+                                className="px-2 py-1 rounded-lg bg-white/5 hover:bg-emerald-600 hover:text-white text-[11px] text-stone-300 flex items-center gap-1.5 truncate transition-all text-left"
+                                title={`Open alongside ${companion.title}`}
+                              >
+                                <span>{companion.emoji}</span>
+                                <span className="truncate">{companion.title}</span>
+                              </button>
+                            ))}
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -419,51 +486,35 @@ export const LifeOSDesktop: React.FC = () => {
                   <span className="truncate max-w-[140px]">{activeApp.title}</span>
                 </div>
 
-                <button
-                  onClick={() => {
-                    sounds.playTap();
-                    closeApp(activeApp.id);
-                  }}
-                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white"
-                  title="Close App"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1">
+                  {/* Quick Mobile Split Button */}
+                  <button
+                    onClick={() => {
+                      sounds.playTap();
+                      const second = apps.find(a => a.id !== activeApp.id)?.id || 'bible_journal';
+                      enterSplitScreen(activeApp.id, second, '50-50');
+                    }}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-400 hover:text-white"
+                    title="Split screen on mobile"
+                  >
+                    <Columns2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      sounds.playTap();
+                      closeApp(activeApp.id);
+                    }}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white"
+                    title="Close App"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Window Body: Specific App Rendering */}
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                {settings.appVisibility[activeApp.id] === false ? (
-                  <div className="h-full min-h-[300px] flex flex-col items-center justify-center p-8 text-center bg-stone-950/95 text-white">
-                    <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border-2 border-rose-500/30 flex items-center justify-center text-3xl mb-4">
-                      🔒
-                    </div>
-                    <h3 className="text-lg font-black text-white mb-2">{activeApp.title} Disabled</h3>
-                    <p className="text-xs text-stone-400 max-w-sm mb-6 leading-relaxed">
-                      This application has been temporarily disabled across LifeOS by the system administrator.
-                    </p>
-                    <button
-                      onClick={() => showDesktop()}
-                      className="px-5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-xs font-black uppercase tracking-wider text-white transition-all shadow-md active:scale-95"
-                    >
-                      Return to Desktop
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {activeApp.id === 'faithlingo' && <FaithLingoWindowContent />}
-                    {activeApp.id === 'bible_journal' && <BibleJournalApp />}
-                    {activeApp.id === 'fellowship_chat' && <DiscordFellowshipApp />}
-                    {activeApp.id === 'faith_meet' && <LifeMeetApp />}
-                    {activeApp.id === 'mini_cats' && <CatFighterApp />}
-                    {activeApp.id === 'mini_games' && <ArcadeVaultApp />}
-                    {activeApp.id === 'youtube' && <YouTubeApp />}
-                    {activeApp.id === 'app_studio' && <AppStudio />}
-                    {activeApp.id !== 'faithlingo' && activeApp.id !== 'bible_journal' && activeApp.id !== 'fellowship_chat' && activeApp.id !== 'faith_meet' && activeApp.id !== 'mini_cats' && activeApp.id !== 'mini_games' && activeApp.id !== 'youtube' && activeApp.id !== 'app_studio' && (
-                      <CustomAppRunner app={activeApp} />
-                    )}
-                  </>
-                )}
+                <LifeOSAppContentRenderer appId={activeApp.id} onReturnToDesktop={() => showDesktop()} />
               </div>
             </motion.div>
           ) : (
