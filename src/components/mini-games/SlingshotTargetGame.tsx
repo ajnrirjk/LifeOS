@@ -188,7 +188,7 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
 
             if (dist < t.radius + s.stone.radius) {
               t.hp -= 1;
-              if (!soundMuted) sounds.playCoinSound();
+              if (!soundMuted) sounds.playTargetSmash();
 
               for (let k = 0; k < 18; k++) {
                 s.particles.push({
@@ -403,7 +403,7 @@ export const SlingshotTargetGame: React.FC<SlingshotTargetGameProps> = ({ onGame
     if (power > 15) {
       s.stones--;
       setStonesLeft(s.stones);
-      if (!soundMuted) sounds.playWhoosh();
+      if (!soundMuted) sounds.playSlingshotSnap();
 
       s.stone = {
         x: slingshotAnchor.x,

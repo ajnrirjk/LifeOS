@@ -2,7 +2,7 @@ class CatFighterAudioEngine {
   private ctx: AudioContext | null = null;
   public muted: boolean = false;
 
-  private initCtx() {
+  public initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
@@ -10,8 +10,12 @@ class CatFighterAudioEngine {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
+  }
+
+  public resume() {
+    this.initCtx();
   }
 
   // Light Claw / Jab sound

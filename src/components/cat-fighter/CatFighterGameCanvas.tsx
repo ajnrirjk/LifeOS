@@ -227,6 +227,8 @@ export const CatFighterGameCanvas: React.FC<CatFighterGameCanvasProps> = ({
         e.preventDefault();
       }
 
+      catAudio.resume();
+
       stateRef.current.keysDown[e.code] = true;
 
       // P1 Actions

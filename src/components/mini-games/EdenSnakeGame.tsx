@@ -164,7 +164,7 @@ export const EdenSnakeGame: React.FC<EdenSnakeGameProps> = ({ onGameOver, onBack
           s.apples++;
           setScore(s.score);
           setApplesEaten(s.apples);
-          if (!soundMuted) sounds.playCoinSound();
+          if (!soundMuted) sounds.playSnakeEatApple();
 
           s.speed = Math.max(60, 105 - s.apples * 1.5);
 

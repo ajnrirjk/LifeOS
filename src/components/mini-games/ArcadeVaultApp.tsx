@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import confetti from 'canvas-confetti';
 import { sounds } from '../../services/soundEffects';
+import { useSettings } from '../../context/SettingsContext';
 import { MiniGameId, MiniGameMeta, ArcadeStats } from './types';
 import { PilgrimGoGame } from './PilgrimGoGame';
 import { FlappyDoveGame } from './FlappyDoveGame';
@@ -21,7 +23,16 @@ import {
   VolumeX,
   Layers,
   Crown,
-  Star
+  Star,
+  Gift,
+  ShoppingBag,
+  Check,
+  RotateCcw,
+  User,
+  Medal,
+  Coins,
+  Lock,
+  ArrowLeft
 } from 'lucide-react';
 
 const GAMES_LIST: MiniGameMeta[] = [
@@ -105,7 +116,7 @@ const GAMES_LIST: MiniGameMeta[] = [
 ];
 
 const INITIAL_STATS: ArcadeStats = {
-  totalTokens: 50,
+  totalTokens: 100,
   highScores: {
     pilgrim_go: 0,
     flappy_dove: 0,
@@ -128,10 +139,85 @@ const INITIAL_STATS: ArcadeStats = {
   activeSkin: 'classic'
 };
 
+// Pre-seeded Fellowship Champions for realistic, competitive hall of fame leaderboards
+const FELLOWSHIP_CHAMPIONS: Record<MiniGameId, Array<{ name: string; score: number; date: string; badge: string }>> = {
+  pilgrim_go: [
+    { name: 'David_The_Slayer', score: 4850, date: 'Today', badge: '🏆 Legend' },
+    { name: 'Gideon_300', score: 3920, date: 'Yesterday', badge: '⚔️ Veteran' },
+    { name: 'Joshua_Jericho', score: 2840, date: '2 days ago', badge: '🛡️ Guardian' },
+    { name: 'Caleb_Faithful', score: 1950, date: '3 days ago', badge: '🚶‍♂️ Explorer' },
+  ],
+  flappy_dove: [
+    { name: 'Noah_Ark_Dove', score: 142, date: 'Today', badge: '🕊️ Sky Master' },
+    { name: 'Elijah_Chariot', score: 98, date: 'Yesterday', badge: '⚡ High Flyer' },
+    { name: 'Peter_Rock', score: 76, date: '2 days ago', badge: '🌿 Pilgrim' },
+    { name: 'FaithSeeker_88', score: 48, date: '3 days ago', badge: '✨ Novice' },
+  ],
+  babel_stack: [
+    { name: 'Solomon_Architect', score: 68, date: 'Today', badge: '🏛️ Master Builder' },
+    { name: 'Nehemiah_Wall', score: 54, date: 'Yesterday', badge: '🧱 Perfect Stacker' },
+    { name: 'Bezalel_Artisan', score: 41, date: '2 days ago', badge: '📐 Crafter' },
+    { name: 'Hiram_Tyre', score: 32, date: '3 days ago', badge: '🔨 Mason' },
+  ],
+  demon_buster: [
+    { name: 'Michael_Archangel', score: 1240, date: 'Today', badge: '⚔️ Divine General' },
+    { name: 'ArmorOfGod_Warrior', score: 980, date: 'Yesterday', badge: '🛡️ Shield Hero' },
+    { name: 'Paul_Ephesus', score: 750, date: '2 days ago', badge: '⚡ Laser Ace' },
+    { name: 'GraceDefender_7', score: 520, date: '3 days ago', badge: '✨ Scout' },
+  ],
+  eden_snake: [
+    { name: 'Eden_Keeper', score: 460, date: 'Today', badge: '🐍 Cyber Serpent' },
+    { name: 'Adam_Tender', score: 350, date: 'Yesterday', badge: '🍎 Scroll Hunter' },
+    { name: 'Abel_Shepherd', score: 270, date: '2 days ago', badge: '🌿 Swift Runner' },
+    { name: 'Seth_Righteous', score: 190, date: '3 days ago', badge: '🌱 Crawler' },
+  ],
+  slingshot_target: [
+    { name: 'David_Goliath_Slayer', score: 890, date: 'Today', badge: '🎯 Brook Master' },
+    { name: 'Jonathan_Archer', score: 720, date: 'Yesterday', badge: '🏹 Marksman' },
+    { name: 'Benjamite_Sling', score: 580, date: '2 days ago', badge: '🪨 Stone Thrower' },
+    { name: 'ShepherdBoy_1', score: 410, date: '3 days ago', badge: '🎯 Striker' },
+  ],
+  scripture_matrix: [
+    { name: 'Ezra_Scribe', score: 38, date: 'Today', badge: '🧠 Memory Master' },
+    { name: 'Timothy_Disciple', score: 29, date: 'Yesterday', badge: '📖 Scripture Sage' },
+    { name: 'Luke_Physician', score: 22, date: '2 days ago', badge: '🕊️ Melodic Scholar' },
+    { name: 'Priscilla_Teacher', score: 16, date: '3 days ago', badge: '💡 Student' },
+  ]
+};
+
+// Arcade Token Shop Catalog
+const SHOP_ITEMS = [
+  { id: 'skin_cyber', name: 'Cyber Neon Glow', type: 'theme', cost: 150, emoji: '⚡', desc: 'Futuristic glowing neon aesthetic for arcade games' },
+  { id: 'skin_gold', name: 'Golden Sanctuary', type: 'theme', cost: 250, emoji: '✨', desc: 'Radiant gold-tinted temple borders and particle effects' },
+  { id: 'skin_celestial', name: 'Celestial Twilight', type: 'theme', cost: 350, emoji: '🌌', desc: 'Deep cosmic starfields and ethereal purple aurora' },
+  { id: 'title_champion', name: 'Faith Champion Tag', type: 'title', cost: 100, emoji: '👑', desc: 'Gold crown badge displayed next to your gamer tag' },
+  { id: 'title_overcomer', name: 'More Than Conqueror', type: 'title', cost: 200, emoji: '🛡️', desc: 'Romans 8:37 conqueror banner in the Hall of Fame' },
+];
+
 export const ArcadeVaultApp: React.FC = () => {
+  const { settings } = useSettings();
   const [activeGame, setActiveGame] = useState<MiniGameId | null>(null);
   const [activeTab, setActiveTab] = useState<'games' | 'leaderboard' | 'trophies'>('games');
   const [soundMuted, setSoundMuted] = useState(false);
+  const [selectedLeaderboardGame, setSelectedLeaderboardGame] = useState<MiniGameId>('pilgrim_go');
+  const [claimedDailyToday, setClaimedDailyToday] = useState<boolean>(() => {
+    try {
+      const last = localStorage.getItem('lifeos_arcade_last_daily');
+      if (!last) return false;
+      const today = new Date().toDateString();
+      return last === today;
+    } catch {
+      return false;
+    }
+  });
+
+  const [customTag, setCustomTag] = useState<string>(() => {
+    try {
+      return localStorage.getItem('lifeos_arcade_tag') || settings.profile.name || 'FaithChampion_7';
+    } catch {
+      return 'FaithChampion_7';
+    }
+  });
 
   const [stats, setStats] = useState<ArcadeStats>(() => {
     try {
@@ -169,6 +255,80 @@ export const ArcadeVaultApp: React.FC = () => {
     sounds.playTap();
     setActiveGame(gameId);
   };
+
+  const handleClaimDailyTokens = () => {
+    if (claimedDailyToday) return;
+    sounds.playCelebration();
+    confetti({
+      particleCount: 80,
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+
+    const today = new Date().toDateString();
+    try {
+      localStorage.setItem('lifeos_arcade_last_daily', today);
+    } catch {}
+    setClaimedDailyToday(true);
+
+    setStats((prev) => ({
+      ...prev,
+      totalTokens: prev.totalTokens + 100
+    }));
+  };
+
+  const handleBuyShopItem = (item: typeof SHOP_ITEMS[0]) => {
+    if (stats.unlockedSkins.includes(item.id)) {
+      // Toggle active skin
+      sounds.playTap();
+      setStats((prev) => ({
+        ...prev,
+        activeSkin: prev.activeSkin === item.id ? 'classic' : item.id
+      }));
+      return;
+    }
+
+    if (stats.totalTokens < item.cost) {
+      sounds.playIncorrect();
+      return;
+    }
+
+    sounds.playCorrect();
+    confetti({
+      particleCount: 50,
+      spread: 60,
+      origin: { y: 0.7 }
+    });
+
+    setStats((prev) => ({
+      ...prev,
+      totalTokens: prev.totalTokens - item.cost,
+      unlockedSkins: [...prev.unlockedSkins, item.id],
+      activeSkin: item.id
+    }));
+  };
+
+  // Compile Leaderboard for currently selected mini game
+  const currentLeaderboard = useMemo(() => {
+    const list = [...(FELLOWSHIP_CHAMPIONS[selectedLeaderboardGame] || [])];
+    const userBest = stats.highScores[selectedLeaderboardGame] || 0;
+
+    const userEntry = {
+      name: `${customTag} (You)`,
+      score: userBest,
+      date: userBest > 0 ? 'Your Best' : 'Unplayed',
+      badge: userBest > 0 ? '🌟 Player' : '🌱 New',
+      isUser: true
+    };
+
+    list.push(userEntry);
+    list.sort((a, b) => b.score - a.score);
+
+    return list.map((entry, idx) => ({
+      ...entry,
+      rank: idx + 1
+    }));
+  }, [selectedLeaderboardGame, stats.highScores, customTag]);
 
   // If a specific mini game is launched, render its game screen
   if (activeGame) {
@@ -240,7 +400,7 @@ export const ArcadeVaultApp: React.FC = () => {
               <span className="px-2.5 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 text-[10px] font-black tracking-wider uppercase flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> LifeOS Arcade Vault
               </span>
-              <span className="text-xs text-stone-400">6 Mini Games Available</span>
+              <span className="text-xs text-stone-400">{GAMES_LIST.length} Retro Games Available</span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2.5">
@@ -250,7 +410,7 @@ export const ArcadeVaultApp: React.FC = () => {
               </span>
             </h1>
             <p className="text-xs sm:text-sm text-stone-300 mt-1 max-w-xl">
-              Play fast-paced retro games with smooth physics, high score tracking, sound effects, and token rewards!
+              Play fast-paced retro games with authentic physics, synthesized audio, community leaderboards, and token rewards!
             </p>
           </div>
 
@@ -273,6 +433,17 @@ export const ArcadeVaultApp: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            <button
+              onClick={() => {
+                setSoundMuted(!soundMuted);
+                sounds.setEnabled(soundMuted);
+              }}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white transition-colors"
+              title={soundMuted ? 'Unmute Sound' : 'Mute Sound'}
+            >
+              {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-amber-400" />}
+            </button>
           </div>
         </div>
 
@@ -305,13 +476,29 @@ export const ArcadeVaultApp: React.FC = () => {
             }`}
           >
             <Trophy className="w-3.5 h-3.5" />
-            <span>High Scores & Records</span>
+            <span>Fellowship Leaderboard</span>
+          </button>
+
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setActiveTab('trophies');
+            }}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs transition-all ${
+              activeTab === 'trophies'
+                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
+                : 'bg-white/5 text-stone-400 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Token Shop & Rewards</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="max-w-5xl mx-auto w-full px-4 sm:px-8 py-6 flex-1">
+        {/* 1. ALL GAMES TAB */}
         {activeTab === 'games' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {GAMES_LIST.map((game) => {
@@ -326,11 +513,9 @@ export const ArcadeVaultApp: React.FC = () => {
                   onClick={() => launchGame(game.id)}
                   className="group relative bg-stone-900/80 border border-stone-800 hover:border-purple-500/50 rounded-3xl p-5 flex flex-col justify-between overflow-hidden shadow-xl hover:shadow-purple-900/20 transition-all cursor-pointer"
                 >
-                  {/* Subtle corner gradient glow */}
                   <div className={`absolute -right-10 -bottom-10 w-36 h-36 bg-gradient-to-tr ${game.accentGradient} opacity-10 group-hover:opacity-20 rounded-full blur-2xl transition-opacity`} />
 
                   <div>
-                    {/* Header Row */}
                     <div className="flex items-center justify-between mb-3">
                       <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${game.accentGradient} flex items-center justify-center text-2xl shadow-lg shrink-0 group-hover:scale-110 transition-transform`}>
                         {game.emoji}
@@ -348,7 +533,6 @@ export const ArcadeVaultApp: React.FC = () => {
                       {game.tagline}
                     </p>
 
-                    {/* How to play bullets */}
                     <div className="mt-3.5 space-y-1 bg-stone-950/60 p-2.5 rounded-xl border border-white/5">
                       {game.instructions.map((inst, i) => (
                         <div key={i} className="flex items-center gap-1.5 text-[11px] text-stone-300">
@@ -359,7 +543,6 @@ export const ArcadeVaultApp: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Bottom Stats & Launch Button */}
                   <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between">
                     <div>
                       <div className="text-[10px] text-stone-400 font-bold uppercase">Personal Best</div>
@@ -377,54 +560,245 @@ export const ArcadeVaultApp: React.FC = () => {
           </div>
         )}
 
+        {/* 2. LEADERBOARD TAB */}
         {activeTab === 'leaderboard' && (
-          <div className="max-w-2xl mx-auto space-y-4">
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-black text-white flex items-center justify-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-400" />
-                <span>Your Arcade Hall of Fame</span>
-              </h2>
-              <p className="text-xs text-stone-400 mt-1">
-                Your highest record scores achieved across all 6 mini-games!
-              </p>
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-stone-900/70 border border-white/10 p-4 rounded-3xl backdrop-blur-md">
+              <div>
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <span>Fellowship Hall of Fame</span>
+                </h2>
+                <p className="text-xs text-stone-400 mt-0.5">
+                  Compete against top believers across the globe to claim the #1 record!
+                </p>
+              </div>
+
+              {/* Tag Editor */}
+              <div className="flex items-center gap-2 bg-stone-950/80 px-3 py-1.5 rounded-2xl border border-white/10">
+                <User className="w-3.5 h-3.5 text-stone-400" />
+                <span className="text-[10px] text-stone-400 uppercase font-bold">Your Tag:</span>
+                <input
+                  type="text"
+                  value={customTag}
+                  onChange={(e) => {
+                    const val = e.target.value.slice(0, 18);
+                    setCustomTag(val);
+                    try { localStorage.setItem('lifeos_arcade_tag', val); } catch {}
+                  }}
+                  className="bg-transparent text-xs font-black text-amber-300 w-28 outline-none border-b border-transparent focus:border-amber-400"
+                />
+              </div>
             </div>
 
-            <div className="space-y-3">
-              {GAMES_LIST.map((game, rank) => {
-                const high = stats.highScores[game.id] || 0;
-                const plays = stats.gamesPlayed[game.id] || 0;
+            {/* Game Selector Chips */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              {GAMES_LIST.map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => {
+                    sounds.playTap();
+                    setSelectedLeaderboardGame(g.id);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 ${
+                    selectedLeaderboardGame === g.id
+                      ? 'bg-amber-500 text-stone-950 font-black shadow-md'
+                      : 'bg-stone-900 border border-stone-800 text-stone-300 hover:bg-stone-800'
+                  }`}
+                >
+                  <span>{g.emoji}</span>
+                  <span>{g.title.split(' ')[0]}</span>
+                </button>
+              ))}
+            </div>
 
-                return (
-                  <div
-                    key={game.id}
-                    className="flex items-center justify-between p-4 rounded-2xl bg-stone-900 border border-stone-800 hover:border-purple-500/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-stone-950 border border-white/10 flex items-center justify-center text-xl">
-                        {game.emoji}
+            {/* Leaderboard Table */}
+            <div className="bg-stone-900 border border-stone-800 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="px-5 py-3.5 bg-stone-950/80 border-b border-white/10 flex items-center justify-between text-xs font-bold text-stone-400 uppercase tracking-wider">
+                <div className="flex items-center gap-3">
+                  <span className="w-8">Rank</span>
+                  <span>Champion Name</span>
+                </div>
+                <span>High Score</span>
+              </div>
+
+              <div className="divide-y divide-white/5">
+                {currentLeaderboard.map((entry) => {
+                  const isTop1 = entry.rank === 1;
+                  const isTop2 = entry.rank === 2;
+                  const isTop3 = entry.rank === 3;
+
+                  return (
+                    <motion.div
+                      key={`${entry.name}-${entry.rank}`}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex items-center justify-between px-5 py-3.5 transition-colors ${
+                        (entry as any).isUser
+                          ? 'bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-transparent border-l-4 border-amber-400'
+                          : 'hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 flex items-center justify-center font-black text-sm">
+                          {isTop1 ? (
+                            <span className="text-xl">🥇</span>
+                          ) : isTop2 ? (
+                            <span className="text-xl">🥈</span>
+                          ) : isTop3 ? (
+                            <span className="text-xl">🥉</span>
+                          ) : (
+                            <span className="text-stone-400 font-bold">#{entry.rank}</span>
+                          )}
+                        </div>
+
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-black text-sm ${(entry as any).isUser ? 'text-amber-300' : 'text-white'}`}>
+                              {entry.name}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] text-stone-300 border border-white/10">
+                              {entry.badge}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-stone-500">{entry.date}</div>
+                        </div>
                       </div>
+
+                      <div className="text-right flex items-center gap-4">
+                        <div className="text-base font-black text-amber-300">
+                          {entry.score.toLocaleString()} <span className="text-xs text-stone-400 font-normal">pts</span>
+                        </div>
+
+                        <button
+                          onClick={() => launchGame(selectedLeaderboardGame)}
+                          className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-all active:scale-95"
+                        >
+                          Play
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 3. TOKEN SHOP & REWARDS TAB */}
+        {activeTab === 'trophies' && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Daily Manna Token Reward Banner */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-amber-900/40 via-yellow-900/30 to-amber-950/50 border-2 border-amber-500/40 rounded-3xl p-6 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-3xl shadow-inner">
+                  🎁
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white flex items-center gap-2">
+                    <span>Daily Arcade Manna Reward</span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-stone-950 text-[10px] font-black uppercase">
+                      +100 Tokens
+                    </span>
+                  </h3>
+                  <p className="text-xs text-stone-300 mt-0.5">
+                    Claim your daily free tokens to unlock exclusive retro themes and custom titles!
+                  </p>
+                </div>
+              </div>
+
+              <button
+                disabled={claimedDailyToday}
+                onClick={handleClaimDailyTokens}
+                className={`px-5 py-2.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
+                  claimedDailyToday
+                    ? 'bg-stone-800 text-stone-500 border border-stone-700 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-amber-400 to-yellow-500 text-stone-950 hover:brightness-110 shadow-amber-900/50'
+                }`}
+              >
+                {claimedDailyToday ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Claimed Today</span>
+                  </>
+                ) : (
+                  <>
+                    <Gift className="w-4 h-4" />
+                    <span>Claim +100 Tokens</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Shop Catalog */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-purple-400" />
+                <span>Arcade Customizations Catalog</span>
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {SHOP_ITEMS.map((item) => {
+                  const isUnlocked = stats.unlockedSkins.includes(item.id);
+                  const isActive = stats.activeSkin === item.id;
+                  const canAfford = stats.totalTokens >= item.cost;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-5 rounded-3xl border transition-all flex flex-col justify-between ${
+                        isActive
+                          ? 'bg-purple-950/40 border-purple-400/60 shadow-lg shadow-purple-900/30'
+                          : isUnlocked
+                          ? 'bg-stone-900/80 border-stone-700 hover:border-purple-500/40'
+                          : 'bg-stone-900/60 border-stone-800/80'
+                      }`}
+                    >
                       <div>
-                        <div className="font-bold text-sm text-white">{game.title}</div>
-                        <div className="text-xs text-stone-400">{plays} total attempts played</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl">
+                            {item.emoji}
+                          </div>
+                          {isActive ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase">
+                              Active
+                            </span>
+                          ) : isUnlocked ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-stone-700 text-stone-300 text-[10px] font-bold uppercase">
+                              Owned
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-1 text-xs font-black text-amber-300">
+                              <span>🪙</span>
+                              <span>{item.cost}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <h4 className="font-black text-sm text-white">{item.name}</h4>
+                        <p className="text-xs text-stone-400 mt-1 leading-relaxed">{item.desc}</p>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-end">
+                        <button
+                          onClick={() => handleBuyShopItem(item)}
+                          className={`px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 ${
+                            isActive
+                              ? 'bg-purple-600 text-white'
+                              : isUnlocked
+                              ? 'bg-white/10 hover:bg-white/20 text-white'
+                              : canAfford
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-stone-950 font-black'
+                              : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {isActive ? 'Applied' : isUnlocked ? 'Equip' : canAfford ? 'Unlock' : 'Need Tokens'}
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="text-[10px] text-stone-400 uppercase font-bold">Record Score</div>
-                        <div className="text-base font-black text-amber-300">{high} pts</div>
-                      </div>
-
-                      <button
-                        onClick={() => launchGame(game.id)}
-                        className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-all active:scale-95"
-                      >
-                        Beat Score
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

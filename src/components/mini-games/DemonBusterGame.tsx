@@ -156,6 +156,9 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
 
         // Auto Fire Lasers every 8 frames
         if (s.frame % 8 === 0) {
+          if (!soundMuted && s.frame % 16 === 0) {
+            sounds.playLaserShot();
+          }
           if (s.tripleTimer > 0) {
             s.bullets.push(
               { x: s.player.x - 12, y: s.player.y - 12, vx: -1.5, vy: -10, power: 1, color: '#38bdf8' },
@@ -248,7 +251,10 @@ export const DemonBusterGame: React.FC<DemonBusterGameProps> = ({ onGameOver, on
           }
 
           if (e.hp <= 0) {
-            if (!soundMuted) sounds.playCoinSound();
+            if (!soundMuted) {
+              if (e.type === 'boss') sounds.playCelebration();
+              else sounds.playExplosion();
+            }
             const pts = e.type === 'boss' ? 50 : e.type === 'shadow' ? 5 : 2;
             s.score += pts;
             setScore(s.score);

@@ -35,7 +35,7 @@ export const FlappyDoveGame: React.FC<FlappyDoveGameProps> = ({ onGameOver, onBa
   const triggerJump = useCallback(() => {
     if (stateRef.current.running) {
       stateRef.current.dove.vy = stateRef.current.jumpPower;
-      if (!soundMuted) sounds.playWhoosh();
+      if (!soundMuted) sounds.playFlap();
       // Burst feather particles
       for (let i = 0; i < 4; i++) {
         stateRef.current.particles.push({
@@ -194,7 +194,7 @@ export const FlappyDoveGame: React.FC<FlappyDoveGameProps> = ({ onGameOver, onBa
             p.passed = true;
             s.score += 1;
             setScore(s.score);
-            if (!soundMuted) sounds.playTap();
+            if (!soundMuted) sounds.playCorrect();
           }
 
           // Collision check with pipes

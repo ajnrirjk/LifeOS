@@ -131,7 +131,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
       newX = topBlock.x;
       s.combo++;
       s.score += 2 + s.combo;
-      if (!soundMuted) sounds.playLevelComplete();
+      if (!soundMuted) sounds.playBlockStack(s.combo);
 
       for (let i = 0; i < 15; i++) {
         s.particles.push({
@@ -146,7 +146,7 @@ export const BabelStackerGame: React.FC<BabelStackerGameProps> = ({ onGameOver, 
     } else if (newWidth > 0) {
       s.combo = 0;
       s.score += 1;
-      if (!soundMuted) sounds.playTap();
+      if (!soundMuted) sounds.playBlockStack(0);
 
       if (diff > 0) {
         newX = current.x;
