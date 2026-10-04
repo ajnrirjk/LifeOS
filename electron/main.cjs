@@ -1,52 +1,78 @@
-const { app, BrowserWindow, Menu, Tray, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
 let mainWindow = null;
-let serverProcess = null;
-let tray = null;
+let embeddedServer = null;
+let serverPort = null;
 
-// Determine if we are in dev or production
 const isDev = !app.isPackaged && process.env.NODE_ENV === 'development';
-const PORT = process.env.LIFEOS_DESKTOP_PORT || 38888;
 
-function createServer() {
-  const serverPath = path.join(__dirname, '../dist-server/server.mjs');
-  if (fs.existsSync(serverPath)) {
-    try {
-      const { fork } = require('child_process');
-      serverProcess = fork(serverPath, [], {
-        env: {
-          ...process.env,
-          PORT: String(PORT),
-          NODE_ENV: 'production',
-          LIFEOS_DIST_PATH: path.join(__dirname, '../dist')
-        },
-        silent: false
-      });
-      console.log(`[LifeOS Desktop] Embedded server started on PID ${serverProcess.pid}`);
-    } catch (err) {
-      console.error('[LifeOS Desktop] Failed to fork server process:', err);
-    }
-  }
-}
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.eot': 'application/vnd.ms-fontobject',
+  '.webmanifest': 'application/manifest+json'
+};
 
-function waitForServer(url, timeoutMs = 15000) {
-  const start = Date.now();
-  return new Promise((resolve) => {
-    function check() {
-      http.get(url, () => {
-        resolve(true);
-      }).on('error', () => {
-        if (Date.now() - start > timeoutMs) {
-          resolve(false);
-        } else {
-          setTimeout(check, 300);
+function startEmbeddedServer(distDir) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      try {
+        const parsedUrl = new URL(req.url, 'http://127.0.0.1');
+        let pathname = decodeURIComponent(parsedUrl.pathname);
+        if (pathname === '/' || pathname === '') {
+          pathname = '/index.html';
         }
-      });
-    }
-    check();
+
+        let filePath = path.join(distDir, pathname);
+
+        // Fallback to index.html for SPA client-side routes
+        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+          filePath = path.join(distDir, 'index.html');
+        }
+
+        const ext = path.extname(filePath).toLowerCase();
+        const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+        const content = fs.readFileSync(filePath);
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000'
+        });
+        res.end(content);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Server Error: ' + err.message);
+      }
+    });
+
+    server.on('error', (err) => {
+      reject(err);
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      console.log(`[LifeOS Desktop] Embedded server listening on http://127.0.0.1:${port}`);
+      resolve({ server, port });
+    });
   });
 }
 
@@ -72,15 +98,26 @@ async function createWindow() {
     show: false
   });
 
-  // Smooth appearance when ready
+  // Log console errors from renderer to terminal for diagnostics
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      console.error(`[LifeOS Renderer Error] ${message} (${sourceId}:${line})`);
+    }
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[LifeOS Desktop] Failed to load URL: ${validatedURL} (code: ${errorCode}, error: ${errorDescription})`);
+  });
+
+  // Reveal window smoothly when first frame is ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
 
-  // Handle external link clicks safely in native browser
+  // Handle external links safely in system default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
-      if (!url.includes(`localhost:${PORT}`) && !url.includes(`127.0.0.1:${PORT}`)) {
+      if (!url.includes(`127.0.0.1:${serverPort}`) && !url.includes(`localhost:${serverPort}`)) {
         shell.openExternal(url);
         return { action: 'deny' };
       }
@@ -88,30 +125,27 @@ async function createWindow() {
     return { action: 'allow' };
   });
 
-  // Target URL
-  const targetUrl = isDev ? 'http://localhost:3000' : `http://127.0.0.1:${PORT}`;
-
-  if (!isDev) {
-    const serverReady = await waitForServer(targetUrl, 10000);
-    if (serverReady) {
-      mainWindow.loadURL(targetUrl);
-    } else {
-      const indexPath = path.join(__dirname, '../dist/index.html');
-      if (fs.existsSync(indexPath)) {
-        mainWindow.loadFile(indexPath);
-      } else {
-        mainWindow.loadURL(targetUrl);
-      }
+  // Determine target URL
+  if (isDev) {
+    try {
+      await mainWindow.loadURL('http://localhost:3000');
+    } catch {
+      await mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
     }
   } else {
-    mainWindow.loadURL(targetUrl);
+    await mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
   }
 
-  // F11 to toggle fullscreen
+  // F11 to toggle fullscreen, F12 to toggle DevTools
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F11' && input.type === 'keyDown') {
-      mainWindow.setFullScreen(!mainWindow.isFullScreen());
-      event.preventDefault();
+    if (input.type === 'keyDown') {
+      if (input.key === 'F11') {
+        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        event.preventDefault();
+      } else if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+        mainWindow.webContents.toggleDevTools();
+        event.preventDefault();
+      }
     }
   });
 
@@ -133,10 +167,16 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(async () => {
-    if (!isDev) {
-      createServer();
+    try {
+      const distDir = path.join(__dirname, '../dist');
+      const { server, port } = await startEmbeddedServer(distDir);
+      embeddedServer = server;
+      serverPort = port;
+
+      await createWindow();
+    } catch (err) {
+      console.error('[LifeOS Desktop] Initialization failed:', err);
     }
-    await createWindow();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -179,17 +219,17 @@ ipcMain.on('open-external', (_event, url) => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    if (serverProcess) {
-      serverProcess.kill();
-      serverProcess = null;
+    if (embeddedServer) {
+      embeddedServer.close();
+      embeddedServer = null;
     }
     app.quit();
   }
 });
 
 app.on('before-quit', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-    serverProcess = null;
+  if (embeddedServer) {
+    embeddedServer.close();
+    embeddedServer = null;
   }
 });
