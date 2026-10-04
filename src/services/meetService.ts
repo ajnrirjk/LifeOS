@@ -1,6 +1,9 @@
 // ==========================================
 // REAL-TIME WEBRTC GROUP CALL SERVICE (Google Meet Architecture)
+// Powered by Serverless MQTT WebSockets + BroadcastChannel Signaling
 // ==========================================
+
+import mqtt, { MqttClient } from 'mqtt';
 
 export interface MeetParticipant {
   id: string;
@@ -37,6 +40,45 @@ export interface MeetRoomInfo {
 
 export type MeetEventListener = (event: { type: string; data: any }) => void;
 
+export const DEFAULT_PUBLIC_MEET_ROOMS: MeetRoomInfo[] = [
+  {
+    id: 'fellowship-sanctuary',
+    title: '🕊️ Fellowship Global Sanctuary',
+    hostId: 'host_anthony',
+    prayerFocus: 'Worldwide Unity & Revival in Christ',
+    createdAt: 1790900000000
+  },
+  {
+    id: 'morning-prayer-altar',
+    title: '🙏 Morning Prayer & Intercession Altar',
+    hostId: 'prayer_team',
+    prayerFocus: 'Praying for Families, Nations & Healing',
+    createdAt: 1790900000000
+  },
+  {
+    id: 'scripture-study-lounge',
+    title: '📖 Scripture Academy Study Room',
+    hostId: 'bible_academy',
+    prayerFocus: 'Greek & Hebrew Exegesis Discussion',
+    createdAt: 1790900000000
+  },
+  {
+    id: 'worship-circle',
+    title: '🎵 Praise & Worship Acoustic Lounge',
+    hostId: 'worship_team',
+    prayerFocus: 'Exalting Jesus in Song & Testimony',
+    createdAt: 1790900000000
+  }
+];
+
+const MQTT_BROKER_PRIMARY = 'wss://broker.emqx.io:8084/mqtt';
+const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
+const BROADCAST_BUS_NAME = 'lifeos_meet_sync_bus_v2';
+
+interface ParticipantRecord extends MeetParticipant {
+  lastSeen: number;
+}
+
 class MeetService {
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
@@ -44,8 +86,6 @@ class MeetService {
   private remoteStreams: Map<string, MediaStream> = new Map();
   private pendingIceCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
   private processedSignalIds: Set<string> = new Set();
-  private eventSource: EventSource | null = null;
-  private pollIntervalId: any = null;
   private listeners: Set<MeetEventListener> = new Set();
   private currentRoomId: string | null = null;
   private currentUser: { id: string; name: string; photoURL?: string; isGoogleUser?: boolean } | null = null;
@@ -58,14 +98,58 @@ class MeetService {
   private audioAnimationId: number | null = null;
   private remoteAnalysers: Map<string, AnalyserNode> = new Map();
 
+  // Participant & Room Directory
+  private participantsMap: Map<string, ParticipantRecord> = new Map();
+  private chatHistory: Map<string, MeetChatMessage[]> = new Map();
+  private knownRooms: Map<string, MeetRoomInfo> = new Map();
+
+  // Real-time Transport
+  private mqttClient: MqttClient | null = null;
+  private broadcastChannel: BroadcastChannel | null = null;
+  private isMqttConnected: boolean = false;
+  private heartbeatIntervalId: any = null;
+  private pruneIntervalId: any = null;
+
   private iceServers = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' },
     ]
   };
+
+  constructor() {
+    this.initDefaultRooms();
+    this.initBroadcastChannel();
+    this.initMqttTransport();
+  }
+
+  private initDefaultRooms() {
+    DEFAULT_PUBLIC_MEET_ROOMS.forEach(room => {
+      this.knownRooms.set(room.id, room);
+    });
+    try {
+      const saved = localStorage.getItem('lifeos_meet_custom_rooms');
+      if (saved) {
+        const parsed: MeetRoomInfo[] = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(r => this.knownRooms.set(r.id, r));
+        }
+      }
+    } catch {}
+  }
+
+  private saveCustomRoom(room: MeetRoomInfo) {
+    this.knownRooms.set(room.id, room);
+    try {
+      const customRooms = Array.from(this.knownRooms.values()).filter(
+        r => !DEFAULT_PUBLIC_MEET_ROOMS.some(d => d.id === r.id)
+      );
+      localStorage.setItem('lifeos_meet_custom_rooms', JSON.stringify(customRooms.slice(-20)));
+    } catch {}
+  }
 
   public subscribe(listener: MeetEventListener): () => void {
     this.listeners.add(listener);
@@ -78,50 +162,175 @@ class MeetService {
     });
   }
 
-  // List public / available rooms
-  public async getPublicRooms(): Promise<any[]> {
-    try {
-      const res = await fetch('/api/meet/rooms');
-      if (res.ok) {
-        return await res.json();
+  // ==========================================
+  // REAL-TIME TRANSPORT: BroadcastChannel + MQTT
+  // ==========================================
+
+  private initBroadcastChannel() {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        this.broadcastChannel = new BroadcastChannel(BROADCAST_BUS_NAME);
+        this.broadcastChannel.onmessage = (e) => {
+          if (!e.data || !this.currentRoomId) return;
+          const { topic, roomId, data } = e.data;
+          if (roomId !== this.currentRoomId) return;
+
+          if (topic === 'presence') {
+            this.handlePresencePayload(data);
+          } else if (topic === 'state') {
+            this.handleStatePayload(data);
+          } else if (topic === 'chat') {
+            this.handleChatPayload(data);
+          } else if (topic === 'signal') {
+            this.handleIncomingSignal(data);
+          }
+        };
+      } catch (err) {
+        console.warn('BroadcastChannel init error:', err);
       }
-    } catch (err) {
-      console.warn('Error fetching meet rooms:', err);
     }
-    return [];
   }
 
-  // Create a new meeting room
-  public async createRoom(params: { title?: string; customCode?: string; isPublic?: boolean; prayerFocus?: string; hostId?: string }): Promise<MeetRoomInfo> {
-    try {
-      const res = await fetch('/api/meet/rooms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params)
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (err) {
-      console.warn('Error creating meet room on server, generating local room:', err);
-    }
+  private initMqttTransport(useFallback: boolean = false) {
+    if (typeof window === 'undefined') return;
 
+    try {
+      const brokerUrl = useFallback ? MQTT_BROKER_FALLBACK : MQTT_BROKER_PRIMARY;
+      const clientId = `lifeos_meet_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+
+      if (this.mqttClient) {
+        try { this.mqttClient.end(true); } catch {}
+        this.mqttClient = null;
+      }
+
+      const client = mqtt.connect(brokerUrl, {
+        clientId,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 2500,
+        keepalive: 30,
+      });
+
+      this.mqttClient = client;
+
+      client.on('connect', () => {
+        this.isMqttConnected = true;
+        // If already in a room, resubscribe and announce presence
+        if (this.currentRoomId && this.currentUser) {
+          this.subscribeRoomMqtt(this.currentRoomId, this.currentUser.id);
+          this.publishPresence('peer_join');
+        }
+      });
+
+      client.on('message', (topic, payload) => {
+        try {
+          if (!this.currentRoomId) return;
+          const parsed = JSON.parse(payload.toString());
+          if (!parsed) return;
+
+          const prefix = `lifeos/meet/v2/rooms/${this.currentRoomId}/`;
+          if (!topic.startsWith(prefix)) return;
+
+          const subTopic = topic.substring(prefix.length);
+
+          if (subTopic === 'presence') {
+            this.handlePresencePayload(parsed);
+          } else if (subTopic === 'state') {
+            this.handleStatePayload(parsed);
+          } else if (subTopic === 'chat') {
+            this.handleChatPayload(parsed);
+          } else if (subTopic.startsWith('signals/')) {
+            this.handleIncomingSignal(parsed);
+          }
+        } catch (err) {
+          console.warn('Error parsing incoming MQTT payload:', err);
+        }
+      });
+
+      client.on('error', (err) => {
+        console.warn('Meet MQTT error:', err);
+        if (!useFallback && !this.isMqttConnected) {
+          // Attempt fallback broker
+          this.initMqttTransport(true);
+        }
+      });
+
+      client.on('close', () => {
+        this.isMqttConnected = false;
+      });
+    } catch (err) {
+      console.warn('MQTT transport initialization failed:', err);
+      if (!useFallback) {
+        this.initMqttTransport(true);
+      }
+    }
+  }
+
+  private subscribeRoomMqtt(roomId: string, userId: string) {
+    if (!this.mqttClient || !this.mqttClient.connected) return;
+    const prefix = `lifeos/meet/v2/rooms/${roomId}`;
+    const topics = [
+      `${prefix}/presence`,
+      `${prefix}/state`,
+      `${prefix}/chat`,
+      `${prefix}/signals/${userId}`
+    ];
+    this.mqttClient.subscribe(topics, (err) => {
+      if (err) {
+        console.warn('Error subscribing to room topics:', err);
+      }
+    });
+  }
+
+  private unsubscribeRoomMqtt(roomId: string, userId: string) {
+    if (!this.mqttClient || !this.mqttClient.connected) return;
+    const prefix = `lifeos/meet/v2/rooms/${roomId}`;
+    const topics = [
+      `${prefix}/presence`,
+      `${prefix}/state`,
+      `${prefix}/chat`,
+      `${prefix}/signals/${userId}`
+    ];
+    this.mqttClient.unsubscribe(topics);
+  }
+
+  // ==========================================
+  // ROOM DIRECTORY & METADATA
+  // ==========================================
+
+  public async getPublicRooms(): Promise<MeetRoomInfo[]> {
+    return Array.from(this.knownRooms.values());
+  }
+
+  public async createRoom(params: {
+    title?: string;
+    customCode?: string;
+    isPublic?: boolean;
+    prayerFocus?: string;
+    hostId?: string;
+  }): Promise<MeetRoomInfo> {
     const defaultCode = `meet-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
     const cleanCode = (params.customCode || defaultCode)
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, '-')
       .replace(/^-+|-+$/g, '') || defaultCode;
 
-    return {
+    const roomInfo: MeetRoomInfo = {
       id: cleanCode,
       title: params.title || `Fellowship Call ${cleanCode.slice(-4).toUpperCase()}`,
       hostId: params.hostId || 'host',
       createdAt: Date.now(),
       prayerFocus: params.prayerFocus || ''
     };
+
+    this.saveCustomRoom(roomInfo);
+    return roomInfo;
   }
 
-  // Initialize local media (Camera + Mic preview)
+  // ==========================================
+  // LOCAL MEDIA CAPTURE & AUDIO ANALYSIS
+  // ==========================================
+
   public async startLocalPreview(video: boolean = true, audio: boolean = true): Promise<MediaStream | null> {
     try {
       if (this.localStream) {
@@ -143,7 +352,7 @@ class MeetService {
         return stream;
       }
     } catch (err: any) {
-      console.warn('Could not access real camera/mic (using fallback synthetic stream):', err.message);
+      console.warn('Could not access hardware camera/mic (using synthetic stream fallback):', err?.message);
       const synthetic = this.createSyntheticStream();
       this.localStream = synthetic;
       this.emit('local_stream', { stream: synthetic });
@@ -167,7 +376,6 @@ class MeetService {
     }
     const stream = canvas.captureStream(15);
 
-    // Provide a silent Web Audio track so WebRTC media description includes audio
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
@@ -211,9 +419,7 @@ class MeetService {
           if (this.audioAnalyser && !this.isAudioMuted) {
             this.audioAnalyser.getByteFrequencyData(dataArray);
             let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-              sum += dataArray[i];
-            }
+            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
             const avg = sum / dataArray.length;
             const level = Math.min(100, Math.round((avg / 255) * 100));
             const isSpeaking = level > 12;
@@ -231,7 +437,6 @@ class MeetService {
     } catch {}
   }
 
-  // Setup Remote Peer Audio Analyser to show green ring when remote peer speaks
   private setupRemoteAudioAnalysis(peerId: string, stream: MediaStream) {
     try {
       const audioTracks = stream.getAudioTracks();
@@ -242,7 +447,6 @@ class MeetService {
         if (AudioCtx) this.audioContext = new AudioCtx();
       }
       if (!this.audioContext) return;
-
       if (this.remoteAnalysers.has(peerId)) return;
 
       const source = this.audioContext.createMediaStreamSource(stream);
@@ -278,8 +482,16 @@ class MeetService {
     }
   }
 
-  // Join a meeting room
-  public async joinRoom(roomId: string, user: { id: string; name: string; photoURL?: string; isGoogleUser?: boolean }): Promise<{
+  // ==========================================
+  // ROOM JOIN / LEAVE
+  // ==========================================
+
+  public async joinRoom(roomId: string, user: {
+    id: string;
+    name: string;
+    photoURL?: string;
+    isGoogleUser?: boolean;
+  }): Promise<{
     room: MeetRoomInfo;
     participant: MeetParticipant;
     allParticipants: MeetParticipant[];
@@ -288,188 +500,448 @@ class MeetService {
     this.currentRoomId = roomId;
     this.currentUser = user;
 
-    // Ensure local stream exists
+    // Ensure local stream is ready
     if (!this.localStream) {
       await this.startLocalPreview(true, true);
     }
 
-    let data: any = null;
-    try {
-      const res = await fetch('/api/meet/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId,
-          user,
-          isAudioMuted: this.isAudioMuted,
-          isVideoMuted: this.isVideoMuted
-        })
-      });
-
-      if (res.ok) {
-        data = await res.json();
-      }
-    } catch (err) {
-      console.warn('Backend join route unreachable, using local fallback:', err);
-    }
-
-    if (!data) {
-      const hostParticipant: MeetParticipant = {
-        id: user.id,
-        name: user.name || 'Believer in Christ',
-        photoURL: user.photoURL,
-        isGoogleUser: !!user.isGoogleUser,
-        isAudioMuted: this.isAudioMuted,
-        isVideoMuted: this.isVideoMuted,
-        isScreenSharing: false,
-        isHandRaised: false,
-        role: 'host',
-        joinedAt: Date.now()
-      };
-      data = {
-        room: {
-          id: roomId,
-          title: `Fellowship Room ${roomId}`,
-          hostId: user.id,
-          createdAt: Date.now()
-        },
-        participant: hostParticipant,
-        allParticipants: [hostParticipant],
-        messages: []
-      };
-    }
-
-    // Start SSE Signaling stream
-    try {
-      this.initSignalStream(roomId, user.id);
-    } catch {}
-
-    // Create PeerConnections to all existing participants using deterministic initiator
-    if (Array.isArray(data.allParticipants)) {
-      data.allParticipants.forEach((p: MeetParticipant) => {
-        if (p.id !== user.id) {
-          const isInit = user.id.localeCompare(p.id) < 0;
-          this.createPeerConnection(p.id, isInit);
-        }
-      });
-    }
-
-    return data;
-  }
-
-  // Initialize SSE Signal Stream & HTTP Polling Fallback
-  private initSignalStream(roomId: string, userId: string) {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-    if (this.pollIntervalId) {
-      clearInterval(this.pollIntervalId);
-      this.pollIntervalId = null;
-    }
-
-    const sseUrl = `/api/meet/stream?roomId=${encodeURIComponent(roomId)}&userId=${encodeURIComponent(userId)}`;
-    this.eventSource = new EventSource(sseUrl);
-
-    this.eventSource.addEventListener('connected', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        this.emit('connected', payload);
-      } catch {}
-    });
-
-    this.eventSource.addEventListener('peer_joined', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        const { peer } = payload;
-        if (peer && peer.id !== this.currentUser?.id) {
-          const isInit = (this.currentUser?.id || '').localeCompare(peer.id) < 0;
-          this.createPeerConnection(peer.id, isInit);
-          this.emit('peer_joined', payload);
-        }
-      } catch {}
-    });
-
-    this.eventSource.addEventListener('peer_left', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        const { peerId } = payload;
-        if (peerId) {
-          const pc = this.peerConnections.get(peerId);
-          if (pc) {
-            pc.close();
-            this.peerConnections.delete(peerId);
-          }
-          this.remoteStreams.delete(peerId);
-          this.pendingIceCandidates.delete(peerId);
-          this.remoteAnalysers.delete(peerId);
-          this.emit('peer_left', payload);
-        }
-      } catch {}
-    });
-
-    this.eventSource.addEventListener('peer_state_changed', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        this.emit('peer_state_changed', payload);
-      } catch {}
-    });
-
-    this.eventSource.addEventListener('chat_message', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        this.emit('chat_message', payload);
-      } catch {}
-    });
-
-    this.eventSource.addEventListener('signal', async (e) => {
-      try {
-        const sig = JSON.parse(e.data);
-        await this.handleIncomingSignal(sig);
-      } catch (err) {
-        console.warn('Error handling incoming WebRTC signal:', err);
-      }
-    });
-
-    this.eventSource.onerror = () => {
-      console.warn('Meet SSE stream disconnected, relying on HTTP polling signals & room sync...');
+    // Initialize local participant
+    const localParticipant: ParticipantRecord = {
+      id: user.id,
+      name: user.name || 'Believer in Christ',
+      photoURL: user.photoURL,
+      isGoogleUser: !!user.isGoogleUser,
+      isAudioMuted: this.isAudioMuted,
+      isVideoMuted: this.isVideoMuted,
+      isScreenSharing: this.isScreenSharing,
+      isHandRaised: this.isHandRaised,
+      role: 'participant',
+      joinedAt: Date.now(),
+      lastSeen: Date.now()
     };
 
-    // Robust Polling Interval (Signals + Room Sync every 1.2 seconds)
-    this.pollIntervalId = setInterval(async () => {
-      if (!this.currentRoomId || !this.currentUser) {
-        if (this.pollIntervalId) clearInterval(this.pollIntervalId);
-        return;
+    // Check if room metadata is known
+    let room = this.knownRooms.get(roomId);
+    if (!room) {
+      room = {
+        id: roomId,
+        title: `Fellowship Room ${roomId.slice(-4).toUpperCase()}`,
+        hostId: user.id,
+        createdAt: Date.now()
+      };
+      this.knownRooms.set(roomId, room);
+    }
+
+    // Set self in participant map
+    this.participantsMap.clear();
+    this.participantsMap.set(user.id, localParticipant);
+
+    // Subscribe to MQTT topics for this room
+    this.subscribeRoomMqtt(roomId, user.id);
+
+    // Announce presence immediately via MQTT and BroadcastChannel
+    this.publishPresence('peer_join');
+
+    // Start 3.5s Heartbeat to continuously discover and retain peers
+    if (this.heartbeatIntervalId) clearInterval(this.heartbeatIntervalId);
+    this.heartbeatIntervalId = setInterval(() => {
+      if (this.currentRoomId && this.currentUser) {
+        this.publishPresence('heartbeat');
       }
-      try {
-        const sigRes = await fetch(`/api/meet/signals?roomId=${encodeURIComponent(this.currentRoomId)}&userId=${encodeURIComponent(this.currentUser.id)}`);
-        if (sigRes.ok) {
-          const { signals, participants } = await sigRes.json();
-          if (Array.isArray(participants) && participants.length > 0) {
-            this.emit('participants_updated', { participants });
-            participants.forEach((p: MeetParticipant) => {
-              if (p.id !== this.currentUser?.id && !this.peerConnections.has(p.id)) {
-                const isInit = (this.currentUser?.id || '').localeCompare(p.id) < 0;
-                this.createPeerConnection(p.id, isInit);
-              }
-            });
-          }
-          if (Array.isArray(signals)) {
-            for (const sig of signals) {
-              await this.handleIncomingSignal(sig);
-            }
-          }
-        }
-      } catch {}
-    }, 1200);
+    }, 3500);
+
+    // Start 4s Stale Participant Pruning
+    if (this.pruneIntervalId) clearInterval(this.pruneIntervalId);
+    this.pruneIntervalId = setInterval(() => {
+      this.pruneStaleParticipants();
+    }, 4000);
+
+    const initialMessages = this.chatHistory.get(roomId) || [];
+
+    return {
+      room,
+      participant: localParticipant,
+      allParticipants: this.getParticipantsList(),
+      messages: initialMessages
+    };
   }
 
-  // Handle incoming WebRTC signal with deduplication and ICE candidate queue
-  private async handleIncomingSignal(sig: { id?: string; senderId: string; signalData: any; type: string }) {
-    const { id, senderId, signalData, type } = sig;
-    if (senderId === this.currentUser?.id) return;
+  public async leaveRoom() {
+    if (this.currentRoomId && this.currentUser) {
+      this.publishPresence('peer_leave');
+      this.unsubscribeRoomMqtt(this.currentRoomId, this.currentUser.id);
+    }
 
-    // Deduplicate signals
+    if (this.heartbeatIntervalId) {
+      clearInterval(this.heartbeatIntervalId);
+      this.heartbeatIntervalId = null;
+    }
+    if (this.pruneIntervalId) {
+      clearInterval(this.pruneIntervalId);
+      this.pruneIntervalId = null;
+    }
+
+    this.peerConnections.forEach(pc => {
+      try { pc.close(); } catch {}
+    });
+    this.peerConnections.clear();
+    this.remoteStreams.clear();
+    this.pendingIceCandidates.clear();
+    this.remoteAnalysers.clear();
+    this.participantsMap.clear();
+
+    this.stopLocalStream();
+    this.stopScreenSharing();
+
+    if (this.audioAnimationId) {
+      cancelAnimationFrame(this.audioAnimationId);
+      this.audioAnimationId = null;
+    }
+
+    this.currentRoomId = null;
+    this.isHandRaised = false;
+    this.isScreenSharing = false;
+
+    this.emit('call_ended', {});
+  }
+
+  // ==========================================
+  // REAL-TIME SIGNALING & PRESENCE PROTOCOL
+  // ==========================================
+
+  private getParticipantsList(): MeetParticipant[] {
+    return Array.from(this.participantsMap.values()).map(p => ({
+      id: p.id,
+      name: p.name,
+      photoURL: p.photoURL,
+      isGoogleUser: p.isGoogleUser,
+      isAudioMuted: p.isAudioMuted,
+      isVideoMuted: p.isVideoMuted,
+      isScreenSharing: p.isScreenSharing,
+      isHandRaised: p.isHandRaised,
+      role: p.role,
+      joinedAt: p.joinedAt,
+      audioLevel: p.audioLevel,
+      isSpeaking: p.isSpeaking
+    }));
+  }
+
+  private publishPresence(type: 'peer_join' | 'heartbeat' | 'peer_leave', targetPeerId?: string) {
+    if (!this.currentRoomId || !this.currentUser) return;
+
+    const localP = this.participantsMap.get(this.currentUser.id);
+    const payload = {
+      type,
+      roomId: this.currentRoomId,
+      peerId: this.currentUser.id,
+      targetPeerId,
+      participant: localP ? {
+        id: localP.id,
+        name: localP.name,
+        photoURL: localP.photoURL,
+        isGoogleUser: localP.isGoogleUser,
+        isAudioMuted: localP.isAudioMuted,
+        isVideoMuted: localP.isVideoMuted,
+        isScreenSharing: localP.isScreenSharing,
+        isHandRaised: localP.isHandRaised,
+        role: localP.role,
+        joinedAt: localP.joinedAt
+      } : undefined,
+      timestamp: Date.now()
+    };
+
+    // 1. Send via MQTT
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        `lifeos/meet/v2/rooms/${this.currentRoomId}/presence`,
+        JSON.stringify(payload)
+      );
+    }
+
+    // 2. Send via BroadcastChannel (local cross-tab sync)
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({
+          topic: 'presence',
+          roomId: this.currentRoomId,
+          data: payload
+        });
+      } catch {}
+    }
+  }
+
+  private handlePresencePayload(payload: {
+    type: 'peer_join' | 'heartbeat' | 'peer_leave';
+    peerId: string;
+    targetPeerId?: string;
+    participant?: MeetParticipant;
+    timestamp: number;
+  }) {
+    if (!payload || !this.currentUser || payload.peerId === this.currentUser.id) return;
+    if (payload.targetPeerId && payload.targetPeerId !== this.currentUser.id) return;
+
+    const { type, peerId, participant } = payload;
+
+    if (type === 'peer_leave') {
+      this.handlePeerLeft(peerId);
+      return;
+    }
+
+    if (participant) {
+      const isNewPeer = !this.participantsMap.has(peerId);
+      const existing = this.participantsMap.get(peerId);
+
+      this.participantsMap.set(peerId, {
+        ...participant,
+        lastSeen: Date.now()
+      });
+
+      if (isNewPeer) {
+        // Immediately reply with targeted heartbeat so the new peer registers us without delay
+        this.publishPresence('heartbeat', peerId);
+
+        this.emit('peer_joined', {
+          peer: participant,
+          participants: this.getParticipantsList()
+        });
+      } else if (existing) {
+        // Check if any state changed
+        if (
+          existing.isAudioMuted !== participant.isAudioMuted ||
+          existing.isVideoMuted !== participant.isVideoMuted ||
+          existing.isScreenSharing !== participant.isScreenSharing ||
+          existing.isHandRaised !== participant.isHandRaised
+        ) {
+          this.emit('peer_state_changed', {
+            peerId,
+            updates: participant,
+            participants: this.getParticipantsList()
+          });
+        }
+      }
+
+      this.emit('participants_updated', {
+        participants: this.getParticipantsList()
+      });
+
+      // Deterministically establish WebRTC connection if not already created
+      if (!this.peerConnections.has(peerId)) {
+        const isInitiator = this.currentUser.id.localeCompare(peerId) < 0;
+        this.createPeerConnection(peerId, isInitiator);
+      }
+    }
+  }
+
+  private handlePeerLeft(peerId: string) {
+    if (!this.participantsMap.has(peerId)) return;
+
+    this.participantsMap.delete(peerId);
+
+    const pc = this.peerConnections.get(peerId);
+    if (pc) {
+      try { pc.close(); } catch {}
+      this.peerConnections.delete(peerId);
+    }
+    this.remoteStreams.delete(peerId);
+    this.pendingIceCandidates.delete(peerId);
+    this.remoteAnalysers.delete(peerId);
+
+    this.emit('peer_left', {
+      peerId,
+      participants: this.getParticipantsList()
+    });
+    this.emit('participants_updated', {
+      participants: this.getParticipantsList()
+    });
+  }
+
+  private pruneStaleParticipants() {
+    if (!this.currentRoomId || !this.currentUser) return;
+    const now = Date.now();
+    const staleIds: string[] = [];
+
+    this.participantsMap.forEach((record, id) => {
+      if (id !== this.currentUser?.id && now - record.lastSeen > 12000) {
+        staleIds.push(id);
+      }
+    });
+
+    staleIds.forEach(id => this.handlePeerLeft(id));
+  }
+
+  private handleStatePayload(payload: {
+    peerId: string;
+    updates: Partial<MeetParticipant>;
+  }) {
+    if (!payload || !this.currentUser || payload.peerId === this.currentUser.id) return;
+    const { peerId, updates } = payload;
+    const existing = this.participantsMap.get(peerId);
+    if (existing) {
+      this.participantsMap.set(peerId, {
+        ...existing,
+        ...updates,
+        lastSeen: Date.now()
+      });
+      this.emit('peer_state_changed', {
+        peerId,
+        updates,
+        participants: this.getParticipantsList()
+      });
+      this.emit('participants_updated', {
+        participants: this.getParticipantsList()
+      });
+    }
+  }
+
+  private handleChatPayload(payload: {
+    message: MeetChatMessage;
+  }) {
+    if (!payload || !payload.message || !this.currentRoomId) return;
+    const { message } = payload;
+    if (message.senderId === this.currentUser?.id) return;
+
+    const list = this.chatHistory.get(this.currentRoomId) || [];
+    if (!list.some(m => m.id === message.id)) {
+      list.push(message);
+      this.chatHistory.set(this.currentRoomId, list);
+      this.emit('chat_message', message);
+    }
+  }
+
+  // ==========================================
+  // WEBRTC PEER CONNECTION & SIGNALING
+  // ==========================================
+
+  private createPeerConnection(remotePeerId: string, isInitiator: boolean): RTCPeerConnection {
+    if (this.peerConnections.has(remotePeerId)) {
+      return this.peerConnections.get(remotePeerId)!;
+    }
+
+    const pc = new RTCPeerConnection(this.iceServers);
+    this.peerConnections.set(remotePeerId, pc);
+
+    // Add local media tracks
+    const currentStream = this.isScreenSharing && this.screenStream ? this.screenStream : this.localStream;
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => {
+        try {
+          pc.addTrack(track, currentStream);
+        } catch (e) {
+          console.warn('Error adding track to peer connection:', e);
+        }
+      });
+    }
+
+    // Handle incoming remote tracks
+    pc.ontrack = (event) => {
+      let stream = this.remoteStreams.get(remotePeerId);
+      if (!stream) {
+        stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+        this.remoteStreams.set(remotePeerId, stream);
+      } else {
+        if (!stream.getTracks().some(t => t.id === event.track.id)) {
+          stream.addTrack(event.track);
+          stream = new MediaStream(stream.getTracks());
+          this.remoteStreams.set(remotePeerId, stream);
+        }
+      }
+
+      this.setupRemoteAudioAnalysis(remotePeerId, stream);
+      this.emit('remote_stream', { peerId: remotePeerId, stream });
+    };
+
+    // Gather and send ICE candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.sendSignal(remotePeerId, event.candidate.toJSON(), 'ice');
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        try { pc.restartIce(); } catch {}
+      }
+    };
+
+    // If deterministic initiator, produce WebRTC Offer
+    if (isInitiator) {
+      pc.onnegotiationneeded = async () => {
+        try {
+          if (pc.signalingState === 'stable') {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this.sendSignal(remotePeerId, offer, 'offer');
+          }
+        } catch (err) {
+          console.warn('Error creating WebRTC offer on negotiation needed:', err);
+        }
+      };
+
+      // Fallback timer to guarantee offer generation even if onnegotiationneeded was delayed
+      setTimeout(async () => {
+        try {
+          if (pc.signalingState === 'stable' && !pc.localDescription) {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this.sendSignal(remotePeerId, offer, 'offer');
+          }
+        } catch (err) {
+          console.warn('Error creating WebRTC offer timeout fallback:', err);
+        }
+      }, 350);
+    }
+
+    return pc;
+  }
+
+  private sendSignal(targetId: string, signalData: any, type: 'offer' | 'answer' | 'ice') {
+    if (!this.currentRoomId || !this.currentUser) return;
+    const signalId = `sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    this.processedSignalIds.add(signalId);
+
+    const payload = {
+      id: signalId,
+      roomId: this.currentRoomId,
+      senderId: this.currentUser.id,
+      targetId,
+      type,
+      signalData,
+      timestamp: Date.now()
+    };
+
+    // 1. MQTT directed to target peer's signal topic
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        `lifeos/meet/v2/rooms/${this.currentRoomId}/signals/${targetId}`,
+        JSON.stringify(payload)
+      );
+    }
+
+    // 2. BroadcastChannel local delivery
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({
+          topic: 'signal',
+          roomId: this.currentRoomId,
+          data: payload
+        });
+      } catch {}
+    }
+  }
+
+  private async handleIncomingSignal(sig: {
+    id?: string;
+    senderId: string;
+    targetId?: string;
+    type: 'offer' | 'answer' | 'ice';
+    signalData: any;
+  }) {
+    if (!sig || !this.currentUser || sig.senderId === this.currentUser.id) return;
+    if (sig.targetId && sig.targetId !== this.currentUser.id) return;
+
+    const { id, senderId, type, signalData } = sig;
+
+    // Deduplicate
     if (id) {
       if (this.processedSignalIds.has(id)) return;
       this.processedSignalIds.add(id);
@@ -481,13 +953,17 @@ class MeetService {
 
     let pc = this.peerConnections.get(senderId);
     if (!pc) {
-      const isInit = (this.currentUser?.id || '').localeCompare(senderId) < 0;
+      const isInit = this.currentUser.id.localeCompare(senderId) < 0;
       pc = this.createPeerConnection(senderId, isInit);
-      this.emit('peer_joined', { peer: { id: senderId }, participants: [] });
     }
 
     try {
       if (type === 'offer') {
+        if (pc.signalingState !== 'stable') {
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' } as any).catch(() => {})
+          ]);
+        }
         await pc.setRemoteDescription(new RTCSessionDescription(signalData));
         await this.flushPendingIceCandidates(senderId, pc);
 
@@ -504,7 +980,6 @@ class MeetService {
           if (pc.remoteDescription && pc.remoteDescription.type) {
             await pc.addIceCandidate(new RTCIceCandidate(signalData));
           } else {
-            // Buffer candidate until remote description is applied
             if (!this.pendingIceCandidates.has(senderId)) {
               this.pendingIceCandidates.set(senderId, []);
             }
@@ -513,11 +988,10 @@ class MeetService {
         }
       }
     } catch (err) {
-      console.warn('Error applying incoming WebRTC signal:', err);
+      console.warn('Error handling incoming WebRTC signal:', err);
     }
   }
 
-  // Flush queued ICE candidates after remote description is applied
   private async flushPendingIceCandidates(peerId: string, pc: RTCPeerConnection) {
     const candidates = this.pendingIceCandidates.get(peerId);
     if (candidates && candidates.length > 0) {
@@ -532,115 +1006,10 @@ class MeetService {
     }
   }
 
-  // Create RTCPeerConnection for a remote peer
-  private createPeerConnection(remotePeerId: string, isInitiator: boolean): RTCPeerConnection {
-    if (this.peerConnections.has(remotePeerId)) {
-      return this.peerConnections.get(remotePeerId)!;
-    }
+  // ==========================================
+  // IN-CALL CONTROLS & FEATURES
+  // ==========================================
 
-    const pc = new RTCPeerConnection(this.iceServers);
-    this.peerConnections.set(remotePeerId, pc);
-
-    // Add local tracks to peer connection
-    const currentStream = this.isScreenSharing && this.screenStream ? this.screenStream : this.localStream;
-    if (currentStream) {
-      currentStream.getTracks().forEach(track => {
-        try {
-          pc.addTrack(track, currentStream);
-        } catch (e) {
-          console.warn('Error adding track to peer connection:', e);
-        }
-      });
-    }
-
-    // Handle remote track arrival
-    pc.ontrack = (event) => {
-      let stream = this.remoteStreams.get(remotePeerId);
-      if (!stream) {
-        stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
-        this.remoteStreams.set(remotePeerId, stream);
-      } else {
-        // Add new track if not already included
-        if (!stream.getTracks().some(t => t.id === event.track.id)) {
-          stream.addTrack(event.track);
-          // Re-instantiate MediaStream reference so React state recognizes change
-          stream = new MediaStream(stream.getTracks());
-          this.remoteStreams.set(remotePeerId, stream);
-        }
-      }
-
-      this.setupRemoteAudioAnalysis(remotePeerId, stream);
-      this.emit('remote_stream', { peerId: remotePeerId, stream });
-    };
-
-    // Handle ICE candidates
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.sendSignal(remotePeerId, event.candidate.toJSON(), 'ice');
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') {
-        try { pc.restartIce(); } catch {}
-      }
-    };
-
-    // If we are initiator, create and send Offer
-    if (isInitiator) {
-      pc.onnegotiationneeded = async () => {
-        try {
-          if (pc.signalingState === 'stable') {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            this.sendSignal(remotePeerId, offer, 'offer');
-          }
-        } catch (err) {
-          console.warn('Error creating WebRTC offer:', err);
-        }
-      };
-
-      setTimeout(async () => {
-        try {
-          if (pc.signalingState === 'stable' && !pc.localDescription) {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            this.sendSignal(remotePeerId, offer, 'offer');
-          }
-        } catch (err) {
-          console.warn('Error creating WebRTC offer timeout fallback:', err);
-        }
-      }, 500);
-    }
-
-    return pc;
-  }
-
-  // Send WebRTC Signal (Offer/Answer/Candidate) to target peer via server
-  private async sendSignal(targetId: string, signalData: any, type: 'offer' | 'answer' | 'ice') {
-    if (!this.currentRoomId || !this.currentUser) return;
-    const signalId = `sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    this.processedSignalIds.add(signalId);
-
-    try {
-      await fetch('/api/meet/signal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId: this.currentRoomId,
-          senderId: this.currentUser.id,
-          targetId,
-          signalData,
-          type,
-          signalId
-        })
-      });
-    } catch (err) {
-      console.warn('Error sending signal:', err);
-    }
-  }
-
-  // Toggle Microphone Mute
   public async toggleAudio(): Promise<boolean> {
     this.isAudioMuted = !this.isAudioMuted;
     if (this.localStream) {
@@ -653,7 +1022,6 @@ class MeetService {
     return !this.isAudioMuted;
   }
 
-  // Toggle Camera Mute / On / Off
   public async toggleVideo(): Promise<boolean> {
     this.isVideoMuted = !this.isVideoMuted;
     if (this.localStream) {
@@ -666,7 +1034,6 @@ class MeetService {
     return !this.isVideoMuted;
   }
 
-  // Flip Camera (Front / Back on Mobile devices)
   public async switchCamera(): Promise<boolean> {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return false;
     try {
@@ -687,7 +1054,6 @@ class MeetService {
         if (currentTrack) this.localStream.removeTrack(currentTrack);
         this.localStream.addTrack(newVideoTrack);
 
-        // Replace track in all peer connections
         this.peerConnections.forEach(pc => {
           const sender = pc.getSenders().find(s => s.track?.kind === 'video');
           if (sender) {
@@ -704,7 +1070,6 @@ class MeetService {
     return false;
   }
 
-  // Toggle Screen Sharing
   public async toggleScreenShare(): Promise<boolean> {
     if (this.isScreenSharing) {
       this.stopScreenSharing();
@@ -720,7 +1085,6 @@ class MeetService {
 
         const screenVideoTrack = stream.getVideoTracks()[0];
 
-        // Replace track in all peer connections
         this.peerConnections.forEach(pc => {
           const sender = pc.getSenders().find(s => s.track?.kind === 'video');
           if (sender) {
@@ -728,7 +1092,6 @@ class MeetService {
           }
         });
 
-        // Listen for browser "Stop Sharing" floating button
         screenVideoTrack.onended = () => {
           this.stopScreenSharing();
         };
@@ -750,7 +1113,6 @@ class MeetService {
       this.screenStream = null;
     }
 
-    // Revert back to local camera track
     if (this.localStream) {
       const cameraTrack = this.localStream.getVideoTracks()[0];
       this.peerConnections.forEach(pc => {
@@ -765,7 +1127,6 @@ class MeetService {
     this.emit('screen_share_stopped', {});
   }
 
-  // Toggle Hand Raise
   public async toggleRaiseHand(): Promise<boolean> {
     this.isHandRaised = !this.isHandRaised;
     await this.updateParticipantState({ isHandRaised: this.isHandRaised });
@@ -773,88 +1134,84 @@ class MeetService {
     return this.isHandRaised;
   }
 
-  // Send In-Call Chat Message
   public async sendChatMessage(text: string): Promise<boolean> {
     if (!this.currentRoomId || !this.currentUser || !text.trim()) return false;
-    try {
-      const res = await fetch('/api/meet/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId: this.currentRoomId,
-          senderId: this.currentUser.id,
-          senderName: this.currentUser.name,
-          senderPhoto: this.currentUser.photoURL,
-          text: text.trim()
-        })
-      });
-      return res.ok;
-    } catch {
-      return false;
+
+    const message: MeetChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      senderId: this.currentUser.id,
+      senderName: this.currentUser.name,
+      senderPhoto: this.currentUser.photoURL,
+      text: text.trim(),
+      createdAt: Date.now()
+    };
+
+    const list = this.chatHistory.get(this.currentRoomId) || [];
+    list.push(message);
+    this.chatHistory.set(this.currentRoomId, list);
+
+    const payload = {
+      message
+    };
+
+    // 1. MQTT
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        `lifeos/meet/v2/rooms/${this.currentRoomId}/chat`,
+        JSON.stringify(payload)
+      );
     }
-  }
 
-  // Update State in Backend Room
-  private async updateParticipantState(updates: Partial<MeetParticipant>) {
-    if (!this.currentRoomId || !this.currentUser) return;
-    try {
-      await fetch('/api/meet/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId: this.currentRoomId,
-          userId: this.currentUser.id,
-          updates
-        })
-      });
-    } catch {}
-  }
-
-  // Leave Call & Cleanup
-  public async leaveRoom() {
-    if (this.currentRoomId && this.currentUser) {
+    // 2. BroadcastChannel
+    if (this.broadcastChannel) {
       try {
-        await fetch('/api/meet/leave', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            roomId: this.currentRoomId,
-            userId: this.currentUser.id
-          })
+        this.broadcastChannel.postMessage({
+          topic: 'chat',
+          roomId: this.currentRoomId,
+          data: payload
         });
       } catch {}
     }
 
-    this.peerConnections.forEach(pc => {
-      try { pc.close(); } catch {}
-    });
-    this.peerConnections.clear();
-    this.remoteStreams.clear();
-    this.pendingIceCandidates.clear();
-    this.remoteAnalysers.clear();
+    // Emit locally
+    this.emit('chat_message', message);
+    return true;
+  }
 
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-    if (this.pollIntervalId) {
-      clearInterval(this.pollIntervalId);
-      this.pollIntervalId = null;
-    }
+  private async updateParticipantState(updates: Partial<MeetParticipant>) {
+    if (!this.currentRoomId || !this.currentUser) return;
 
-    this.stopLocalStream();
-    this.stopScreenSharing();
-
-    if (this.audioAnimationId) {
-      cancelAnimationFrame(this.audioAnimationId);
-      this.audioAnimationId = null;
+    const localP = this.participantsMap.get(this.currentUser.id);
+    if (localP) {
+      this.participantsMap.set(this.currentUser.id, {
+        ...localP,
+        ...updates
+      });
     }
 
-    this.currentRoomId = null;
-    this.isHandRaised = false;
-    this.isScreenSharing = false;
+    const payload = {
+      peerId: this.currentUser.id,
+      updates
+    };
 
-    this.emit('call_ended', {});
+    // 1. MQTT
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        `lifeos/meet/v2/rooms/${this.currentRoomId}/state`,
+        JSON.stringify(payload)
+      );
+    }
+
+    // 2. BroadcastChannel
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({
+          topic: 'state',
+          roomId: this.currentRoomId,
+          data: payload
+        });
+      } catch {}
+    }
   }
 
   public stopLocalStream() {
