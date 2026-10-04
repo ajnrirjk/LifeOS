@@ -25,7 +25,8 @@ const DEFAULT_CONFIG: GlobalConfigPayload = {
     fellowship_chat: true,
     mini_cats: true,
     mini_games: true,
-    youtube: true
+    youtube: true,
+    life_ai: true
   },
   maintenanceMode: false,
   maintenanceMessage: 'System maintenance in progress. Master Admin access only.',

@@ -258,12 +258,18 @@ export const LifeAiApp: React.FC = () => {
   const handleSaveApiKey = () => {
     const trimmed = geminiKeyInput.trim();
     updateSettings({ geminiApiKey: trimmed });
+    try {
+      localStorage.setItem('lifeos_gemini_api_key', trimmed);
+    } catch {}
     setShowApiKeyModal(false);
     sounds.playCorrect();
   };
 
   const activePersona = PERSONAS[selectedPersona];
-  const hasGeminiKey = Boolean(settings.geminiApiKey && settings.geminiApiKey.trim());
+  const hasGeminiKey = Boolean(
+    (settings.geminiApiKey && settings.geminiApiKey.trim()) ||
+    (typeof window !== 'undefined' && localStorage.getItem('lifeos_gemini_api_key')?.trim())
+  );
 
   // Render markdown-like simple formatting for paragraphs, bold text, bullet points
   const renderFormattedText = (text: string) => {

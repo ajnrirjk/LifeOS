@@ -164,7 +164,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           maintenanceMode: globalCfg.maintenanceMode !== undefined ? globalCfg.maintenanceMode : parsed.maintenanceMode,
           maintenanceMessage: globalCfg.maintenanceMessage || parsed.maintenanceMessage,
           activeAnnouncement: globalCfg.activeAnnouncement !== undefined ? globalCfg.activeAnnouncement : parsed.activeAnnouncement,
-          appVisibility: globalCfg.appVisibility || parsed.appVisibility || DEFAULT_SETTINGS.appVisibility
+          appVisibility: {
+            ...DEFAULT_SETTINGS.appVisibility,
+            ...(parsed.appVisibility || {}),
+            ...(globalCfg.appVisibility || {}),
+            life_ai: true
+          }
         };
       }
       return {
@@ -172,7 +177,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         maintenanceMode: globalCfg.maintenanceMode ?? DEFAULT_SETTINGS.maintenanceMode,
         maintenanceMessage: globalCfg.maintenanceMessage ?? DEFAULT_SETTINGS.maintenanceMessage,
         activeAnnouncement: globalCfg.activeAnnouncement ?? DEFAULT_SETTINGS.activeAnnouncement,
-        appVisibility: globalCfg.appVisibility || DEFAULT_SETTINGS.appVisibility
+        appVisibility: {
+          ...DEFAULT_SETTINGS.appVisibility,
+          ...(globalCfg.appVisibility || {}),
+          life_ai: true
+        }
       };
     } catch {
       return DEFAULT_SETTINGS;
