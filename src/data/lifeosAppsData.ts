@@ -87,13 +87,13 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
   },
   {
     id: 'tiktok',
-    title: 'TikFeed',
-    emoji: '🎵',
-    iconName: 'Music2',
+    title: 'TikTok',
+    emoji: '🎬',
+    iconName: 'PlaySquare',
     category: 'Learning',
     type: 'tiktok',
-    color: 'from-stone-700 via-emerald-700 to-teal-700',
-    description: 'Trending TikTok videos — dance, comedy, food, sports, tech, music & faith content.',
+    color: 'from-pink-600 via-rose-600 to-cyan-600',
+    description: 'Full TikTok browser & player: watch trending videos, search creators, explore FYP, paste any link & sign in.',
     isPinned: true,
     isSystem: true
   }

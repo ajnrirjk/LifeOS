@@ -272,3 +272,34 @@ export function extractYouTubeId(urlOrId: string): string | null {
 
   return null;
 }
+
+// Helper to extract TikTok video ID from links or raw numeric ID
+export function extractTikTokId(urlOrId: string): string | null {
+  if (!urlOrId) return null;
+  const trimmed = urlOrId.trim();
+
+  // If already pure digits (TikTok video IDs are usually 15-20 digits)
+  if (/^\d{10,24}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Handle standard https://www.tiktok.com/@user/video/VIDEO_ID
+  const videoMatch = trimmed.match(/\/video\/(\d+)/);
+  if (videoMatch && videoMatch[1]) {
+    return videoMatch[1];
+  }
+
+  // Handle mobile links https://m.tiktok.com/v/VIDEO_ID
+  const vMatch = trimmed.match(/\/v\/(\d+)/);
+  if (vMatch && vMatch[1]) {
+    return vMatch[1];
+  }
+
+  // Handle /embed/v2/VIDEO_ID or /player/v1/VIDEO_ID
+  const embedMatch = trimmed.match(/\/(?:embed|player)\/(?:v\d+\/)?(\d+)/);
+  if (embedMatch && embedMatch[1]) {
+    return embedMatch[1];
+  }
+
+  return null;
+}
