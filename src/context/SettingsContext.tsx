@@ -119,8 +119,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     fellowship_chat: true,
     mini_cats: true,
     mini_games: true,
-    youtube: true,
-    life_ai: true
+    youtube: true
   },
   debugTelemetryEnabled: false
 };
@@ -167,8 +166,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           appVisibility: {
             ...DEFAULT_SETTINGS.appVisibility,
             ...(parsed.appVisibility || {}),
-            ...(globalCfg.appVisibility || {}),
-            life_ai: true
+            ...(globalCfg.appVisibility || {})
           }
         };
       }
@@ -179,8 +177,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         activeAnnouncement: globalCfg.activeAnnouncement ?? DEFAULT_SETTINGS.activeAnnouncement,
         appVisibility: {
           ...DEFAULT_SETTINGS.appVisibility,
-          ...(globalCfg.appVisibility || {}),
-          life_ai: true
+          ...(globalCfg.appVisibility || {})
         }
       };
     } catch {

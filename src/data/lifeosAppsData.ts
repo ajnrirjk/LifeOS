@@ -84,18 +84,6 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     description: 'Watch worship streams, BibleProject videos, lofi study beats, and any YouTube video.',
     isPinned: true,
     isSystem: true
-  },
-  {
-    id: 'life_ai',
-    title: 'LifeAi',
-    emoji: '✨',
-    iconName: 'Sparkles',
-    category: 'Productivity',
-    type: 'life_ai',
-    color: 'from-cyan-500 via-teal-500 to-emerald-600',
-    description: 'AI companion for LifeOS & daily life: scripture insight, personalized prayer, system guidance, sermon ideas & voice.',
-    isPinned: true,
-    isSystem: true
   }
 ];
 
