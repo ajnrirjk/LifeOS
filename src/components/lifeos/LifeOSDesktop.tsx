@@ -30,6 +30,8 @@ import { useApp } from '../../context/AppContext';
 import { useSettings } from '../../context/SettingsContext';
 import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft, Megaphone } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
+import { LifeOSGodModeBar } from '../admin/LifeOSGodModeBar';
+import { MASTER_ADMIN_EMAIL } from '../../types/settings';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { WelcomeOnboardingModal } from './WelcomeOnboardingModal';
 
@@ -171,7 +173,7 @@ export const LifeOSDesktop: React.FC = () => {
 
   const activeApp = apps.find(a => a.id === activeAppId);
   const activeWindowState = openWindows[activeAppId];
-  const { announcement, setAnnouncement, settings, updateSettings } = useSettings();
+  const { announcement, setAnnouncement, settings, updateSettings, isAuthorizedAdmin } = useSettings();
 
   const themeWallpaper = {
     dark: wallpaperClasses[wallpaper] || wallpaperClasses.mountain,
@@ -515,6 +517,27 @@ export const LifeOSDesktop: React.FC = () => {
         onClose={() => setIsPrivacyModalOpen(false)}
         onAgree={() => setIsPrivacyModalOpen(false)}
       />
+
+      {/* Exclusive Master Admin Floating God-Mode Command Center for aw03102008@gmail.com */}
+      <LifeOSGodModeBar />
+
+      {/* Site-Wide Maintenance Mode Lockdown Overlay for non-admins */}
+      {settings.maintenanceMode && !isAuthorizedAdmin && (
+        <div className="fixed inset-0 z-50 bg-stone-950/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center text-white select-none">
+          <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-4xl mb-4 shadow-2xl animate-pulse">
+            🔒
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-black text-amber-300 mb-2">
+            LifeOS Sanctuary Under Scheduled Maintenance
+          </h2>
+          <p className="text-sm text-stone-300 max-w-md mb-6 leading-relaxed">
+            {settings.maintenanceMessage || 'System maintenance in progress. All offline features remain functional.'}
+          </p>
+          <div className="p-3 rounded-2xl bg-black/40 border border-white/10 text-xs text-stone-400 font-mono">
+            Administrator: {MASTER_ADMIN_EMAIL}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -33,7 +33,11 @@ import {
   Flame,
   Subtitles,
   Smile,
-  FileText
+  FileText,
+  Crown,
+  Lock,
+  Unlock,
+  ShieldAlert
 } from 'lucide-react';
 import { meetService, MeetParticipant, MeetChatMessage, MeetRoomInfo } from '../../services/meetService';
 import { useSettings } from '../../context/SettingsContext';
@@ -279,8 +283,12 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
 };
 
 export const LifeMeetApp: React.FC = () => {
-  const { settings, googleUser } = useSettings();
+  const { settings, googleUser, isAuthorizedAdmin } = useSettings();
   const { launchApp } = useLifeOS();
+
+  // Master Host Controls State (Only for aw03102008@gmail.com)
+  const [isHostControlsOpen, setIsHostControlsOpen] = useState(false);
+  const [isRoomLocked, setIsRoomLocked] = useState(false);
 
   // Call / Room State (Restored from meetService singleton)
   const [isInCall, setIsInCall] = useState(() => meetService.getIsInCall());
@@ -563,6 +571,35 @@ export const LifeMeetApp: React.FC = () => {
     sounds.playVictory();
     await meetService.sendChatMessage(`📖 Scripture Sharing: "${refText}"`);
     setIsPrayModalOpen(false);
+  };
+
+  // Master Host Control Handlers (aw03102008@gmail.com)
+  const handleHostMuteAll = async () => {
+    sounds.playTap();
+    await meetService.sendChatMessage('👑 [HOST DIRECTIVE]: Host has muted all participant microphones in the room.');
+    setIsHostControlsOpen(false);
+  };
+
+  const handleHostToggleLock = async () => {
+    sounds.playTap();
+    const newLockState = !isRoomLocked;
+    setIsRoomLocked(newLockState);
+    await meetService.sendChatMessage(
+      newLockState
+        ? '🔒 [HOST DIRECTIVE]: Meeting room is now LOCKED by the Host. No new entries permitted.'
+        : '🔓 [HOST DIRECTIVE]: Meeting room has been UNLOCKED by the Host.'
+    );
+  };
+
+  const handleHostEndMeeting = async () => {
+    if (confirm('Are you sure you want to end this meeting for everyone?')) {
+      sounds.playIncorrect();
+      await meetService.sendChatMessage('🛑 [HOST DIRECTIVE]: Meeting has been ended by the Host for all participants.');
+      setIsHostControlsOpen(false);
+      setTimeout(() => {
+        handleLeaveCall();
+      }, 400);
+    }
   };
 
   // Calculate Grid Layout Classes based on participant count
@@ -1200,6 +1237,20 @@ export const LifeMeetApp: React.FC = () => {
                 <RefreshCw className="w-5 h-5" />
               </button>
 
+              {/* Master Host Controls Trigger (aw03102008@gmail.com) */}
+              {isAuthorizedAdmin && (
+                <button
+                  onClick={() => {
+                    sounds.playTap();
+                    setIsHostControlsOpen(true);
+                  }}
+                  className="p-3.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-stone-950 font-black transition-all shadow-xl active:scale-95 ring-2 ring-amber-300"
+                  title="Master Host Controls (aw03102008@gmail.com)"
+                >
+                  <Crown className="w-5 h-5" />
+                </button>
+              )}
+
               {/* End Call Button */}
               <button
                 onClick={handleLeaveCall}
@@ -1264,6 +1315,116 @@ export const LifeMeetApp: React.FC = () => {
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={() => setIsPrayModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MASTER HOST CONTROLS MODAL (Exclusive to aw03102008@gmail.com)          */}
+        {/* ========================================================================= */}
+        {isHostControlsOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#131b2e] border border-amber-500/40 rounded-3xl p-6 max-w-md w-full text-white shadow-2xl space-y-5"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400">
+                    <Crown className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-amber-300">Master Host Controls</h3>
+                    <p className="text-[10px] text-stone-400">Host Authority (aw03102008@gmail.com)</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsHostControlsOpen(false)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-stone-400"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Mute All */}
+                <button
+                  onClick={handleHostMuteAll}
+                  className="w-full p-3.5 rounded-2xl bg-stone-800/80 hover:bg-rose-950/40 border border-white/10 hover:border-rose-500/50 flex items-center justify-between text-left transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 group-hover:scale-110 transition-transform">
+                      <MicOff className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-stone-100">Mute All Participants</div>
+                      <div className="text-[10px] text-stone-400">Silence all participant audio feeds instantly</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider bg-rose-500/10 px-2 py-1 rounded-md">
+                    Mute All
+                  </span>
+                </button>
+
+                {/* Lock Room */}
+                <button
+                  onClick={handleHostToggleLock}
+                  className={`w-full p-3.5 rounded-2xl border flex items-center justify-between text-left transition-all group ${
+                    isRoomLocked
+                      ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
+                      : 'bg-stone-800/80 border-white/10 hover:border-amber-500/40 text-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl ${isRoomLocked ? 'bg-amber-500 text-stone-950' : 'bg-amber-500/20 text-amber-400'}`}>
+                      {isRoomLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-stone-100">
+                        {isRoomLocked ? 'Room is Locked' : 'Lock Meeting Room'}
+                      </div>
+                      <div className="text-[10px] text-stone-400">
+                        {isRoomLocked ? 'New participants cannot join call' : 'Allow or prevent new participant entries'}
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md ${
+                    isRoomLocked ? 'bg-amber-500 text-stone-950' : 'bg-white/10 text-stone-300'
+                  }`}>
+                    {isRoomLocked ? 'Locked' : 'Unlocked'}
+                  </span>
+                </button>
+
+                {/* Force End Meeting */}
+                <button
+                  onClick={handleHostEndMeeting}
+                  className="w-full p-3.5 rounded-2xl bg-rose-950/30 hover:bg-rose-950/60 border border-rose-500/40 hover:border-rose-500 flex items-center justify-between text-left transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-rose-500 text-white group-hover:scale-110 transition-transform">
+                      <ShieldAlert className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-rose-300">End Meeting for Everyone</div>
+                      <div className="text-[10px] text-stone-400">Disconnect all participants and close the room</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black text-rose-300 uppercase tracking-wider bg-rose-500/20 px-2 py-1 rounded-md">
+                    End Call
+                  </span>
+                </button>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={() => setIsHostControlsOpen(false)}
                   className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors"
                 >
                   Close

@@ -215,10 +215,11 @@ const SHOP_ITEMS = [
 ];
 
 export const ArcadeVaultApp: React.FC = () => {
-  const { settings } = useSettings();
+  const { settings, isAuthorizedAdmin } = useSettings();
   const [activeGame, setActiveGame] = useState<MiniGameId | null>(null);
   const [activeTab, setActiveTab] = useState<'games' | 'leaderboard' | 'trophies'>('games');
   const [soundMuted, setSoundMuted] = useState(false);
+  const [showGodModeModal, setShowGodModeModal] = useState(false);
   const [selectedLeaderboardGame, setSelectedLeaderboardGame] = useState<MiniGameId>('pilgrim_go');
   const [claimedDailyToday, setClaimedDailyToday] = useState<boolean>(() => {
     try {
@@ -254,6 +255,18 @@ export const ArcadeVaultApp: React.FC = () => {
       localStorage.setItem('lifeos_arcade_stats_v1', JSON.stringify(stats));
     } catch {}
   }, [stats]);
+
+  // Sync external God Mode token/skin grants instantly
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        const saved = localStorage.getItem('lifeos_arcade_stats_v1');
+        if (saved) setStats(JSON.parse(saved));
+      } catch {}
+    };
+    window.addEventListener('lifeos_arcade_stats_updated', handleUpdate);
+    return () => window.removeEventListener('lifeos_arcade_stats_updated', handleUpdate);
+  }, []);
 
   const handleGameOver = (gameId: MiniGameId, score: number, tokensEarned: number) => {
     setStats((prev) => {
@@ -294,6 +307,58 @@ export const ArcadeVaultApp: React.FC = () => {
     setStats((prev) => ({
       ...prev,
       totalTokens: prev.totalTokens + 100
+    }));
+  };
+
+  const handleGodGrantTokens = (amount: number = 10000) => {
+    sounds.playVictory();
+    confetti({ particleCount: 60, spread: 70 });
+    setStats(prev => ({
+      ...prev,
+      totalTokens: prev.totalTokens + amount
+    }));
+  };
+
+  const handleGodUnlockAll = () => {
+    sounds.playVictory();
+    confetti({ particleCount: 80, spread: 80 });
+    setStats(prev => ({
+      ...prev,
+      unlockedSkins: SHOP_ITEMS.map(i => i.id).concat(['classic'])
+    }));
+  };
+
+  const handleGodSetMaxScores = () => {
+    sounds.playVictory();
+    setStats(prev => ({
+      ...prev,
+      highScores: {
+        pilgrim_go: 9999,
+        flappy_dove: 999,
+        babel_stack: 999,
+        demon_buster: 9999,
+        eden_snake: 9999,
+        scripture_matrix: 999,
+        slingshot_target: 9999,
+        samson_smash: 9999
+      }
+    }));
+  };
+
+  const handleGodResetScores = () => {
+    sounds.playTap();
+    setStats(prev => ({
+      ...prev,
+      highScores: {
+        pilgrim_go: 0,
+        flappy_dove: 0,
+        babel_stack: 0,
+        demon_buster: 0,
+        eden_snake: 0,
+        scripture_matrix: 0,
+        slingshot_target: 0,
+        samson_smash: 0
+      }
     }));
   };
 
@@ -471,6 +536,20 @@ export const ArcadeVaultApp: React.FC = () => {
             >
               {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-amber-400" />}
             </button>
+
+            {isAuthorizedAdmin && (
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setShowGodModeModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-stone-950 font-black text-xs shadow-lg active:scale-95 transition-all"
+                title="Arcade God Mode (aw03102008@gmail.com)"
+              >
+                <span>👑</span>
+                <span className="hidden sm:inline">God Mode</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -841,6 +920,70 @@ export const ArcadeVaultApp: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Exclusive Master Admin Arcade God Mode Modal */}
+      {showGodModeModal && isAuthorizedAdmin && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-stone-900 border-2 border-amber-500/40 rounded-3xl p-6 shadow-2xl text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">👑</span>
+                <div>
+                  <h3 className="text-sm font-black text-amber-300 uppercase tracking-wide">Arcade God Mode</h3>
+                  <p className="text-[10px] text-stone-400">Exclusive controls for aw03102008@gmail.com</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowGodModeModal(false)}
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-stone-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <button
+                onClick={() => handleGodGrantTokens(10000)}
+                className="p-3.5 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-black text-xs flex flex-col items-center gap-1.5 active:scale-95 transition-all shadow-md"
+              >
+                <Coins className="w-5 h-5 text-amber-400" />
+                <span>+10,000 Tokens</span>
+              </button>
+
+              <button
+                onClick={handleGodUnlockAll}
+                className="p-3.5 rounded-2xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-300 font-black text-xs flex flex-col items-center gap-1.5 active:scale-95 transition-all shadow-md"
+              >
+                <Sparkles className="w-5 h-5 text-purple-400" />
+                <span>Unlock All Skins</span>
+              </button>
+
+              <button
+                onClick={handleGodSetMaxScores}
+                className="p-3.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-black text-xs flex flex-col items-center gap-1.5 active:scale-95 transition-all shadow-md"
+              >
+                <Award className="w-5 h-5 text-emerald-400" />
+                <span>Set Max 9,999 Scores</span>
+              </button>
+
+              <button
+                onClick={handleGodResetScores}
+                className="p-3.5 rounded-2xl bg-stone-800 hover:bg-stone-700 border border-white/10 text-stone-300 font-black text-xs flex flex-col items-center gap-1.5 active:scale-95 transition-all shadow-md"
+              >
+                <RotateCcw className="w-5 h-5 text-stone-400" />
+                <span>Reset Scores to 0</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowGodModeModal(false)}
+              className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs"
+            >
+              Close God Mode
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

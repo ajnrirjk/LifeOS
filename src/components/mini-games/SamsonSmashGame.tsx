@@ -59,6 +59,8 @@ export const SamsonSmashGame: React.FC<SamsonSmashGameProps> = ({ onGameOver, on
   // Meter oscillation state
   const meterPosRef = useRef(0); // 0 to 1
   const meterDirRef = useRef(1); // 1 or -1
+  const needleRef = useRef<HTMLDivElement | null>(null);
+  const lastDisplaySecRef = useRef<number>(-1);
   const animFrameRef = useRef<number | null>(null);
   const particlesRef = useRef<RubbleParticle[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
@@ -193,21 +195,21 @@ export const SamsonSmashGame: React.FC<SamsonSmashGameProps> = ({ onGameOver, on
       scoreGain = 600;
       timeBonus = 2.5;
       furyGain = 0;
-    } else if (distFromCenter < 0.08) {
-      // Golden center
+    } else if (distFromCenter <= 0.06) {
+      // Golden center (44% to 56%)
       quality = 'perfect';
-      baseDamage = 180 + s.combo * 15;
+      baseDamage = 190 + s.combo * 15;
       scoreGain = 350 + s.combo * 50;
       timeBonus = 2.5;
       furyGain = 25;
-    } else if (distFromCenter < 0.20) {
-      // Great zone
+    } else if (distFromCenter <= 0.20) {
+      // Great zone (30% to 70%)
       quality = 'great';
       baseDamage = 110 + s.combo * 8;
       scoreGain = 180 + s.combo * 25;
       timeBonus = 1.5;
       furyGain = 12;
-    } else if (distFromCenter < 0.35) {
+    } else if (distFromCenter <= 0.35) {
       // Good zone
       quality = 'good';
       baseDamage = 60;
@@ -342,8 +344,8 @@ export const SamsonSmashGame: React.FC<SamsonSmashGameProps> = ({ onGameOver, on
       const s = stateRef.current;
 
       if (s.gameState === 'playing') {
-        // Meter oscillation: base speed increases with stage
-        const baseSpeed = 1.4 + (s.stage - 1) * 0.15;
+        // Meter oscillation: smooth ping-pong sweep
+        const baseSpeed = 1.35 + (s.stage - 1) * 0.12;
         meterPosRef.current += meterDirRef.current * baseSpeed * dt;
         if (meterPosRef.current >= 1) {
           meterPosRef.current = 1;
@@ -351,6 +353,11 @@ export const SamsonSmashGame: React.FC<SamsonSmashGameProps> = ({ onGameOver, on
         } else if (meterPosRef.current <= 0) {
           meterPosRef.current = 0;
           meterDirRef.current = 1;
+        }
+
+        // Direct 60fps DOM needle update (zero React reconciliation delay, completely smooth!)
+        if (needleRef.current) {
+          needleRef.current.style.left = `${(meterPosRef.current * 100).toFixed(2)}%`;
         }
 
         // Timer decrement
@@ -381,7 +388,12 @@ export const SamsonSmashGame: React.FC<SamsonSmashGameProps> = ({ onGameOver, on
           }
         }
 
-        setTimeLeft(Math.ceil(s.timeLeft));
+        // Only update React state when whole seconds tick to eliminate 60Hz React re-rendering
+        const currentSec = Math.ceil(s.timeLeft);
+        if (currentSec !== lastDisplaySecRef.current) {
+          lastDisplaySecRef.current = currentSec;
+          setTimeLeft(currentSec);
+        }
       }
 
       // Draw Canvas
@@ -680,23 +692,31 @@ export const SamsonSmashGame: React.FC<SamsonSmashGameProps> = ({ onGameOver, on
         {gameState === 'playing' && (
           <div className="w-full max-w-md mx-auto flex flex-col gap-2.5 z-10 shrink-0 pb-2">
             {/* Meter Bar */}
-            <div className="relative w-full h-10 rounded-2xl bg-stone-900 border border-white/20 overflow-hidden shadow-inner flex items-center">
+            <div className="relative w-full h-11 rounded-2xl bg-stone-900 border-2 border-white/20 overflow-hidden shadow-inner flex items-center">
               {/* Sweet Spot Zones */}
               <div className="absolute inset-y-0 left-0 w-[30%] bg-stone-800/40" />
-              <div className="absolute inset-y-0 left-[30%] w-[15%] bg-blue-500/30 border-r border-blue-400/30" />
-              <div className="absolute inset-y-0 left-[45%] w-[10%] bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 shadow-lg shadow-amber-400/50 border-x-2 border-white flex items-center justify-center">
-                <span className="text-[9px] font-black text-stone-950 uppercase tracking-tighter">PERFECT</span>
+              <div className="absolute inset-y-0 left-[30%] w-[14%] bg-sky-500/25 border-r border-sky-400/40 flex items-center justify-center">
+                <span className="text-[8px] font-black text-sky-300 uppercase tracking-tighter">GOOD</span>
               </div>
-              <div className="absolute inset-y-0 left-[55%] w-[15%] bg-blue-500/30 border-l border-blue-400/30" />
+              <div className="absolute inset-y-0 left-[44%] w-[12%] bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 shadow-lg shadow-amber-400/50 border-x-2 border-white flex items-center justify-center">
+                <span className="text-[9px] font-black text-stone-950 uppercase tracking-tighter font-mono">PERFECT</span>
+              </div>
+              <div className="absolute inset-y-0 left-[56%] w-[14%] bg-sky-500/25 border-l border-sky-400/40 flex items-center justify-center">
+                <span className="text-[8px] font-black text-sky-300 uppercase tracking-tighter">GOOD</span>
+              </div>
               <div className="absolute inset-y-0 right-0 w-[30%] bg-stone-800/40" />
 
-              {/* Moving Indicator Needle */}
+              {/* Moving Indicator Needle - Driven directly at 60fps via ref */}
               <div
-                className="absolute top-0 bottom-0 w-3 rounded-full bg-white shadow-[0_0_12px_#ffffff] -ml-1.5 transition-transform"
+                ref={needleRef}
+                className="absolute top-0 bottom-0 w-3.5 rounded-full bg-white shadow-[0_0_16px_#ffffff,0_0_24px_#f59e0b] -ml-[7px] pointer-events-none will-change-transform z-10"
                 style={{
-                  left: `${meterPosRef.current * 100}%`
+                  left: '50%'
                 }}
-              />
+              >
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-amber-300 shadow-sm" />
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-amber-300 shadow-sm" />
+              </div>
             </div>
 
             {/* Massive Touch/Click Smash Button */}

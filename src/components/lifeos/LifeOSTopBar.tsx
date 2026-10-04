@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { useSettings } from '../../context/SettingsContext';
-import { ChevronDown, Settings, Shield, Crown } from 'lucide-react';
+import { ChevronDown, Settings, Shield, Crown, Megaphone, AlertTriangle, Sparkles, X, Lock } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 
 interface LifeOSTopBarProps {
@@ -10,11 +11,26 @@ interface LifeOSTopBarProps {
 
 export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => {
   const { activeAppId, apps, wallpaper, setWallpaper, isDesktopView, showDesktop, launchApp } = useLifeOS();
-  const { setIsSettingsOpen, settings, googleUser, isGoogleSigningIn, signInWithGoogle, isAuthorizedAdmin } = useSettings();
+  const {
+    setIsSettingsOpen,
+    settings,
+    googleUser,
+    isGoogleSigningIn,
+    signInWithGoogle,
+    isAuthorizedAdmin,
+    announcement,
+    setAnnouncement,
+    toggleMaintenanceMode
+  } = useSettings();
 
   const [timeStr, setTimeStr] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isBannerDismissed, setIsBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    setIsBannerDismissed(false);
+  }, [announcement?.id, announcement?.timestamp]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -47,7 +63,8 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
   ];
 
   return (
-    <header className="min-h-8 pt-[max(env(safe-area-inset-top,0px),44px)] pb-1.5 sm:pt-0 sm:pb-0 sm:h-8 bg-black/75 backdrop-blur-xl border-b border-white/10 text-white text-xs select-none flex items-center justify-between px-3 z-50 relative">
+    <div className="w-full flex flex-col shrink-0 z-50">
+      <header className="min-h-8 pt-[max(env(safe-area-inset-top,0px),44px)] pb-1.5 sm:pt-0 sm:pb-0 sm:h-8 bg-black/75 backdrop-blur-xl border-b border-white/10 text-white text-xs select-none flex items-center justify-between px-3 relative">
       {/* Left: LifeOS Logo, Desktop Button & Active App Name */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Apple/LifeOS Menu */}
@@ -294,5 +311,70 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
         </div>
       </div>
     </header>
-  );
+
+    {/* Master Admin Maintenance Bypass Alert */}
+    {settings.maintenanceMode && isAuthorizedAdmin && (
+      <div className="w-full bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-600 text-stone-950 px-3 py-1 text-xs font-black flex items-center justify-between z-40 shadow-md">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">👑</span>
+          <span>GOD-MODE ACTIVE: Maintenance Mode is ENABLED for regular users. You have bypass access.</span>
+        </div>
+        <button
+          onClick={() => toggleMaintenanceMode(false)}
+          className="px-2 py-0.5 rounded-lg bg-stone-950 text-amber-300 text-[10px] font-black hover:bg-stone-900 transition-colors"
+        >
+          Disable Maintenance Mode
+        </button>
+      </div>
+    )}
+
+    {/* Sticky Top Broadcast Announcement Banner */}
+    <AnimatePresence>
+      {announcement && announcement.isActive && !isBannerDismissed && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          className={`w-full px-3 py-1.5 flex items-center justify-between text-xs font-bold border-b select-none z-40 transition-colors shadow-md ${
+            announcement.type === 'alert'
+              ? 'bg-rose-950/90 text-rose-200 border-rose-500/40'
+              : announcement.type === 'warning'
+              ? 'bg-amber-950/90 text-amber-200 border-amber-500/40'
+              : announcement.type === 'info'
+              ? 'bg-blue-950/90 text-blue-200 border-blue-500/40'
+              : 'bg-purple-950/90 text-purple-200 border-purple-500/40'
+          }`}
+        >
+          <div className="flex items-center gap-2 min-w-0 max-w-[85%]">
+            <span className="shrink-0 text-sm">
+              {announcement.type === 'alert' ? '🚨' : announcement.type === 'warning' ? '⚠️' : announcement.type === 'info' ? 'ℹ️' : '🎉'}
+            </span>
+            <span className="font-black text-white shrink-0">{announcement.title}:</span>
+            <span className="truncate opacity-90">{announcement.message}</span>
+            <span className="text-[10px] text-stone-400 shrink-0 hidden md:inline">({announcement.timestamp})</span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isAuthorizedAdmin && (
+              <button
+                onClick={() => setAnnouncement(null)}
+                className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] text-amber-300 font-black border border-white/20 transition-all"
+                title="Master Admin: Dismiss globally for all users"
+              >
+                Clear Global
+              </button>
+            )}
+            <button
+              onClick={() => setIsBannerDismissed(true)}
+              className="p-1 rounded hover:bg-white/10 text-stone-300 hover:text-white transition-colors"
+              title="Dismiss banner"
+            >
+              ✕
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
 };
