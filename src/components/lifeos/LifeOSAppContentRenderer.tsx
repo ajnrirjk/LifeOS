@@ -8,6 +8,7 @@ import { LifeMeetApp } from '../meet/LifeMeetApp';
 import { CatFighterApp } from '../cat-fighter/CatFighterApp';
 import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
+import { LifeAiApp } from '../ai/LifeAiApp';
 import { AppStudio } from './AppStudio';
 import { CustomAppRunner } from './CustomAppRunner';
 
@@ -60,6 +61,7 @@ export const LifeOSAppContentRenderer: React.FC<LifeOSAppContentRendererProps> =
       {appId === 'bible_journal' && <BibleJournalApp />}
       {appId === 'fellowship_chat' && <DiscordFellowshipApp />}
       {appId === 'faith_meet' && <LifeMeetApp />}
+      {appId === 'lifeai' && <LifeAiApp />}
       {appId === 'mini_cats' && <CatFighterApp />}
       {appId === 'mini_games' && <ArcadeVaultApp />}
       {appId === 'youtube' && <YouTubeApp />}
@@ -68,6 +70,7 @@ export const LifeOSAppContentRenderer: React.FC<LifeOSAppContentRendererProps> =
         appId !== 'bible_journal' &&
         appId !== 'fellowship_chat' &&
         appId !== 'faith_meet' &&
+        appId !== 'lifeai' &&
         appId !== 'mini_cats' &&
         appId !== 'mini_games' &&
         appId !== 'youtube' &&

@@ -50,6 +50,18 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     isSystem: true
   },
   {
+    id: 'lifeai',
+    title: 'LifeAi',
+    emoji: '✨',
+    iconName: 'Sparkles',
+    category: 'Productivity',
+    type: 'lifeai',
+    color: 'from-violet-600 via-indigo-600 to-purple-800',
+    description: 'Intelligent AI companion for everyday guidance, Bible wisdom, daily planning & LifeOS tasks.',
+    isPinned: true,
+    isSystem: true
+  },
+  {
     id: 'mini_cats',
     title: 'Cat Fighter Turbo',
     emoji: '🥊',

@@ -3,6 +3,7 @@ export type AppType =
   | 'bible_journal'
   | 'fellowship_chat'
   | 'faith_meet'
+  | 'lifeai'
   | 'mini_cats'
   | 'mini_games'
   | 'youtube'

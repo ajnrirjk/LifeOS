@@ -185,6 +185,210 @@ Return JSON with:
   }
 });
 
+// Helper for LifeAi intelligent fallback responses when offline or API key is unavailable
+function getLifeAiFallbackResponse(message: string, persona: string = 'guide'): {
+  reply: string;
+  actionSuggestion?: { appId: string; label: string };
+  suggestedFollowUps: string[];
+} {
+  const query = (message || '').toLowerCase();
+
+  // 1. App-specific intent matches
+  if (query.includes('note') || query.includes('journal') || query.includes('sermon') || query.includes('write')) {
+    return {
+      reply: `### 📖 ChurchNotes in LifeOS\n\n**ChurchNotes** is designed specifically for recording sermon notes, personal reflections, and prayer journals during services or quiet time.\n\n* **Encrypted Backups:** You can set a password to encrypt and download backup archives.\n* **Scripture Tagging:** Organize notes with verse tags.\n* **Quick Search:** Find past sermons by pastor name, topic, or date.\n\nWould you like me to open ChurchNotes for you?`,
+      actionSuggestion: { appId: 'bible_journal', label: 'Open ChurchNotes' },
+      suggestedFollowUps: ['How do I encrypt my sermon notes?', 'Show me a sermon note template', 'What are good reflection prompts?']
+    };
+  }
+
+  if (query.includes('meet') || query.includes('video') || query.includes('call') || query.includes('conference') || query.includes('screen share')) {
+    return {
+      reply: `### 📹 LifeMeet Video Calling\n\n**LifeMeet** provides real-time group video conferencing, live screen sharing, and audio fellowship across all devices.\n\n* **Room Codes:** Share room codes (like \`fellowship-room\`) to connect instantly.\n* **Audio & Video Controls:** Toggle camera, mic, and background blur.\n* **Cross-Device Sync:** Works seamlessly between phone, tablet, and desktop.\n\nReady to start or join a fellowship meeting?`,
+      actionSuggestion: { appId: 'faith_meet', label: 'Open LifeMeet' },
+      suggestedFollowUps: ['How do I share my screen in LifeMeet?', 'Can I host a prayer meeting?', 'How do I invite others with a link?']
+    };
+  }
+
+  if (query.includes('bible') || query.includes('learn') || query.includes('quiz') || query.includes('streak') || query.includes('lesson') || query.includes('scripture')) {
+    return {
+      reply: `### 🕊️ FaithLingo Bible Learning & Offline Scripture\n\n**FaithLingo** is your flagship spiritual growth hub in LifeOS!\n\n* **Complete 66-Book Bible:** Full offline support for NIV, KJV, BBE, and WEB translations.\n* **Interactive Curriculum:** Genesis-to-Revelation lessons with streak rewards.\n* **Sesame Voice Narration:** Listen to Scripture read aloud naturally.\n* **Daily Reading Plans:** Structured paths for Psalms, Gospels, and Epistles.\n\nJump into FaithLingo to continue your streak!`,
+      actionSuggestion: { appId: 'faithlingo', label: 'Open FaithLingo' },
+      suggestedFollowUps: ['How do I switch Bible translations in FaithLingo?', 'What reading plan should I start today?', 'How do streaks work?']
+    };
+  }
+
+  if (query.includes('chat') || query.includes('fellowship') || query.includes('community') || query.includes('message') || query.includes('talk to others')) {
+    return {
+      reply: `### 💬 Fellowship Chat\n\nConnect with believers in real-time through **Fellowship Chat**!\n\n* **Channels:** Join sermon discussions, general fellowship, and prayer request rooms.\n* **Google Sign-In:** Sign in to sync your verified profile across devices.\n* **Media & Scripture Sharing:** Share verses, prayer points, and encouragement directly.\n\nHead over to Fellowship Chat to say hello to the community!`,
+      actionSuggestion: { appId: 'fellowship_chat', label: 'Open Fellowship Chat' },
+      suggestedFollowUps: ['How do I request prayer in Fellowship Chat?', 'Can I create a private group?', 'Where do I find sermon discussions?']
+    };
+  }
+
+  if (query.includes('game') || query.includes('arcade') || query.includes('slingshot') || query.includes('samson') || query.includes('dove') || query.includes('snake')) {
+    return {
+      reply: `### 🕹️ Arcade Vault & Mini-Games\n\nUnwind with faith-themed retro arcade games in **Arcade Vault**!\n\n* **Faith Flappy Dove:** Guide the dove through olive branch pillars.\n* **Samson's Pillar Smash:** Time your strength meter at 60fps!\n* **Eden Snake & Babel Stacker:** Classic puzzle games reimagined.\n* **Cat Fighter Turbo:** Retro 16-bit street fighting action.\n\nTake a quick study break and test your reflexes!`,
+      actionSuggestion: { appId: 'mini_games', label: 'Open Arcade Vault' },
+      suggestedFollowUps: ['What are the controls for Samson Smash?', 'How do I unlock Cat Fighter Turbo?', 'Where can I see the leaderboard?']
+    };
+  }
+
+  if (query.includes('youtube') || query.includes('video') || query.includes('worship') || query.includes('music') || query.includes('beats')) {
+    return {
+      reply: `### ▶️ YouTube & Worship Media\n\nWatch worship streams, BibleProject animated summaries, and relaxing lofi study beats directly within **YouTube** on LifeOS.\n\n* **Worship Playlists:** Curated Christian music and ambient beats.\n* **Bible Study Videos:** Deep dive into biblical history and theological overviews.\n\nWould you like to open YouTube now?`,
+      actionSuggestion: { appId: 'youtube', label: 'Open YouTube' },
+      suggestedFollowUps: ['Find lofi worship study beats', 'Search for BibleProject overview videos', 'How do I play videos in the background?']
+    };
+  }
+
+  if (query.includes('pray') || query.includes('prayer') || query.includes('anxious') || query.includes('worried') || query.includes('peace') || query.includes('comfort') || query.includes('grief')) {
+    return {
+      reply: `### 🙏 A Prayer for Your Peace & Comfort\n\n*Heavenly Father, You know every thought, fear, and burden carried in the heart of Your child right now. You tell us in Philippians 4:6-7 not to be anxious about anything, but in everything, by prayer and supplication with thanksgiving, to let our requests be made known to God. Grant Your supernatural peace that guards hearts and minds in Christ Jesus. Calm the storm within, bring restful assurance, and remind them that they are held securely in Your hands. In Jesus' loving name, Amen.*\n\n> *"The LORD is near to the brokenhearted and saves the crushed in spirit."* — Psalm 34:18\n\nWould you like to open the **Ai Prayer Companion** in FaithLingo to explore more personalized prayers?`,
+      actionSuggestion: { appId: 'faithlingo', label: 'Open Prayer Companion' },
+      suggestedFollowUps: ['Give me a short prayer for energy and focus', 'Find 3 Bible verses for peace', 'How can I establish a daily prayer habit?']
+    };
+  }
+
+  if (query.includes('routine') || query.includes('plan') || query.includes('schedule') || query.includes('morning') || query.includes('day') || query.includes('habit')) {
+    return {
+      reply: `### ☀️ A Balanced & Purposeful Daily LifeOS Routine\n\nHere is a simple, high-impact daily blueprint to keep your spirit, mind, and productivity centered:\n\n1. **First 15 Minutes (Quiet Time):**\n   * Open **FaithLingo** for your daily verse and 1 quick scripture lesson to maintain your streak.\n   * Spend 3 minutes in gratitude and prayer.\n2. **Mid-Day Focus (Work & Study):**\n   * Use **ChurchNotes** to jot down tasks, key ideas, and inspirations as they strike.\n   * Listen to ambient worship or study beats in **YouTube**.\n3. **Afternoon Check-In (Fellowship):**\n   * Say hello to fellow believers in **Fellowship Chat** or schedule a quick fellowship session in **LifeMeet**.\n4. **Evening Rest (Decompression):**\n   * Unwind with a quick round in **Arcade Vault** or read a Psalm before sleeping.\n\nSmall, faithful steps each day build a life of deep peace and purpose!`,
+      actionSuggestion: { appId: 'faithlingo', label: 'Start Morning Devotional' },
+      suggestedFollowUps: ['How do I build a consistent devotional habit?', 'What is a good evening reflection routine?', 'Help me organize my study priorities']
+    };
+  }
+
+  // Default warm companion guidance
+  return {
+    reply: `### ✨ Welcome to LifeAi!\n\nI'm your intelligent LifeOS companion, here to assist you with everyday life, Bible study, organization, and navigating all the tools in LifeOS.\n\nHere are some things I can do for you:\n\n* **📖 Scripture & Theology:** Ask questions about verses, historical context, or Greek/Hebrew word meanings.\n* **☀️ Daily Planning:** Get tailored morning routines, habit builders, and devotional schedules.\n* **🙏 Prayer Support:** Request personalized prayers for anxiety, gratitude, guidance, or loved ones.\n* **⚡ LifeOS Navigation:** Direct shortcuts to **FaithLingo**, **ChurchNotes**, **LifeMeet**, **Fellowship Chat**, and **Arcade Vault**.\n\nHow can I help you today?`,
+    actionSuggestion: { appId: 'faithlingo', label: 'Explore FaithLingo' },
+    suggestedFollowUps: [
+      'Give me an uplifting verse for today',
+      'How can I organize my sermon notes?',
+      'Tell me what features are in LifeOS'
+    ]
+  };
+}
+
+// API: LifeAi Intelligent Companion Chat Endpoint
+app.post('/api/lifeai/chat', async (req: Request, res: Response) => {
+  try {
+    const { message, history = [], persona = 'guide' } = req.body;
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'Message text is required' });
+    }
+
+    const trimmedMessage = message.trim();
+
+    // If Gemini client is not initialized, smoothly deliver the rich contextual wisdom engine
+    if (!aiClient) {
+      const fallback = getLifeAiFallbackResponse(trimmedMessage, persona);
+      return res.json(fallback);
+    }
+
+    // Build the system prompt
+    const systemInstruction = `You are "LifeAi", an intelligent, compassionate, and versatile AI companion built natively into LifeOS.
+LifeOS is an all-in-one operating system featuring:
+- FaithLingo: Gamified Bible learning, Jesus teachings, streaks, reading plans, and an offline 66-book Bible (NIV, KJV, BBE, WEB).
+- ChurchNotes: Sermon notebook, encrypted cloud backups, scripture tagging, and devotional journaling.
+- Fellowship Chat: Real-time fellowship rooms, community channels, and faith discussions.
+- LifeMeet: Video conferencing, screen sharing, and group prayer calls.
+- Arcade Vault: Faith-themed retro arcade games (Flappy Dove, Babel Stacker, Demon Buster, Eden Snake, Samson's Pillar Smash).
+- YouTube: Worship streams, study beats, and Bible teachings.
+- App Studio: Custom personal app generator.
+
+Active persona mode: "${persona || 'guide'}"
+- "guide": Warm, thoughtful, helpful everyday guide for faith, organization, goals, and LifeOS navigation.
+- "scholar": Insightful biblical scholar, deep theology, Greek/Hebrew word insights, historical context.
+- "navigator": Fast, direct LifeOS system expert, tips, shortcuts, and app recommendations.
+- "prayer": Deeply empathetic, compassionate prayer and spiritual comfort partner.
+
+Instructions:
+1. Provide rich, clear, markdown-formatted answers (use bullet points, bold headers, and clean paragraph breaks).
+2. Answer everyday questions with practical wisdom, empathy, and biblical grounding where appropriate.
+3. When referencing LifeOS capabilities, suggest the relevant app.
+4. Output MUST be valid JSON adhering strictly to this schema:
+{
+  "reply": "Full markdown-formatted response string",
+  "actionSuggestion": { "appId": "faithlingo" | "bible_journal" | "fellowship_chat" | "faith_meet" | "mini_games" | "youtube" | "settings", "label": "Short button label like 'Open ChurchNotes'" },
+  "suggestedFollowUps": ["Follow up question 1", "Follow up question 2", "Follow up question 3"]
+}
+Note: actionSuggestion is optional if no specific app is relevant.`;
+
+    // Construct clean alternating contents array for Gemini
+    const contents: Array<{ role: 'user' | 'model'; parts: { text: string }[] }> = [];
+
+    if (Array.isArray(history) && history.length > 0) {
+      // Pick last 8 turns
+      const recent = history.slice(-8);
+      for (const item of recent) {
+        if (!item || !item.text || !item.text.trim()) continue;
+        const role = item.sender === 'user' ? 'user' : 'model';
+
+        // Must start with user
+        if (contents.length === 0 && role === 'model') continue;
+
+        // Prevent identical consecutive roles by combining
+        if (contents.length > 0 && contents[contents.length - 1].role === role) {
+          contents[contents.length - 1].parts[0].text += `\n\n${item.text.trim()}`;
+        } else {
+          contents.push({
+            role,
+            parts: [{ text: item.text.trim() }]
+          });
+        }
+      }
+    }
+
+    // Append the current message as trailing user turn
+    if (contents.length > 0 && contents[contents.length - 1].role === 'user') {
+      contents[contents.length - 1].parts[0].text += `\n\n${trimmedMessage}`;
+    } else {
+      contents.push({
+        role: 'user',
+        parts: [{ text: trimmedMessage }]
+      });
+    }
+
+    const response = await aiClient.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents,
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+      }
+    });
+
+    const rawText = response.text || '{}';
+    let parsed: any;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = {
+        reply: rawText,
+        suggestedFollowUps: ['Tell me more', 'How do I apply this today?']
+      };
+    }
+
+    // Ensure reply exists
+    if (!parsed.reply || typeof parsed.reply !== 'string') {
+      parsed.reply = rawText || "I'm here to help you navigate LifeOS and grow in wisdom every day.";
+    }
+
+    if (!Array.isArray(parsed.suggestedFollowUps) || parsed.suggestedFollowUps.length === 0) {
+      parsed.suggestedFollowUps = ['Give me an uplifting verse', 'How can I organize my day?'];
+    }
+
+    return res.json(parsed);
+  } catch (error: any) {
+    console.error('Error in /api/lifeai/chat:', error);
+    // Graceful fallback so the user always gets a rich answer
+    const fallback = getLifeAiFallbackResponse(req.body?.message || '', req.body?.persona || 'guide');
+    return res.json(fallback);
+  }
+});
+
 // Cache for Bible complete translations in memory
 const bibleTranslationsCache: Record<string, Record<string, Record<string, string[]>>> = {};
 
