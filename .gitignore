@@ -6,3 +6,4 @@ coverage/
 *.log
 .env*
 !.env.example
+data/lifeos_meeting_store.json

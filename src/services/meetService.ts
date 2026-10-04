@@ -35,13 +35,17 @@ export interface MeetRoomInfo {
   createdAt: number;
 }
 
-type MeetEventListener = (event: { type: string; data: any }) => void;
+export type MeetEventListener = (event: { type: string; data: any }) => void;
 
 class MeetService {
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
+  private remoteStreams: Map<string, MediaStream> = new Map();
+  private pendingIceCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
+  private processedSignalIds: Set<string> = new Set();
   private eventSource: EventSource | null = null;
+  private pollIntervalId: any = null;
   private listeners: Set<MeetEventListener> = new Set();
   private currentRoomId: string | null = null;
   private currentUser: { id: string; name: string; photoURL?: string; isGoogleUser?: boolean } | null = null;
@@ -52,6 +56,7 @@ class MeetService {
   private audioAnalyser: AnalyserNode | null = null;
   private audioContext: AudioContext | null = null;
   private audioAnimationId: number | null = null;
+  private remoteAnalysers: Map<string, AnalyserNode> = new Map();
 
   private iceServers = {
     iceServers: [
@@ -138,8 +143,7 @@ class MeetService {
         return stream;
       }
     } catch (err: any) {
-      console.warn('Could not access real camera/mic (using fallback stream):', err.message);
-      // Fallback synthetic stream (canvas + audio oscillator silent track)
+      console.warn('Could not access real camera/mic (using fallback synthetic stream):', err.message);
       const synthetic = this.createSyntheticStream();
       this.localStream = synthetic;
       this.emit('local_stream', { stream: synthetic });
@@ -162,6 +166,27 @@ class MeetService {
       ctx.fillText('🕊️ LifeMeet Camera Ready', canvas.width / 2, canvas.height / 2);
     }
     const stream = canvas.captureStream(15);
+
+    // Provide a silent Web Audio track so WebRTC media description includes audio
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctxAudio = new AudioCtx();
+        const osc = ctxAudio.createOscillator();
+        const gain = ctxAudio.createGain();
+        gain.gain.value = 0.0001; // Silent
+        const dst = ctxAudio.createMediaStreamDestination();
+        osc.connect(gain);
+        gain.connect(dst);
+        osc.start();
+        const silentTrack = dst.stream.getAudioTracks()[0];
+        if (silentTrack) {
+          silentTrack.enabled = false;
+          stream.addTrack(silentTrack);
+        }
+      }
+    } catch {}
+
     return stream;
   }
 
@@ -191,9 +216,9 @@ class MeetService {
             }
             const avg = sum / dataArray.length;
             const level = Math.min(100, Math.round((avg / 255) * 100));
-            const isSpeaking = level > 14;
+            const isSpeaking = level > 12;
 
-            if (now - lastEmitTime > 120 || isSpeaking !== lastSpeakingState) {
+            if (now - lastEmitTime > 100 || isSpeaking !== lastSpeakingState) {
               lastEmitTime = now;
               lastSpeakingState = isSpeaking;
               this.emit('local_audio_level', { level, isSpeaking });
@@ -206,6 +231,53 @@ class MeetService {
     } catch {}
   }
 
+  // Setup Remote Peer Audio Analyser to show green ring when remote peer speaks
+  private setupRemoteAudioAnalysis(peerId: string, stream: MediaStream) {
+    try {
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) return;
+
+      if (!this.audioContext) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) this.audioContext = new AudioCtx();
+      }
+      if (!this.audioContext) return;
+
+      if (this.remoteAnalysers.has(peerId)) return;
+
+      const source = this.audioContext.createMediaStreamSource(stream);
+      const analyser = this.audioContext.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+      this.remoteAnalysers.set(peerId, analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let lastSpeaking = false;
+
+      const checkPeerAudio = () => {
+        if (!this.currentRoomId || !this.peerConnections.has(peerId)) {
+          this.remoteAnalysers.delete(peerId);
+          return;
+        }
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const level = Math.min(100, Math.round((avg / 255) * 100));
+        const isSpeaking = level > 14;
+
+        if (isSpeaking !== lastSpeaking) {
+          lastSpeaking = isSpeaking;
+          this.emit('peer_speaking', { peerId, isSpeaking, level });
+        }
+        requestAnimationFrame(checkPeerAudio);
+      };
+      requestAnimationFrame(checkPeerAudio);
+    } catch (err) {
+      console.warn('Remote audio analysis setup error:', err);
+    }
+  }
+
   // Join a meeting room
   public async joinRoom(roomId: string, user: { id: string; name: string; photoURL?: string; isGoogleUser?: boolean }): Promise<{
     room: MeetRoomInfo;
@@ -215,6 +287,11 @@ class MeetService {
   } | null> {
     this.currentRoomId = roomId;
     this.currentUser = user;
+
+    // Ensure local stream exists
+    if (!this.localStream) {
+      await this.startLocalPreview(true, true);
+    }
 
     let data: any = null;
     try {
@@ -280,10 +357,15 @@ class MeetService {
     return data;
   }
 
-  // Initialize SSE Signal Stream & Robust Dual-Polling Loop
+  // Initialize SSE Signal Stream & HTTP Polling Fallback
   private initSignalStream(roomId: string, userId: string) {
     if (this.eventSource) {
       this.eventSource.close();
+      this.eventSource = null;
+    }
+    if (this.pollIntervalId) {
+      clearInterval(this.pollIntervalId);
+      this.pollIntervalId = null;
     }
 
     const sseUrl = `/api/meet/stream?roomId=${encodeURIComponent(roomId)}&userId=${encodeURIComponent(userId)}`;
@@ -318,6 +400,9 @@ class MeetService {
             pc.close();
             this.peerConnections.delete(peerId);
           }
+          this.remoteStreams.delete(peerId);
+          this.pendingIceCandidates.delete(peerId);
+          this.remoteAnalysers.delete(peerId);
           this.emit('peer_left', payload);
         }
       } catch {}
@@ -339,28 +424,8 @@ class MeetService {
 
     this.eventSource.addEventListener('signal', async (e) => {
       try {
-        const { senderId, signalData, type } = JSON.parse(e.data);
-        if (senderId === this.currentUser?.id) return;
-
-        let pc = this.peerConnections.get(senderId);
-        if (!pc) {
-          const isInit = (this.currentUser?.id || '').localeCompare(senderId) < 0;
-          pc = this.createPeerConnection(senderId, isInit);
-          this.emit('peer_joined', { peer: { id: senderId }, participants: [] });
-        }
-
-        if (type === 'offer') {
-          await pc.setRemoteDescription(new RTCSessionDescription(signalData));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          this.sendSignal(senderId, answer, 'answer');
-        } else if (type === 'answer') {
-          await pc.setRemoteDescription(new RTCSessionDescription(signalData));
-        } else if (type === 'ice') {
-          if (signalData) {
-            await pc.addIceCandidate(new RTCIceCandidate(signalData));
-          }
-        }
+        const sig = JSON.parse(e.data);
+        await this.handleIncomingSignal(sig);
       } catch (err) {
         console.warn('Error handling incoming WebRTC signal:', err);
       }
@@ -370,14 +435,13 @@ class MeetService {
       console.warn('Meet SSE stream disconnected, relying on HTTP polling signals & room sync...');
     };
 
-    // Robust Dual-Polling Interval (Signals + Room Participants Sync every 1.2 seconds)
-    const pollInterval = setInterval(async () => {
+    // Robust Polling Interval (Signals + Room Sync every 1.2 seconds)
+    this.pollIntervalId = setInterval(async () => {
       if (!this.currentRoomId || !this.currentUser) {
-        clearInterval(pollInterval);
+        if (this.pollIntervalId) clearInterval(this.pollIntervalId);
         return;
       }
       try {
-        // 1. Poll signals & participants
         const sigRes = await fetch(`/api/meet/signals?roomId=${encodeURIComponent(this.currentRoomId)}&userId=${encodeURIComponent(this.currentUser.id)}`);
         if (sigRes.ok) {
           const { signals, participants } = await sigRes.json();
@@ -396,50 +460,75 @@ class MeetService {
             }
           }
         }
-
-        // 2. Poll room room details for redundancy
-        const roomRes = await fetch(`/api/meet/rooms/${encodeURIComponent(this.currentRoomId)}`);
-        if (roomRes.ok) {
-          const roomData = await roomRes.json();
-          if (Array.isArray(roomData.participants)) {
-            this.emit('participants_updated', { participants: roomData.participants });
-            roomData.participants.forEach((p: MeetParticipant) => {
-              if (p.id !== this.currentUser?.id && !this.peerConnections.has(p.id)) {
-                const isInit = (this.currentUser?.id || '').localeCompare(p.id) < 0;
-                this.createPeerConnection(p.id, isInit);
-              }
-            });
-          }
-        }
       } catch {}
     }, 1200);
   }
 
-  private async handleIncomingSignal(sig: { senderId: string; signalData: any; type: string }) {
-    const { senderId, signalData, type } = sig;
+  // Handle incoming WebRTC signal with deduplication and ICE candidate queue
+  private async handleIncomingSignal(sig: { id?: string; senderId: string; signalData: any; type: string }) {
+    const { id, senderId, signalData, type } = sig;
     if (senderId === this.currentUser?.id) return;
+
+    // Deduplicate signals
+    if (id) {
+      if (this.processedSignalIds.has(id)) return;
+      this.processedSignalIds.add(id);
+      if (this.processedSignalIds.size > 2000) {
+        const first = this.processedSignalIds.values().next().value;
+        if (first) this.processedSignalIds.delete(first);
+      }
+    }
 
     let pc = this.peerConnections.get(senderId);
     if (!pc) {
-      pc = this.createPeerConnection(senderId, false);
+      const isInit = (this.currentUser?.id || '').localeCompare(senderId) < 0;
+      pc = this.createPeerConnection(senderId, isInit);
       this.emit('peer_joined', { peer: { id: senderId }, participants: [] });
     }
 
     try {
       if (type === 'offer') {
         await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+        await this.flushPendingIceCandidates(senderId, pc);
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         this.sendSignal(senderId, answer, 'answer');
       } else if (type === 'answer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+        if (pc.signalingState === 'have-local-offer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+          await this.flushPendingIceCandidates(senderId, pc);
+        }
       } else if (type === 'ice') {
         if (signalData) {
-          await pc.addIceCandidate(new RTCIceCandidate(signalData));
+          if (pc.remoteDescription && pc.remoteDescription.type) {
+            await pc.addIceCandidate(new RTCIceCandidate(signalData));
+          } else {
+            // Buffer candidate until remote description is applied
+            if (!this.pendingIceCandidates.has(senderId)) {
+              this.pendingIceCandidates.set(senderId, []);
+            }
+            this.pendingIceCandidates.get(senderId)!.push(signalData);
+          }
         }
       }
     } catch (err) {
-      console.warn('Error handling incoming WebRTC signal:', err);
+      console.warn('Error applying incoming WebRTC signal:', err);
+    }
+  }
+
+  // Flush queued ICE candidates after remote description is applied
+  private async flushPendingIceCandidates(peerId: string, pc: RTCPeerConnection) {
+    const candidates = this.pendingIceCandidates.get(peerId);
+    if (candidates && candidates.length > 0) {
+      this.pendingIceCandidates.delete(peerId);
+      for (const cand of candidates) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (e) {
+          console.warn('Error adding queued ICE candidate:', e);
+        }
+      }
     }
   }
 
@@ -456,22 +545,44 @@ class MeetService {
     const currentStream = this.isScreenSharing && this.screenStream ? this.screenStream : this.localStream;
     if (currentStream) {
       currentStream.getTracks().forEach(track => {
-        pc.addTrack(track, currentStream);
+        try {
+          pc.addTrack(track, currentStream);
+        } catch (e) {
+          console.warn('Error adding track to peer connection:', e);
+        }
       });
     }
 
     // Handle remote track arrival
     pc.ontrack = (event) => {
-      const [remoteStream] = event.streams;
-      if (remoteStream) {
-        this.emit('remote_stream', { peerId: remotePeerId, stream: remoteStream });
+      let stream = this.remoteStreams.get(remotePeerId);
+      if (!stream) {
+        stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+        this.remoteStreams.set(remotePeerId, stream);
+      } else {
+        // Add new track if not already included
+        if (!stream.getTracks().some(t => t.id === event.track.id)) {
+          stream.addTrack(event.track);
+          // Re-instantiate MediaStream reference so React state recognizes change
+          stream = new MediaStream(stream.getTracks());
+          this.remoteStreams.set(remotePeerId, stream);
+        }
       }
+
+      this.setupRemoteAudioAnalysis(remotePeerId, stream);
+      this.emit('remote_stream', { peerId: remotePeerId, stream });
     };
 
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        this.sendSignal(remotePeerId, event.candidate, 'ice');
+        this.sendSignal(remotePeerId, event.candidate.toJSON(), 'ice');
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        try { pc.restartIce(); } catch {}
       }
     };
 
@@ -499,7 +610,7 @@ class MeetService {
         } catch (err) {
           console.warn('Error creating WebRTC offer timeout fallback:', err);
         }
-      }, 600);
+      }, 500);
     }
 
     return pc;
@@ -508,6 +619,9 @@ class MeetService {
   // Send WebRTC Signal (Offer/Answer/Candidate) to target peer via server
   private async sendSignal(targetId: string, signalData: any, type: 'offer' | 'answer' | 'ice') {
     if (!this.currentRoomId || !this.currentUser) return;
+    const signalId = `sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    this.processedSignalIds.add(signalId);
+
     try {
       await fetch('/api/meet/signal', {
         method: 'POST',
@@ -517,7 +631,8 @@ class MeetService {
           senderId: this.currentUser.id,
           targetId,
           signalData,
-          type
+          type,
+          signalId
         })
       });
     } catch (err) {
@@ -559,17 +674,17 @@ class MeetService {
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
       if (videoDevices.length > 1 && this.localStream) {
         const currentTrack = this.localStream.getVideoTracks()[0];
-        const currentFacing = currentTrack.getSettings().facingMode;
+        const currentFacing = currentTrack ? currentTrack.getSettings().facingMode : 'user';
         const newFacing = currentFacing === 'user' ? 'environment' : 'user';
 
-        currentTrack.stop();
+        if (currentTrack) currentTrack.stop();
         const newStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: newFacing },
           audio: !this.isAudioMuted
         });
 
         const newVideoTrack = newStream.getVideoTracks()[0];
-        this.localStream.removeTrack(currentTrack);
+        if (currentTrack) this.localStream.removeTrack(currentTrack);
         this.localStream.addTrack(newVideoTrack);
 
         // Replace track in all peer connections
@@ -592,11 +707,9 @@ class MeetService {
   // Toggle Screen Sharing
   public async toggleScreenShare(): Promise<boolean> {
     if (this.isScreenSharing) {
-      // Stop screen sharing
       this.stopScreenSharing();
       return false;
     } else {
-      // Start screen sharing
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
           throw new Error('Screen sharing not supported on this device');
@@ -712,12 +825,21 @@ class MeetService {
       } catch {}
     }
 
-    this.peerConnections.forEach(pc => pc.close());
+    this.peerConnections.forEach(pc => {
+      try { pc.close(); } catch {}
+    });
     this.peerConnections.clear();
+    this.remoteStreams.clear();
+    this.pendingIceCandidates.clear();
+    this.remoteAnalysers.clear();
 
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
+    }
+    if (this.pollIntervalId) {
+      clearInterval(this.pollIntervalId);
+      this.pollIntervalId = null;
     }
 
     this.stopLocalStream();

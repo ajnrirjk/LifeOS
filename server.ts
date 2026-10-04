@@ -967,8 +967,12 @@ interface ServerMeetingRoom {
   messages: MeetingChatMessage[];
 }
 
-// File-backed shared storage for meeting rooms & WebRTC signals across devices and instances
-const STORE_PATH = path.join('/tmp', 'lifeos_meeting_store.json');
+// Shared storage for meeting rooms across devices
+const STORE_DIR = path.resolve(__dirname, 'data');
+if (!fs.existsSync(STORE_DIR)) {
+  try { fs.mkdirSync(STORE_DIR, { recursive: true }); } catch {}
+}
+const STORE_PATH = path.resolve(STORE_DIR, 'lifeos_meeting_store.json');
 
 function getStoredStore(): { rooms: Map<string, ServerMeetingRoom>; signals: Map<string, any[]> } {
   const rooms = new Map<string, ServerMeetingRoom>([
@@ -1023,11 +1027,6 @@ function getStoredStore(): { rooms: Map<string, ServerMeetingRoom>; signals: Map
           rooms.set(k, v as ServerMeetingRoom);
         });
       }
-      if (data.signals) {
-        Object.entries(data.signals).forEach(([k, v]) => {
-          signals.set(k, v as any[]);
-        });
-      }
     }
   } catch {}
 
@@ -1038,48 +1037,28 @@ const initialStore = getStoredStore();
 const meetingRooms: Map<string, ServerMeetingRoom> = initialStore.rooms;
 const pendingSignals: Map<string, any[]> = initialStore.signals;
 
+let persistTimeout: NodeJS.Timeout | null = null;
 function persistStore() {
-  try {
-    const roomsObj: Record<string, ServerMeetingRoom> = {};
-    meetingRooms.forEach((r, k) => { roomsObj[k] = r; });
-    const signalsObj: Record<string, any[]> = {};
-    pendingSignals.forEach((s, k) => { signalsObj[k] = s; });
-    fs.writeFileSync(STORE_PATH, JSON.stringify({ rooms: roomsObj, signals: signalsObj }), 'utf-8');
-  } catch {}
+  if (persistTimeout) return;
+  persistTimeout = setTimeout(() => {
+    persistTimeout = null;
+    try {
+      const roomsObj: Record<string, ServerMeetingRoom> = {};
+      meetingRooms.forEach((r, k) => {
+        // Only persist clean room state, exclude transient streams
+        roomsObj[k] = {
+          ...r,
+          participants: r.participants || {},
+          messages: (r.messages || []).slice(-100)
+        };
+      });
+      fs.writeFileSync(STORE_PATH, JSON.stringify({ rooms: roomsObj }, null, 2), 'utf-8');
+    } catch {}
+  }, 1000);
 }
 
 function syncStoreFromDisk() {
-  try {
-    if (fs.existsSync(STORE_PATH)) {
-      const raw = fs.readFileSync(STORE_PATH, 'utf-8');
-      const data = JSON.parse(raw);
-      if (data.rooms) {
-        Object.entries(data.rooms).forEach(([k, v]) => {
-          if (!meetingRooms.has(k)) {
-            meetingRooms.set(k, v as ServerMeetingRoom);
-          } else {
-            // Merge participants
-            const existing = meetingRooms.get(k)!;
-            const incoming = v as ServerMeetingRoom;
-            existing.participants = { ...incoming.participants, ...existing.participants };
-            if (incoming.messages && incoming.messages.length > existing.messages.length) {
-              existing.messages = incoming.messages;
-            }
-          }
-        });
-      }
-      if (data.signals) {
-        Object.entries(data.signals).forEach(([k, v]) => {
-          const arr = v as any[];
-          if (!pendingSignals.has(k)) {
-            pendingSignals.set(k, arr);
-          } else {
-            pendingSignals.set(k, [...pendingSignals.get(k)!, ...arr]);
-          }
-        });
-      }
-    }
-  } catch {}
+  // Rooms are maintained in-memory for low-latency WebRTC; sync is loaded on start
 }
 
 const meetingClients: Map<string, { res: Response; roomId: string; userId: string }> = new Map();
@@ -1258,7 +1237,7 @@ app.post('/api/meet/join', (req: Request, res: Response) => {
 // 5. Relay WebRTC Signal (Offer, Answer, ICE Candidate) between peers
 app.post('/api/meet/signal', (req: Request, res: Response) => {
   syncStoreFromDisk();
-  const { roomId, senderId, targetId, signalData, type } = req.body;
+  const { roomId, senderId, targetId, signalData, type, signalId } = req.body;
   if (!roomId || !senderId || !targetId || !signalData) {
     return res.status(400).json({ error: 'Missing roomId, senderId, targetId, or signalData' });
   }
@@ -1268,37 +1247,44 @@ app.post('/api/meet/signal', (req: Request, res: Response) => {
     room.participants[senderId].lastSeen = Date.now();
   }
 
-  // Find target's SSE stream and deliver WebRTC signal directly
-  let delivered = false;
-  meetingClients.forEach((client) => {
-    if (client.roomId === roomId && client.userId === targetId) {
-      try {
-        client.res.write(`event: signal\ndata: ${JSON.stringify({ senderId, targetId, signalData, type })}\n\n`);
-        delivered = true;
-      } catch {}
-    }
-  });
-
-  // Also push to HTTP poll queue for guaranteed retrieval
-  const queueKey = `${roomId}_${targetId}`;
-  if (!pendingSignals.has(queueKey)) {
-    pendingSignals.set(queueKey, []);
-  }
-  pendingSignals.get(queueKey)!.push({
+  const sid = signalId || `sig_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const signalPacket = {
+    id: sid,
+    roomId,
     senderId,
     targetId,
     signalData,
     type,
     timestamp: Date.now()
+  };
+
+  // Find target's SSE stream and deliver WebRTC signal directly
+  let delivered = false;
+  meetingClients.forEach((client) => {
+    if (client.roomId === roomId && client.userId === targetId) {
+      try {
+        client.res.write(`event: signal\ndata: ${JSON.stringify(signalPacket)}\n\n`);
+        delivered = true;
+      } catch {}
+    }
   });
 
-  persistStore();
-  return res.json({ success: true, delivered });
+  // Always keep in fallback HTTP poll queue for guaranteed reliability
+  const queueKey = `${roomId}_${targetId}`;
+  if (!pendingSignals.has(queueKey)) {
+    pendingSignals.set(queueKey, []);
+  }
+  const queue = pendingSignals.get(queueKey)!;
+  queue.push(signalPacket);
+  if (queue.length > 60) {
+    queue.splice(0, queue.length - 60);
+  }
+
+  return res.json({ success: true, delivered, signalId: sid });
 });
 
 // 5b. HTTP Polling endpoint for WebRTC signals (Guaranteed cross-device relay)
 app.get('/api/meet/signals', (req: Request, res: Response) => {
-  syncStoreFromDisk();
   const roomId = String(req.query.roomId || '');
   const userId = String(req.query.userId || '');
   if (!roomId || !userId) {
@@ -1314,7 +1300,6 @@ app.get('/api/meet/signals', (req: Request, res: Response) => {
     room.participants[userId].lastSeen = Date.now();
   }
 
-  persistStore();
   return res.json({
     signals,
     participants: room ? Object.values(room.participants) : []
@@ -1323,7 +1308,6 @@ app.get('/api/meet/signals', (req: Request, res: Response) => {
 
 // 6. Update Participant State (Mute mic, camera off, screen share, raise hand)
 app.post('/api/meet/state', (req: Request, res: Response) => {
-  syncStoreFromDisk();
   const { roomId, userId, updates } = req.body;
   if (!roomId || !userId || !updates) {
     return res.status(400).json({ error: 'roomId, userId, and updates are required' });
@@ -1354,7 +1338,6 @@ app.post('/api/meet/state', (req: Request, res: Response) => {
 
 // 7. Send In-Call Chat Message
 app.post('/api/meet/chat', (req: Request, res: Response) => {
-  syncStoreFromDisk();
   const { roomId, senderId, senderName, senderPhoto, text } = req.body;
   if (!roomId || !text || !text.trim()) {
     return res.status(400).json({ error: 'roomId and text are required' });
@@ -1394,6 +1377,7 @@ app.post('/api/meet/leave', (req: Request, res: Response) => {
   const room = meetingRooms.get(roomId);
   if (room && room.participants[userId]) {
     delete room.participants[userId];
+    persistStore();
     broadcastToMeetingRoom(roomId, 'peer_left', {
       peerId: userId,
       participants: Object.values(room.participants)
@@ -1440,18 +1424,25 @@ app.get('/api/meet/stream', (req: Request, res: Response) => {
     clearInterval(keepAliveInterval);
     meetingClients.delete(clientId);
 
-    // If no other stream for this user in this room, mark as left
-    const hasOtherStream = Array.from(meetingClients.values()).some(
-      c => c.roomId === roomId && c.userId === userId
-    );
+    // 4-second grace period before evicting participant to permit smooth SSE reconnects
+    setTimeout(() => {
+      const hasOtherStream = Array.from(meetingClients.values()).some(
+        c => c.roomId === roomId && c.userId === userId
+      );
 
-    if (!hasOtherStream && room && room.participants[userId]) {
-      delete room.participants[userId];
-      broadcastToMeetingRoom(roomId, 'peer_left', {
-        peerId: userId,
-        participants: Object.values(room.participants)
-      });
-    }
+      if (!hasOtherStream && room && room.participants[userId]) {
+        // Also check if they were seen in the last 15 seconds via polling
+        const lastSeenDiff = Date.now() - (room.participants[userId].lastSeen || 0);
+        if (lastSeenDiff > 12000) {
+          delete room.participants[userId];
+          persistStore();
+          broadcastToMeetingRoom(roomId, 'peer_left', {
+            peerId: userId,
+            participants: Object.values(room.participants)
+          });
+        }
+      }
+    }, 4000);
   });
 });
 

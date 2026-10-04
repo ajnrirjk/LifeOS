@@ -84,8 +84,52 @@ const VideoStreamPlayer = React.memo(({
       ref={videoRef}
       autoPlay
       playsInline
-      muted={isLocal}
+      muted={true}
       className={className}
+    />
+  );
+});
+
+// Dedicated Audio Player for each Remote Participant
+// Guarantees remote voice is ALWAYS audible even if their camera is turned off
+const RemoteAudioPlayer = React.memo(({
+  peerId,
+  stream,
+  isMuted,
+  onAutoplayBlocked
+}: {
+  peerId: string;
+  stream: MediaStream;
+  isMuted: boolean;
+  onAutoplayBlocked?: () => void;
+}) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.srcObject !== stream) {
+      audio.srcObject = stream;
+    }
+    audio.muted = isMuted;
+    if (!isMuted) {
+      audio.play().catch((err: any) => {
+        if (err && err.name === 'NotAllowedError') {
+          onAutoplayBlocked?.();
+        }
+      });
+    }
+  }, [stream, isMuted, onAutoplayBlocked]);
+
+  return (
+    <audio
+      ref={audioRef}
+      autoPlay
+      playsInline
+      muted={isMuted}
+      className="hidden"
+      data-peer-id={peerId}
     />
   );
 });
@@ -214,6 +258,7 @@ export const LifeMeetApp: React.FC = () => {
   const [publicRooms, setPublicRooms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   // Local Media & Participant State
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -268,6 +313,24 @@ export const LifeMeetApp: React.FC = () => {
     };
   }, [googleUser, settings.profile.name]);
 
+  // Check URL hash for direct meeting invite link (e.g. /#meet=fellowship-prayer-room)
+  useEffect(() => {
+    const handleMeetHash = () => {
+      const hash = window.location.hash;
+      const match = hash.match(/meet=([a-zA-Z0-9_-]+)/i);
+      if (match && match[1]) {
+        const code = match[1];
+        setRoomCodeInput(code);
+        if (!isInCall) {
+          handleJoinMeeting(code);
+        }
+      }
+    };
+    handleMeetHash();
+    window.addEventListener('hashchange', handleMeetHash);
+    return () => window.removeEventListener('hashchange', handleMeetHash);
+  }, [isInCall]);
+
   // 1. Fetch Public Lounges on Mount & start preview
   useEffect(() => {
     loadPublicRooms();
@@ -298,6 +361,11 @@ export const LifeMeetApp: React.FC = () => {
       } else if (type === 'local_audio_level') {
         setLocalAudioLevel(data.level);
         setIsLocalSpeaking(data.isSpeaking);
+      } else if (type === 'peer_speaking') {
+        setSpeakingPeers(prev => ({
+          ...prev,
+          [data.peerId]: data.isSpeaking
+        }));
       } else if (type === 'local_state_changed') {
         setIsAudioMuted(data.isAudioMuted);
         setIsVideoMuted(data.isVideoMuted);
@@ -316,6 +384,18 @@ export const LifeMeetApp: React.FC = () => {
         }
       } else if (type === 'peer_left') {
         setParticipants(data.participants || []);
+        if (data.peerId) {
+          setSpeakingPeers(prev => {
+            const next = { ...prev };
+            delete next[data.peerId];
+            return next;
+          });
+          setRemoteStreams(prev => {
+            const next = { ...prev };
+            delete next[data.peerId];
+            return next;
+          });
+        }
       } else if (type === 'peer_state_changed') {
         setParticipants(data.participants || []);
         if (data.updates?.prayerFocus) {
@@ -337,6 +417,7 @@ export const LifeMeetApp: React.FC = () => {
         setRoomInfo(null);
         setParticipants([]);
         setRemoteStreams({});
+        setSpeakingPeers({});
         startPreview();
       }
     });
@@ -779,7 +860,56 @@ export const LifeMeetApp: React.FC = () => {
                     onPin={() => setPinnedPeerId(pinnedPeerId === peer.id ? null : peer.id)}
                   />
                 ))}
+
+              {/* Waiting for Others Card when alone in call */}
+              {participants.filter(p => p.id !== currentUser.id).length === 0 && (
+                <div className="hidden lg:flex flex-col items-center justify-center p-6 rounded-3xl bg-stone-900/60 border border-white/10 text-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-2xl">
+                    🕊️
+                  </div>
+                  <h3 className="font-extrabold text-sm text-stone-200">You're the first one here!</h3>
+                  <p className="text-xs text-stone-400 max-w-xs">
+                    Share the meeting code <span className="font-mono text-blue-400 font-bold">{roomInfo?.id}</span> with brothers and sisters to invite them into this fellowship.
+                  </p>
+                  <button
+                    onClick={copyMeetingCode}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedCode ? 'Copied Invite Link!' : 'Copy Meeting Invite Link'}</span>
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* Dedicated Remote Audio Players (Always audible even if remote camera is disabled) */}
+            {participants
+              .filter((p) => p.id !== currentUser.id && remoteStreams[p.id])
+              .map((p) => (
+                <RemoteAudioPlayer
+                  key={`remote-audio-${p.id}`}
+                  peerId={p.id}
+                  stream={remoteStreams[p.id]}
+                  isMuted={p.isAudioMuted}
+                  onAutoplayBlocked={() => setAutoplayBlocked(true)}
+                />
+              ))}
+
+            {/* Autoplay blocked banner */}
+            {autoplayBlocked && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-amber-500 text-stone-950 px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-black ring-2 ring-amber-300">
+                <span>🔊 Click to enable participant audio</span>
+                <button
+                  onClick={() => {
+                    setAutoplayBlocked(false);
+                    document.querySelectorAll('audio').forEach(a => a.play().catch(() => {}));
+                  }}
+                  className="px-3 py-1 bg-stone-950 text-white rounded-xl hover:bg-stone-900 transition-colors"
+                >
+                  Unmute
+                </button>
+              </div>
+            )}
 
             {/* Live Closed Captions Subtitle Overlay */}
             {isCaptionsEnabled && currentCaption && (

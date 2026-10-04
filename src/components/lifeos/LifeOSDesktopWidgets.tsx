@@ -703,6 +703,35 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {widgetId === 'life_meet' && (
+                    <div className="flex flex-col h-full justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-2xl shrink-0">
+                          📹
+                        </div>
+                        <div>
+                          <h4 className="font-black text-sm text-white">Fellowship Video Calls</h4>
+                          <p className="text-xs text-stone-300">
+                            WebRTC group video calling, live screen sharing & prayer fellowship.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            sounds.playTap();
+                            launchApp('faith_meet');
+                          }}
+                          className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                        >
+                          <span>Join LifeMeet</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Widget Action Footer */}
@@ -724,6 +753,8 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         launchApp('mini_cats');
                       } else if (widgetId === 'app_studio') {
                         launchApp('app_studio');
+                      } else if (widgetId === 'life_meet') {
+                        launchApp('faith_meet');
                       } else {
                         launchApp('faithlingo');
                       }
@@ -741,6 +772,8 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         ? 'Record Sermon'
                         : widgetId === 'app_studio'
                         ? 'Open Studio'
+                        : widgetId === 'life_meet'
+                        ? 'Open LifeMeet'
                         : 'Open FaithLingo'}
                     </span>
                     <ArrowRight className="w-3.5 h-3.5" />

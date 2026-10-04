@@ -9,7 +9,8 @@ export type WidgetId =
   | 'quick_listen'
   | 'prayer_focus'
   | 'spiritual_habits'
-  | 'app_studio';
+  | 'app_studio'
+  | 'life_meet';
 
 export interface DesktopWidgetConfig {
   id: WidgetId;
@@ -120,6 +121,15 @@ export const ALL_DESKTOP_WIDGETS: DesktopWidgetConfig[] = [
     category: 'System',
     span: 'small',
     color: 'from-cyan-500/20 to-blue-600/20 border-cyan-500/30'
+  },
+  {
+    id: 'life_meet',
+    title: 'LifeMeet Lounge',
+    subtitle: 'Real-time video fellowship & group prayer rooms',
+    emoji: '📹',
+    category: 'Spiritual',
+    span: 'medium',
+    color: 'from-blue-600/20 to-sky-600/20 border-blue-500/30'
   }
 ];
 

@@ -68,6 +68,7 @@ export const LifeOSDesktop: React.FC = () => {
     apps,
     activeAppId,
     openWindows,
+    launchApp,
     closeApp,
     minimizeApp,
     maximizeApp,
@@ -120,6 +121,18 @@ export const LifeOSDesktop: React.FC = () => {
     window.addEventListener('hashchange', checkPrivacyRoute);
     return () => window.removeEventListener('hashchange', checkPrivacyRoute);
   }, []);
+
+  // Check URL hash for direct meeting invite link (e.g. /#meet=fellowship-prayer-room)
+  React.useEffect(() => {
+    const checkMeetRoute = () => {
+      if (window.location.hash.toLowerCase().includes('meet=')) {
+        launchApp('faith_meet');
+      }
+    };
+    checkMeetRoute();
+    window.addEventListener('hashchange', checkMeetRoute);
+    return () => window.removeEventListener('hashchange', checkMeetRoute);
+  }, [launchApp]);
 
   // Keyboard shortcuts (Escape key minimizes active window to desktop dashboard)
   React.useEffect(() => {
