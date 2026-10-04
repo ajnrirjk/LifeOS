@@ -4,7 +4,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { useApp } from '../../context/AppContext';
 import { sounds } from '../../services/soundEffects';
 import { firebaseGlobalService } from '../../services/firebaseGlobalService';
-import { Sparkles, ArrowRight, Shield, Check } from 'lucide-react';
+import { Sparkles, ArrowRight, Shield, Check, X } from 'lucide-react';
 
 const AVATAR_OPTIONS = ['🕊️', '✝️', '👑', '📖', '🧔🏻‍♂️', '👩🏼', '🌟', '🌿', '🕯️', '🛡️', '⛪', '🐑'];
 
@@ -17,11 +17,20 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
   const { settings, updateProfile, googleUser, signInWithGoogle, isGoogleSigningIn, isAuthorizedAdmin } = useSettings();
   const { userStats } = useApp();
 
-  const [name, setName] = useState('');
-  const [handle, setHandle] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState('🕊️');
+  const [name, setName] = useState(() => (settings.profile.name && settings.profile.name !== 'Believer in Christ') ? settings.profile.name : '');
+  const [handle, setHandle] = useState(() => settings.profile.handle || '');
+  const [selectedAvatar, setSelectedAvatar] = useState(() => settings.profile.avatar || '🕊️');
   const [bio, setBio] = useState('Walking with Christ daily • LifeOS Believer');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleDismiss = () => {
+    try {
+      localStorage.setItem('lifeos_user_registered_v2', 'true');
+      localStorage.setItem('lifeos_user_registered_v1', 'true');
+    } catch {}
+    sounds.playTap();
+    onComplete();
+  };
 
   if (!isOpen) return null;
 
@@ -85,6 +94,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
 
       try {
         localStorage.setItem('lifeos_user_registered_v2', 'true');
+        localStorage.setItem('lifeos_user_registered_v1', 'true');
       } catch {}
 
       sounds.playVictory();
@@ -105,6 +115,16 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
         transition={{ type: 'spring', damping: 25, stiffness: 350 }}
         className="w-full max-w-lg bg-stone-900 border border-white/20 rounded-3xl p-6 sm:p-8 shadow-2xl text-stone-100 relative overflow-hidden"
       >
+        {/* Close / Dismiss Button */}
+        <button
+          type="button"
+          onClick={handleDismiss}
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center transition-all z-10"
+          title="Dismiss"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
         {/* Background glow header */}
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-emerald-600/20 via-teal-500/10 to-transparent pointer-events-none" />
 
@@ -221,19 +241,29 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({ 
               </div>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isSubmitting || !name.trim()}
-              className={`w-full py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all ${
-                name.trim()
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-900/40 active:scale-98'
-                  : 'bg-stone-800 text-stone-500 cursor-not-allowed'
-              }`}
-            >
-              <span>Enter LifeOS Sanctuary</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {/* Submit & Skip Buttons */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="submit"
+                disabled={isSubmitting || !name.trim()}
+                className={`w-full py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all ${
+                  name.trim()
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-900/40 active:scale-98 cursor-pointer'
+                    : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                }`}
+              >
+                <span>Enter LifeOS Sanctuary</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="w-full py-2 text-center text-xs text-stone-400 hover:text-stone-200 transition-colors font-medium"
+              >
+                Skip for now (Continue as Believer)
+              </button>
+            </div>
           </form>
         </div>
       </motion.div>

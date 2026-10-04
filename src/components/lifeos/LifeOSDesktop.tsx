@@ -44,9 +44,21 @@ export const LifeOSDesktop: React.FC = () => {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
-      const isRegistered = localStorage.getItem('lifeos_user_registered_v2');
+      const isRegisteredV2 = localStorage.getItem('lifeos_user_registered_v2');
+      const isRegisteredV1 = localStorage.getItem('lifeos_user_registered_v1');
       const googleUser = localStorage.getItem('lifeos_persistent_google_user');
-      return !isRegistered && !googleUser;
+      const savedSettings = localStorage.getItem('lifeos_system_settings_v1');
+
+      if (isRegisteredV2 === 'true' || isRegisteredV1 === 'true' || Boolean(googleUser)) {
+        return false;
+      }
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed?.profile?.name && parsed.profile.name.trim() !== '') {
+          return false;
+        }
+      }
+      return !isRegisteredV2 && !isRegisteredV1;
     } catch {
       return false;
     }

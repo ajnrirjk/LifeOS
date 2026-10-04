@@ -31,6 +31,8 @@ const MIME_TYPES = {
   '.webmanifest': 'application/manifest+json'
 };
 
+const FIXED_PORT = 38888;
+
 function startEmbeddedServer(distDir) {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
@@ -65,13 +67,17 @@ function startEmbeddedServer(distDir) {
     });
 
     server.on('error', (err) => {
-      reject(err);
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`[LifeOS Desktop] Port ${FIXED_PORT} already bound. Reusing existing instance...`);
+        resolve({ server: null, port: FIXED_PORT });
+      } else {
+        reject(err);
+      }
     });
 
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      console.log(`[LifeOS Desktop] Embedded server listening on http://127.0.0.1:${port}`);
-      resolve({ server, port });
+    server.listen(FIXED_PORT, '127.0.0.1', () => {
+      console.log(`[LifeOS Desktop] Embedded server listening on http://127.0.0.1:${FIXED_PORT}`);
+      resolve({ server, port: FIXED_PORT });
     });
   });
 }
