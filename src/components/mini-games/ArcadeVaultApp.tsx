@@ -333,7 +333,7 @@ export const ArcadeVaultApp: React.FC = () => {
   // If a specific mini game is launched, render its game screen
   if (activeGame) {
     return (
-      <div className="min-h-full bg-stone-950 text-white flex flex-col justify-start items-center py-2 px-1 sm:px-4 overflow-x-hidden w-full">
+      <div className="h-full w-full overflow-y-auto overflow-x-hidden bg-stone-950 text-white flex flex-col justify-start items-center py-2 px-1 sm:px-4">
         {activeGame === 'pilgrim_go' && (
           <PilgrimGoGame
             highScore={stats.highScores.pilgrim_go || 0}
@@ -388,9 +388,9 @@ export const ArcadeVaultApp: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full bg-stone-950 text-white flex flex-col">
+    <div className="flex-1 flex flex-col h-full w-full overflow-y-auto overflow-x-hidden bg-stone-950 text-white select-none">
       {/* Hero Header */}
-      <div className="relative overflow-hidden bg-gradient-to-b from-purple-950/80 via-stone-900 to-stone-950 px-4 sm:px-8 pt-6 pb-6 border-b border-purple-900/30">
+      <div className="relative shrink-0 overflow-hidden bg-gradient-to-b from-purple-950/80 via-stone-900 to-stone-950 px-4 sm:px-8 pt-5 pb-5 border-b border-purple-900/30">
         <div className="absolute top-0 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-10 left-1/3 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -415,20 +415,20 @@ export const ArcadeVaultApp: React.FC = () => {
           </div>
 
           {/* Arcade Token & Stats Badge */}
-          <div className="flex items-center gap-3 bg-stone-900/90 border border-white/10 rounded-2xl p-2.5 sm:p-3 shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-2.5 bg-stone-900/90 border border-white/10 rounded-2xl p-2 sm:p-2.5 shadow-xl backdrop-blur-md">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300">
-              <span className="text-lg">🪙</span>
+              <span className="text-base sm:text-lg">🪙</span>
               <div>
                 <div className="text-[10px] font-bold text-amber-400/80 uppercase leading-none">Arcade Tokens</div>
-                <div className="text-sm sm:text-base font-black text-amber-300 leading-none mt-0.5">{stats.totalTokens}</div>
+                <div className="text-xs sm:text-sm font-black text-amber-300 leading-none mt-0.5">{stats.totalTokens}</div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-300">
-              <Trophy className="w-4 h-4 text-purple-400" />
+              <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
               <div>
                 <div className="text-[10px] font-bold text-purple-400/80 uppercase leading-none">Total Plays</div>
-                <div className="text-sm sm:text-base font-black text-purple-300 leading-none mt-0.5">
+                <div className="text-xs sm:text-sm font-black text-purple-300 leading-none mt-0.5">
                   {Object.values(stats.gamesPlayed).reduce((a, b) => a + b, 0)}
                 </div>
               </div>
@@ -446,58 +446,69 @@ export const ArcadeVaultApp: React.FC = () => {
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Navigation Tabs */}
-        <div className="max-w-5xl mx-auto flex items-center gap-2 mt-6">
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setActiveTab('games');
-            }}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs transition-all ${
-              activeTab === 'games'
-                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
-                : 'bg-white/5 text-stone-400 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Gamepad2 className="w-3.5 h-3.5" />
-            <span>All Games ({GAMES_LIST.length})</span>
-          </button>
+      {/* Sticky Navigation Tabs Bar */}
+      <div className="sticky top-0 z-30 bg-stone-950/95 backdrop-blur-xl border-b border-white/10 px-4 sm:px-8 py-2.5 shadow-2xl shrink-0">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2 overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setActiveTab('games');
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs whitespace-nowrap transition-all ${
+                activeTab === 'games'
+                  ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
+                  : 'bg-white/5 text-stone-400 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Gamepad2 className="w-3.5 h-3.5" />
+              <span>All Games ({GAMES_LIST.length})</span>
+            </button>
 
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setActiveTab('leaderboard');
-            }}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs transition-all ${
-              activeTab === 'leaderboard'
-                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
-                : 'bg-white/5 text-stone-400 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Trophy className="w-3.5 h-3.5" />
-            <span>Fellowship Leaderboard</span>
-          </button>
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setActiveTab('leaderboard');
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs whitespace-nowrap transition-all ${
+                activeTab === 'leaderboard'
+                  ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
+                  : 'bg-white/5 text-stone-400 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Fellowship Leaderboard</span>
+            </button>
 
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setActiveTab('trophies');
-            }}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs transition-all ${
-              activeTab === 'trophies'
-                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
-                : 'bg-white/5 text-stone-400 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Token Shop & Rewards</span>
-          </button>
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setActiveTab('trophies');
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs whitespace-nowrap transition-all ${
+                activeTab === 'trophies'
+                  ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
+                  : 'bg-white/5 text-stone-400 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Token Shop & Rewards</span>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="text-[11px] text-stone-400 font-bold uppercase">Balance:</span>
+            <span className="text-xs font-black text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-500/30">
+              🪙 {stats.totalTokens} Tokens
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-5xl mx-auto w-full px-4 sm:px-8 py-6 flex-1">
+      <div className="max-w-5xl mx-auto w-full px-4 sm:px-8 py-6 pb-36 flex-1">
         {/* 1. ALL GAMES TAB */}
         {activeTab === 'games' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
