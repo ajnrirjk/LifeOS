@@ -7,7 +7,8 @@ const CLOUD_MEMBERS_RELAY = 'https://ntfy.sh/lifeos_fellowship_v2';
 const MQTT_TOPIC_SETTINGS = 'lifeos/global/settings_v3';
 const MQTT_TOPIC_MAINTENANCE = 'lifeos/global/maintenance_mode';
 const MQTT_TOPIC_MEMBERS = 'lifeos/global/members_v3';
-const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+const MQTT_BROKER_PRIMARY = 'wss://mqtt.tyckr.io:8081';
+const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
 
 export interface GlobalConfigPayload {
   activeAnnouncement: SystemAnnouncement | null;
@@ -289,20 +290,36 @@ class FirebaseGlobalService {
   }
 
   // 6. MQTT WebSockets Connection with Retained Message Support
-  private initMqtt() {
+  private initMqtt(useFallback: boolean = false) {
     if (typeof window === 'undefined') return;
     try {
-      this.mqttClient = mqtt.connect(MQTT_BROKER_URL, {
-        clientId: `lifeos_client_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      const brokerUrl = useFallback ? MQTT_BROKER_FALLBACK : MQTT_BROKER_PRIMARY;
+      const clientId = `lifeos_global_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+      if (this.mqttClient) {
+        try { this.mqttClient.end(true); } catch {}
+        this.mqttClient = null;
+      }
+
+      this.mqttClient = mqtt.connect(brokerUrl, {
+        clientId,
         clean: true,
-        connectTimeout: 5000,
-        reconnectPeriod: 2500
+        connectTimeout: 8000,
+        reconnectPeriod: 2500,
+        keepalive: 60
       });
 
       this.mqttClient.on('connect', () => {
         this.mqttClient?.subscribe(MQTT_TOPIC_SETTINGS, { qos: 1 });
         this.mqttClient?.subscribe(MQTT_TOPIC_MAINTENANCE, { qos: 1 });
         this.mqttClient?.subscribe(MQTT_TOPIC_MEMBERS, { qos: 0 });
+      });
+
+      this.mqttClient.on('error', (err) => {
+        console.warn('Global MQTT error:', err?.message);
+        if (!useFallback && !this.mqttClient?.connected) {
+          this.initMqtt(true);
+        }
       });
 
       this.mqttClient.on('message', (topic, payload) => {
@@ -324,7 +341,11 @@ class FirebaseGlobalService {
           }
         } catch {}
       });
-    } catch {}
+    } catch (err) {
+      if (!useFallback) {
+        this.initMqtt(true);
+      }
+    }
   }
 
   private applyIncomingConfig(incoming: Partial<GlobalConfigPayload>) {
@@ -375,7 +396,7 @@ class FirebaseGlobalService {
 
   private async fetchCloudConfig() {
     try {
-      const res = await fetch(`${CLOUD_CONFIG_RELAY}/json?poll=1&since=all`);
+      const res = await fetch(`${CLOUD_CONFIG_RELAY}/json?poll=1&since=all`, { signal: AbortSignal.timeout(1500) });
       if (!res.ok) return;
       const text = await res.text();
       const lines = text.trim().split('\n').filter(Boolean);
@@ -395,7 +416,7 @@ class FirebaseGlobalService {
 
   private async fetchServerConfig() {
     try {
-      const res = await fetch('/api/global/config', { cache: 'no-store' });
+      const res = await fetch('/api/global/config', { cache: 'no-store', signal: AbortSignal.timeout(1500) });
       if (res.ok) {
         const config = await res.json();
         if (config && typeof config === 'object') {
@@ -407,7 +428,7 @@ class FirebaseGlobalService {
 
   private async fetchServerMembers() {
     try {
-      const res = await fetch('/api/fellowship/members', { cache: 'no-store' });
+      const res = await fetch('/api/fellowship/members', { cache: 'no-store', signal: AbortSignal.timeout(1500) });
       if (res.ok) {
         const json = await res.json();
         if (json?.members && Array.isArray(json.members)) {
@@ -481,9 +502,9 @@ class FirebaseGlobalService {
       }
     } catch {}
 
-    // C. Universal Cloud Relay via ntfy.sh
+    // C. Universal Cloud Relay
     try {
-      await fetch(CLOUD_CONFIG_RELAY, {
+      fetch(CLOUD_CONFIG_RELAY, {
         method: 'POST',
         headers: {
           'Title': enabled ? 'LifeOS Emergency Lockdown Enabled' : 'LifeOS Lockdown Disabled',
@@ -494,20 +515,22 @@ class FirebaseGlobalService {
           type: 'config_update',
           data: nextConfig,
           timestamp: Date.now()
-        })
-      });
+        }),
+        signal: AbortSignal.timeout(1500)
+      }).catch(() => {});
     } catch {}
 
     // D. Server API
     try {
-      await fetch('/api/global/maintenance', {
+      fetch('/api/global/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           maintenanceMode: enabled,
           maintenanceMessage: nextConfig.maintenanceMessage
-        })
-      });
+        }),
+        signal: AbortSignal.timeout(1500)
+      }).catch(() => {});
     } catch {}
   }
 
@@ -533,7 +556,7 @@ class FirebaseGlobalService {
     } catch {}
 
     try {
-      await fetch(CLOUD_CONFIG_RELAY, {
+      fetch(CLOUD_CONFIG_RELAY, {
         method: 'POST',
         headers: {
           'Title': announcement ? `Announcement: ${announcement.title}` : 'Announcement Dismissed',
@@ -543,19 +566,21 @@ class FirebaseGlobalService {
           type: 'config_update',
           data: nextConfig,
           timestamp: Date.now()
-        })
-      });
+        }),
+        signal: AbortSignal.timeout(1500)
+      }).catch(() => {});
     } catch {}
 
     try {
       if (announcement) {
-        await fetch('/api/global/broadcast', {
+        fetch('/api/global/broadcast', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(announcement)
-        });
+          body: JSON.stringify(announcement),
+          signal: AbortSignal.timeout(1500)
+        }).catch(() => {});
       } else {
-        await fetch('/api/global/dismiss-announcement', { method: 'POST' });
+        fetch('/api/global/dismiss-announcement', { method: 'POST', signal: AbortSignal.timeout(1500) }).catch(() => {});
       }
     } catch {}
   }

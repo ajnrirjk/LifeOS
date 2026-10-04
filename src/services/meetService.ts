@@ -72,7 +72,7 @@ export const DEFAULT_PUBLIC_MEET_ROOMS: MeetRoomInfo[] = [
   }
 ];
 
-const MQTT_BROKER_PRIMARY = 'wss://broker.emqx.io:8084/mqtt';
+const MQTT_BROKER_PRIMARY = 'wss://mqtt.tyckr.io:8081';
 const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
 const BROADCAST_BUS_NAME = 'lifeos_meet_sync_bus_v2';
 
@@ -375,8 +375,8 @@ class MeetService {
       const client = mqtt.connect(brokerUrl, {
         clientId,
         clean: true,
-        connectTimeout: 5000,
-        reconnectPeriod: 2500,
+        connectTimeout: 8000,
+        reconnectPeriod: 2000,
         keepalive: 30,
       });
 

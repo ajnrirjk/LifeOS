@@ -258,7 +258,8 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
 
 export const DEFAULT_MEMBERS: ActiveChatMember[] = [];
 
-const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+const MQTT_BROKER_PRIMARY = 'wss://mqtt.tyckr.io:8081';
+const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
 const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v6/messages';
 const MQTT_TOPIC_PRESENCE = 'lifeos/fellowship/v6/presence';
 const MQTT_TOPIC_STRUCTURE = 'lifeos/fellowship/v6/structure';
@@ -271,6 +272,19 @@ class DiscordChatService {
   private broadcastChannel: BroadcastChannel | null = null;
   private listeners: Set<DiscordEventListener> = new Set();
   public isConnectedToBroker = false;
+
+  public currentSessionId: string = (() => {
+    try {
+      let sid = sessionStorage.getItem('lifeos_chat_device_sid');
+      if (!sid) {
+        sid = 'cs_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36).slice(-4);
+        sessionStorage.setItem('lifeos_chat_device_sid', sid);
+      }
+      return sid;
+    } catch {
+      return 'cs_' + Math.random().toString(36).substring(2, 9);
+    }
+  })();
 
   public currentUser: ChatUser = {
     id: 'user_' + Math.random().toString(36).substring(2, 9),
@@ -497,17 +511,24 @@ class DiscordChatService {
     }
   }
 
-  private initMqttRealtime() {
+  private initMqttRealtime(useFallback: boolean = false) {
     if (typeof window === 'undefined') return;
 
     try {
-      const clientId = `lifeos_${this.currentUser.id}_${Math.random().toString(36).substring(2, 6)}`;
-      const client = mqtt.connect(MQTT_BROKER_URL, {
+      const brokerUrl = useFallback ? MQTT_BROKER_FALLBACK : MQTT_BROKER_PRIMARY;
+      const clientId = `lifeos_${this.currentSessionId}_${Math.random().toString(36).substring(2, 6)}`;
+
+      if (this.mqttClient) {
+        try { this.mqttClient.end(true); } catch {}
+        this.mqttClient = null;
+      }
+
+      const client = mqtt.connect(brokerUrl, {
         clientId,
         clean: true,
-        connectTimeout: 5000,
-        reconnectPeriod: 2000,
-        keepalive: 30,
+        connectTimeout: 8000,
+        reconnectPeriod: 2500,
+        keepalive: 60,
       });
 
       this.mqttClient = client;
@@ -524,12 +545,12 @@ class DiscordChatService {
           }
         );
 
-        // Keep real users continuously discovered via 10s presence heartbeat
+        // Keep real users continuously discovered via 5s presence heartbeat
         setInterval(() => {
           if (this.mqttClient && this.mqttClient.connected) {
             this.publishPresence();
           }
-        }, 10000);
+        }, 5000);
       });
 
       client.on('message', (topic, payload) => {
@@ -544,13 +565,20 @@ class DiscordChatService {
           } else if (topic === MQTT_TOPIC_STRUCTURE) {
             this.handleStructureUpdate(parsed.type, parsed.data);
           } else if (topic === MQTT_TOPIC_SYNC) {
-            if (parsed.type === 'sync_request' && parsed.fromId !== this.currentUser.id) {
-              this.respondToSync(parsed.fromId);
-            } else if (parsed.type === 'sync_response' && parsed.targetId === this.currentUser.id) {
+            if (parsed.type === 'sync_request' && parsed.fromSessionId !== this.currentSessionId) {
+              this.respondToSync(parsed.fromSessionId);
+            } else if (parsed.type === 'sync_response' && parsed.targetSessionId === this.currentSessionId) {
               this.mergeHistory(parsed.messages);
             }
           }
         } catch {}
+      });
+
+      client.on('error', (err) => {
+        console.warn('Fellowship MQTT error:', err?.message);
+        if (!useFallback && !this.isConnectedToBroker) {
+          this.initMqttRealtime(true);
+        }
       });
 
       client.on('reconnect', () => {
@@ -562,6 +590,9 @@ class DiscordChatService {
       });
     } catch (err) {
       console.warn('MQTT init fallback:', err);
+      if (!useFallback) {
+        this.initMqttRealtime(true);
+      }
     }
   }
 
@@ -573,7 +604,7 @@ class DiscordChatService {
         this.messagesCache.push(msg);
 
         // Auto-register real incoming message senders in members list
-        if (msg.senderId && msg.senderId !== this.currentUser.id && msg.senderId !== 'fellowship_system') {
+        if (msg.senderId && msg.senderId !== 'fellowship_system') {
           const exists = this.membersCache.some((m) => m.id === msg.senderId);
           if (!exists) {
             this.membersCache.push({
@@ -731,8 +762,12 @@ class DiscordChatService {
       return;
     }
 
-    if (!data.user || data.user.id === this.currentUser.id) return;
+    if (!data.user) return;
+    // Ignore only if exact same tab/session
+    if (data.sessionId === this.currentSessionId && data.user.id === this.currentUser.id) return;
+
     const incomingUser: ChatUser = data.user;
+    const isSameAccountDifferentDevice = Boolean(incomingUser.id === this.currentUser.id && data.sessionId !== this.currentSessionId);
 
     const roleInfo = this.roleOverrides[incomingUser.id] || {
       role: incomingUser.role || 'Believer',
@@ -744,10 +779,13 @@ class DiscordChatService {
       incomingUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
     );
 
-    const existingIndex = this.membersCache.findIndex((m) => m.id === incomingUser.id);
+    const effectiveMemberId = isSameAccountDifferentDevice ? `${incomingUser.id}_${(data.sessionId || '').slice(-4)}` : incomingUser.id;
+    const effectiveName = isSameAccountDifferentDevice ? `${incomingUser.name} (Other Device)` : incomingUser.name;
+
+    const existingIndex = this.membersCache.findIndex((m) => m.id === effectiveMemberId);
     const memberObj: ActiveChatMember = {
-      id: incomingUser.id,
-      name: incomingUser.name,
+      id: effectiveMemberId,
+      name: effectiveName,
       discriminator: incomingUser.discriminator,
       photoURL: incomingUser.photoURL,
       email: incomingUser.email,
@@ -777,7 +815,7 @@ class DiscordChatService {
           MQTT_TOPIC_PRESENCE,
           JSON.stringify({
             type: 'presence',
-            data: { type: 'offline', userId: this.currentUser.id, timestamp: Date.now() },
+            data: { type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() },
           })
         );
       } catch {}
@@ -790,7 +828,7 @@ class DiscordChatService {
         MQTT_TOPIC_PRESENCE,
         JSON.stringify({
           type: 'presence',
-          data: { user: this.currentUser, timestamp: Date.now() },
+          data: { user: this.currentUser, sessionId: this.currentSessionId, timestamp: Date.now() },
         })
       );
     }
@@ -802,19 +840,19 @@ class DiscordChatService {
         MQTT_TOPIC_SYNC,
         JSON.stringify({
           type: 'sync_request',
-          fromId: this.currentUser.id,
+          fromSessionId: this.currentSessionId,
         })
       );
     }
   }
 
-  private respondToSync(targetId: string) {
+  private respondToSync(targetSessionId: string) {
     if (this.mqttClient && this.mqttClient.connected && this.messagesCache.length > 0) {
       this.mqttClient.publish(
         MQTT_TOPIC_SYNC,
         JSON.stringify({
           type: 'sync_response',
-          targetId,
+          targetSessionId,
           messages: this.messagesCache.slice(-80),
         })
       );
@@ -1047,6 +1085,7 @@ class DiscordChatService {
       attachment: payload.attachment,
       embed: payload.embed,
     };
+    (newMsg as any).senderSessionId = this.currentSessionId;
 
     // 1. Optimistic Local Update & Broadcast
     this.handleIncomingPayload('message', newMsg, true);
@@ -1055,7 +1094,7 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'message', data: newMsg })
+        JSON.stringify({ type: 'message', data: newMsg, sessionId: this.currentSessionId })
       );
     }
 
