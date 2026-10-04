@@ -256,7 +256,7 @@ export const LifeOSDock: React.FC = () => {
             title="Open All Apps Drawer"
           >
             <LayoutGrid className="w-5 h-5 text-amber-400" />
-            <span className="text-[10px] tracking-tight font-black">All Apps</span>
+            <span className="text-[10px] tracking-tight font-black whitespace-nowrap">All Apps</span>
           </button>
 
           {/* Home / Desktop Tab */}
@@ -265,14 +265,14 @@ export const LifeOSDock: React.FC = () => {
               sounds.playTap();
               showDesktop();
             }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all min-w-[56px] min-h-[46px] active:scale-95 ${
+            className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all min-w-[56px] min-h-[46px] active:scale-95 whitespace-nowrap ${
               isDesktopView
                 ? 'bg-emerald-500/25 text-emerald-400 font-black border border-emerald-500/40 shadow-sm'
                 : 'text-stone-400 hover:text-white'
             }`}
           >
             <span className="text-xl">🌿</span>
-            <span className="text-[10px] tracking-tight font-bold">Desktop</span>
+            <span className="text-[10px] tracking-tight font-bold whitespace-nowrap">Desktop</span>
           </button>
 
           {/* All Registered Apps listed dynamically (filtered by feature flag) */}
@@ -290,14 +290,14 @@ export const LifeOSDock: React.FC = () => {
                     launchApp(app.id);
                   }
                 }}
-                className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-2xl transition-all min-w-[56px] min-h-[46px] active:scale-95 relative ${
+                className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-2xl transition-all min-w-[56px] min-h-[46px] active:scale-95 relative whitespace-nowrap ${
                   isActive
                     ? 'bg-white/20 text-white font-black border border-white/30 shadow-md ring-1 ring-white/40'
                     : 'text-stone-300 hover:text-white'
                 }`}
               >
                 <span className="text-xl">{app.emoji}</span>
-                <span className="text-[10px] tracking-tight font-bold truncate max-w-[62px]">
+                <span className="text-[10px] tracking-tight font-bold truncate max-w-[62px] whitespace-nowrap">
                   {app.id === 'faithlingo'
                     ? 'Study'
                     : app.id === 'bible_journal'

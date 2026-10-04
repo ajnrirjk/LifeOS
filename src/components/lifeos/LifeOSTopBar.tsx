@@ -73,18 +73,18 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
 
   return (
     <div className="w-full flex flex-col shrink-0 z-50">
-      <header className="h-10 pt-[max(env(safe-area-inset-top,0px),0px)] bg-stone-950/85 backdrop-blur-2xl border-b border-white/10 text-white text-xs select-none flex items-center justify-between px-3.5 sm:px-4 relative shadow-sm">
+      <header className="h-10 pt-[max(env(safe-area-inset-top,0px),0px)] bg-stone-950/85 backdrop-blur-2xl border-b border-white/10 text-white text-xs select-none flex items-center justify-between px-3.5 sm:px-4 relative shadow-sm whitespace-nowrap overflow-hidden">
         {/* Left: LifeOS Logo, Desktop Button & Active App Indicator */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 min-w-0">
           {/* LifeOS Menu */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg hover:bg-white/15 transition-all text-xs font-black tracking-tight"
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg hover:bg-white/15 transition-all text-xs font-black tracking-tight whitespace-nowrap shrink-0"
             >
-              <span className="text-sm">🌿</span>
-              <span>LifeOS</span>
-              <ChevronDown className="w-3 h-3 opacity-60" />
+              <span className="text-sm shrink-0">🌿</span>
+              <span className="whitespace-nowrap">LifeOS</span>
+              <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
             </button>
 
             {isMenuOpen && (
@@ -95,20 +95,20 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                     setIsMenuOpen(false);
                     setIsSettingsOpen(true);
                   }}
-                  className="px-2.5 py-1.5 rounded-xl text-left text-xs bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold transition-colors flex items-center justify-between"
+                  className="px-2.5 py-1.5 rounded-xl text-left text-xs bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold transition-colors flex items-center justify-between whitespace-nowrap"
                 >
-                  <div className="flex items-center gap-2">
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Control Center & Admin</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Settings className="w-3.5 h-3.5 shrink-0" />
+                    <span className="whitespace-nowrap">Control Center & Admin</span>
                   </div>
                   {isAuthorizedAdmin && (
-                    <span className="text-[9px] px-1 rounded bg-amber-500/30 text-amber-200 font-mono font-bold">GOD</span>
+                    <span className="text-[9px] px-1 rounded bg-amber-500/30 text-amber-200 font-mono font-bold shrink-0">GOD</span>
                   )}
                 </button>
 
                 <div className="h-px bg-white/10 my-1" />
 
-                <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-stone-400">
+                <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-stone-400 whitespace-nowrap">
                   Desktop Wallpaper
                 </div>
                 {wallpapers.map(wp => (
@@ -128,15 +128,15 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                       }
                       setIsMenuOpen(false);
                     }}
-                    className={`px-2.5 py-1.5 rounded-xl text-left text-xs transition-colors flex items-center justify-between ${
+                    className={`px-2.5 py-1.5 rounded-xl text-left text-xs transition-colors flex items-center justify-between whitespace-nowrap ${
                       wallpaper === wp.id ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10 text-stone-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span>{wp.icon}</span>
-                      <span>{wp.label}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="shrink-0">{wp.icon}</span>
+                      <span className="whitespace-nowrap">{wp.label}</span>
                     </div>
-                    {wallpaper === wp.id && <span>✓</span>}
+                    {wallpaper === wp.id && <span className="shrink-0">✓</span>}
                   </button>
                 ))}
 
@@ -148,10 +148,10 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                     setIsMenuOpen(false);
                     if (onOpenPrivacy) onOpenPrivacy();
                   }}
-                  className="px-2.5 py-1.5 rounded-xl text-left text-xs hover:bg-white/10 text-stone-300 hover:text-white transition-colors flex items-center gap-2"
+                  className="px-2.5 py-1.5 rounded-xl text-left text-xs hover:bg-white/10 text-stone-300 hover:text-white transition-colors flex items-center gap-2 whitespace-nowrap"
                 >
-                  <span>🛡️</span>
-                  <span>Privacy Policy</span>
+                  <span className="shrink-0">🛡️</span>
+                  <span className="whitespace-nowrap">Privacy Policy</span>
                 </button>
 
                 <a
@@ -160,16 +160,16 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                     sounds.playTap();
                     setIsMenuOpen(false);
                   }}
-                  className="px-2.5 py-1.5 rounded-xl text-left text-xs hover:bg-white/10 text-stone-300 hover:text-white transition-colors flex items-center gap-2"
+                  className="px-2.5 py-1.5 rounded-xl text-left text-xs hover:bg-white/10 text-stone-300 hover:text-white transition-colors flex items-center gap-2 whitespace-nowrap"
                 >
-                  <span>📜</span>
-                  <span>Terms of Service</span>
+                  <span className="shrink-0">📜</span>
+                  <span className="whitespace-nowrap">Terms of Service</span>
                 </a>
               </div>
             )}
           </div>
 
-          <div className="h-4 w-px bg-white/15 hidden sm:block" />
+          <div className="h-4 w-px bg-white/15 hidden sm:block shrink-0" />
 
           {/* Desktop / Widgets View Button */}
           <button
@@ -177,37 +177,37 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
               sounds.playTap();
               showDesktop();
             }}
-            className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               isDesktopView
                 ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-sm'
                 : 'hover:bg-white/15 text-stone-300 hover:text-white'
             }`}
             title="Show LifeOS Desktop Dashboard"
           >
-            <span>🖥️</span>
-            <span className="hidden sm:inline">Desktop</span>
+            <span className="shrink-0">🖥️</span>
+            <span className="hidden sm:inline whitespace-nowrap">Desktop</span>
           </button>
 
           {/* Active App Indicator & Return Button */}
           {!isDesktopView && activeApp && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => {
                   sounds.playTap();
                   showDesktop();
                 }}
-                className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 font-extrabold text-xs hover:bg-emerald-900/80 transition-all"
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 font-extrabold text-xs hover:bg-emerald-900/80 transition-all whitespace-nowrap shrink-0 max-w-[160px] sm:max-w-[220px]"
                 title="Return to Desktop"
               >
-                <span>◀</span>
-                <span className="sm:hidden">Home</span>
-                <span className="hidden sm:inline">{activeApp.title}</span>
+                <span className="shrink-0">◀</span>
+                <span className="sm:hidden whitespace-nowrap">Home</span>
+                <span className="hidden sm:inline truncate whitespace-nowrap">{activeApp.title}</span>
               </button>
             </div>
           )}
 
           {/* Quick App Switcher Tabs directly in Top Bar */}
-          <div className="hidden lg:flex items-center gap-1 border-l border-white/10 pl-2">
+          <div className="hidden xl:flex items-center gap-1 border-l border-white/10 pl-2 max-w-[42vw] overflow-x-auto no-scrollbar shrink min-w-0">
             {apps
               .filter(a => settings.appVisibility[a.id] !== false && (a.id === 'faithlingo' || a.id === 'bible_journal' || a.isPinned))
               .map((app) => {
@@ -219,16 +219,16 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                       sounds.playTap();
                       launchApp(app.id);
                     }}
-                    className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-all ${
                       isActive
                         ? 'bg-white/20 text-white shadow-sm border border-white/25'
                         : 'text-stone-300 hover:text-white hover:bg-white/10'
                     }`}
                     title={`${app.title} — ${app.description}`}
                   >
-                    <span>{app.emoji}</span>
-                    <span>{app.title}</span>
-                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                    <span className="shrink-0">{app.emoji}</span>
+                    <span className="whitespace-nowrap">{app.title}</span>
+                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
                   </button>
                 );
               })}
@@ -236,11 +236,11 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
         </div>
 
         {/* Right: Date/Time Capsule, Google Auth, Admin God Mode, Settings, Privacy */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 whitespace-nowrap">
           {/* Live System Date & Time Capsule - on right side, completely clear of open apps */}
-          <div className="hidden sm:flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-semibold select-none shadow-sm transition-colors">
-            <Clock className="w-3.5 h-3.5 text-stone-400" />
-            <span>{timeStr}</span>
+          <div className="hidden md:flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-semibold select-none shadow-sm transition-colors whitespace-nowrap shrink-0">
+            <Clock className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+            <span className="whitespace-nowrap font-mono">{timeStr}</span>
           </div>
           {/* Google User Avatar / Sign-In Button */}
           {googleUser ? (
@@ -249,21 +249,21 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                 sounds.playTap();
                 setIsSettingsOpen(true);
               }}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-stone-200 transition-all text-xs font-semibold"
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-stone-200 transition-all text-xs font-semibold whitespace-nowrap shrink-0"
               title={`Signed in as ${googleUser.email}`}
             >
               {googleUser.photoURL ? (
                 <img
                   src={googleUser.photoURL}
                   alt="Profile"
-                  className="w-4 h-4 rounded-full object-cover border border-emerald-400"
+                  className="w-4 h-4 rounded-full object-cover border border-emerald-400 shrink-0"
                 />
               ) : (
-                <span className="text-xs">🕊️</span>
+                <span className="text-xs shrink-0">🕊️</span>
               )}
-              <span className="font-bold hidden sm:inline max-w-[100px] truncate">{googleUser.displayName || 'Believer'}</span>
+              <span className="font-bold hidden sm:inline max-w-[100px] truncate whitespace-nowrap">{googleUser.displayName || 'Believer'}</span>
               {isAuthorizedAdmin && (
-                <span className="px-1 py-0.2 rounded bg-amber-500/30 text-amber-300 text-[9px] font-black font-mono">
+                <span className="px-1 py-0.5 rounded bg-amber-500/30 text-amber-300 text-[9px] font-black font-mono whitespace-nowrap shrink-0">
                   ADMIN
                 </span>
               )}
@@ -272,10 +272,10 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
             <button
               disabled={isGoogleSigningIn}
               onClick={() => signInWithGoogle()}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white text-stone-900 hover:bg-stone-100 font-black text-xs transition-all shadow-sm active:scale-95"
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white text-stone-900 hover:bg-stone-100 font-black text-xs transition-all shadow-sm active:scale-95 whitespace-nowrap shrink-0"
               title="Sign In with Google"
             >
-              <svg className="w-3 h-3" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -293,7 +293,7 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>{isGoogleSigningIn ? '...' : 'Sign In'}</span>
+              <span className="whitespace-nowrap">{isGoogleSigningIn ? '...' : 'Sign In'}</span>
             </button>
           )}
 
@@ -304,11 +304,11 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                 sounds.playTap();
                 window.dispatchEvent(new CustomEvent('toggle_god_mode'));
               }}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border font-extrabold text-xs transition-all shadow-sm active:scale-95 bg-amber-500/20 hover:bg-amber-500/35 border-amber-500/40 text-amber-300"
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border font-extrabold text-xs transition-all shadow-sm active:scale-95 bg-amber-500/20 hover:bg-amber-500/35 border-amber-500/40 text-amber-300 whitespace-nowrap shrink-0"
               title="Master Admin God-Mode Panel"
             >
-              <span>👑</span>
-              <span className="hidden sm:inline font-mono">God Mode</span>
+              <span className="shrink-0">👑</span>
+              <span className="hidden sm:inline font-mono whitespace-nowrap">God Mode</span>
             </button>
           )}
 
@@ -318,11 +318,11 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
               sounds.playTap();
               setIsSettingsOpen(true);
             }}
-            className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-stone-200 hover:text-white font-semibold text-xs transition-all"
+            className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-stone-200 hover:text-white font-semibold text-xs transition-all whitespace-nowrap shrink-0"
             title="Open User Settings & Admin Control Center"
           >
-            <Settings className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Settings</span>
+            <Settings className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="hidden sm:inline whitespace-nowrap">Settings</span>
           </button>
 
           {onOpenPrivacy && (
@@ -331,16 +331,16 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                 sounds.playTap();
                 onOpenPrivacy();
               }}
-              className="h-7 px-2 rounded-lg hover:bg-white/10 text-stone-300 hover:text-white text-xs font-semibold transition-colors hidden xl:flex items-center gap-1"
+              className="h-7 px-2 rounded-lg hover:bg-white/10 text-stone-300 hover:text-white text-xs font-semibold transition-colors hidden xl:flex items-center gap-1 whitespace-nowrap shrink-0"
               title="View Life OS Privacy Policy"
             >
-              <span>🛡️</span>
-              <span>Privacy</span>
+              <span className="shrink-0">🛡️</span>
+              <span className="whitespace-nowrap">Privacy</span>
             </button>
           )}
 
-          {/* Clock fallback on mobile */}
-          <div className="font-semibold text-stone-300 tracking-tight text-[11px] whitespace-nowrap block md:hidden">
+          {/* Clock fallback on smaller screens */}
+          <div className="font-semibold text-stone-300 tracking-tight text-[11px] whitespace-nowrap md:hidden shrink-0">
             {timeStr.split('•')[1] || timeStr}
           </div>
         </div>
