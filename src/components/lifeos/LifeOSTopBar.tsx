@@ -33,12 +33,17 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
   const activeApp = apps.find(a => a.id === activeAppId);
   const isAdmin = settings.profile.role === 'admin' || settings.profile.role === 'superadmin';
 
-  const wallpapers: Array<{ id: any; label: string }> = [
-    { id: 'mountain', label: 'Mountain Dawn' },
-    { id: 'nebula', label: 'Midnight Nebula' },
-    { id: 'olive', label: 'Olive Sanctuary' },
-    { id: 'slate', label: 'Minimal Slate' },
-    { id: 'aurora', label: 'Sacred Aurora' },
+  const wallpapers: Array<{ id: any; label: string; icon: string }> = [
+    { id: 'mountain', label: 'Mountain Dawn', icon: '🏔️' },
+    { id: 'nebula', label: 'Midnight Nebula', icon: '🌌' },
+    { id: 'olive', label: 'Olive Sanctuary', icon: '🌿' },
+    { id: 'slate', label: 'Minimal Slate', icon: '⬛' },
+    { id: 'aurora', label: 'Sacred Aurora', icon: '✨' },
+    { id: 'stained_glass', label: 'Cathedral Glass', icon: '🎨' },
+    { id: 'golden_temple', label: 'Golden Temple', icon: '🏛️' },
+    { id: 'sunset_peaks', label: 'Galilee Sunset', icon: '🌅' },
+    { id: 'cyber_neon', label: 'Cyber Arcade', icon: '⚡' },
+    { id: 'custom', label: 'Custom Image URL', icon: '🖼️' },
   ];
 
   return (
@@ -83,14 +88,26 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
                   key={wp.id}
                   onClick={() => {
                     sounds.playTap();
-                    setWallpaper(wp.id);
+                    if (wp.id === 'custom') {
+                      const current = localStorage.getItem('lifeos_custom_wallpaper') || '';
+                      const url = window.prompt('Enter an image URL for your custom desktop wallpaper:', current);
+                      if (url && url.trim()) {
+                        localStorage.setItem('lifeos_custom_wallpaper', url.trim());
+                        setWallpaper('custom');
+                      }
+                    } else {
+                      setWallpaper(wp.id);
+                    }
                     setIsMenuOpen(false);
                   }}
-                  className={`px-2.5 py-1 rounded-lg text-left text-xs transition-colors flex items-center justify-between ${
+                  className={`px-2.5 py-1.5 rounded-lg text-left text-xs transition-colors flex items-center justify-between ${
                     wallpaper === wp.id ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
                   }`}
                 >
-                  <span>{wp.label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>{wp.icon}</span>
+                    <span>{wp.label}</span>
+                  </div>
                   {wallpaper === wp.id && <span>✓</span>}
                 </button>
               ))}

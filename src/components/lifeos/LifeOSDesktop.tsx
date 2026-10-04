@@ -150,26 +150,39 @@ export const LifeOSDesktop: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDesktopView, activeAppId, minimizeApp]);
 
-  const wallpaperClasses = {
+  const [windowSnap, setWindowSnap] = useState<'maximize' | 'left' | 'right' | 'center'>('maximize');
+  const [isSnapMenuOpen, setIsSnapMenuOpen] = useState(false);
+
+  const customWallpaperUrl = typeof window !== 'undefined' ? localStorage.getItem('lifeos_custom_wallpaper') : null;
+
+  const wallpaperClasses: Record<string, string> = {
     mountain: 'bg-gradient-to-b from-sky-900 via-indigo-950 to-slate-950',
     nebula: 'bg-gradient-to-tr from-purple-950 via-slate-950 to-indigo-950',
     olive: 'bg-gradient-to-b from-emerald-950 via-teal-950 to-stone-950',
     slate: 'bg-gradient-to-b from-slate-900 via-stone-900 to-black',
     aurora: 'bg-gradient-to-tr from-emerald-950 via-sky-950 to-purple-950',
-  }[wallpaper];
+    stained_glass: 'bg-gradient-to-tr from-rose-950 via-indigo-950 to-purple-950',
+    golden_temple: 'bg-gradient-to-b from-amber-950 via-yellow-950 to-stone-950',
+    sunset_peaks: 'bg-gradient-to-b from-rose-950 via-purple-950 to-stone-950',
+    cyber_neon: 'bg-gradient-to-tr from-cyan-950 via-fuchsia-950 to-stone-950',
+    celestial: 'bg-gradient-to-b from-indigo-950 via-blue-950 to-black',
+    custom: customWallpaperUrl ? 'bg-cover bg-center bg-no-repeat' : 'bg-gradient-to-b from-slate-900 to-black'
+  };
 
   const activeApp = apps.find(a => a.id === activeAppId);
   const activeWindowState = openWindows[activeAppId];
   const { announcement, setAnnouncement, settings, updateSettings } = useSettings();
 
   const themeWallpaper = {
-    dark: wallpaperClasses,
+    dark: wallpaperClasses[wallpaper] || wallpaperClasses.mountain,
     light: 'bg-gradient-to-b from-amber-50 via-sky-50 to-stone-100 text-stone-900',
     amoled: 'bg-black text-white'
-  }[settings.themeMode || 'dark'] || wallpaperClasses;
+  }[settings.themeMode || 'dark'] || wallpaperClasses[wallpaper] || wallpaperClasses.mountain;
 
   return (
-    <div className={`h-[100dvh] w-full flex flex-col overflow-hidden relative select-none ${themeWallpaper} ${
+    <div
+      style={wallpaper === 'custom' && customWallpaperUrl ? { backgroundImage: `url(${customWallpaperUrl})` } : undefined}
+      className={`h-[100dvh] w-full flex flex-col overflow-hidden relative select-none ${themeWallpaper} ${
       settings.fastingModeActive ? 'sepia-[0.3] contrast-[0.95] brightness-[0.92]' : ''
     }`}>
       {/* Top System Menu Bar (Desktop always; Mobile only on Desktop/Widgets view) */}
@@ -228,10 +241,18 @@ export const LifeOSDesktop: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="flex-1 flex flex-col bg-amber-50/95 dark:bg-slate-950/95 backdrop-blur-xl overflow-hidden w-full h-full rounded-none border-0 shadow-none m-0 p-0"
+              className={`flex flex-col bg-amber-50/95 dark:bg-slate-950/95 backdrop-blur-xl overflow-hidden transition-all duration-200 ${
+                windowSnap === 'maximize'
+                  ? 'flex-1 w-full h-full rounded-none border-0 shadow-none m-0 p-0'
+                  : windowSnap === 'left'
+                  ? 'flex-1 w-full md:w-1/2 h-full rounded-none border-r border-white/20 self-start shadow-2xl'
+                  : windowSnap === 'right'
+                  ? 'flex-1 w-full md:w-1/2 h-full rounded-none border-l border-white/20 self-end shadow-2xl ml-auto'
+                  : 'w-full md:w-11/12 max-w-6xl h-full md:h-[94%] my-auto mx-auto rounded-3xl border border-white/20 shadow-2xl'
+              }`}
             >
               {/* Desktop Window Titlebar with macOS traffic lights & Windows-style actions */}
-              <div className="hidden md:flex h-9 px-4 bg-stone-100/90 dark:bg-slate-900/90 border-b border-stone-200/80 dark:border-slate-800 items-center justify-between select-none shrink-0">
+              <div className="hidden md:flex h-9 px-4 bg-stone-100/90 dark:bg-slate-900/90 border-b border-stone-200/80 dark:border-slate-800 items-center justify-between select-none shrink-0 relative">
                 {/* Traffic Light Controls */}
                 <div className="flex items-center gap-2">
                   {/* Close (Red) */}
@@ -260,19 +281,21 @@ export const LifeOSDesktop: React.FC = () => {
                   >
                     <Minus className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </motion.button>
-                  {/* Maximize (Green) */}
-                  <motion.button
-                    whileHover={{ scale: 1.15 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      maximizeApp(activeApp.id);
-                    }}
-                    className="w-3.5 h-3.5 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-[9px] text-white opacity-90 transition-all shadow-sm group"
-                    title={activeWindowState.isMaximized ? "Restore windowed view" : "Maximize window"}
-                  >
-                    <Maximize2 className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </motion.button>
+                  {/* Maximize & Snap (Green) */}
+                  <div className="relative">
+                    <motion.button
+                      whileHover={{ scale: 1.15 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsSnapMenuOpen(!isSnapMenuOpen);
+                      }}
+                      className="w-3.5 h-3.5 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-[9px] text-white opacity-90 transition-all shadow-sm group"
+                      title="Window Snap Layouts"
+                    >
+                      <Maximize2 className="w-2 h-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.button>
+                  </div>
                 </div>
 
                 {/* Window Title & Emoji */}
@@ -284,8 +307,67 @@ export const LifeOSDesktop: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Right Side Window Controls (Windows / Chrome style for easy minimize & close) */}
-                <div className="flex items-center gap-1">
+                {/* Right Side Window Controls (Windows 11 Snap Layouts & Controls) */}
+                <div className="flex items-center gap-1 relative">
+                  {/* Snap Layouts Selector Button */}
+                  <button
+                    onClick={() => {
+                      sounds.playTap();
+                      setIsSnapMenuOpen(!isSnapMenuOpen);
+                    }}
+                    className={`p-1 px-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1 ${
+                      isSnapMenuOpen ? 'bg-emerald-600 text-white' : 'hover:bg-stone-200 dark:hover:bg-slate-800 text-stone-400 hover:text-white'
+                    }`}
+                    title="Snap layouts (Left, Right, Center, Full)"
+                  >
+                    <span>🗖 Snap</span>
+                  </button>
+
+                  {/* Snap Layout Dropdown Menu */}
+                  {isSnapMenuOpen && (
+                    <div className="absolute top-8 right-0 w-44 bg-stone-900/98 border border-white/20 rounded-2xl shadow-2xl p-2 z-50 text-xs text-stone-200 space-y-1 backdrop-blur-xl">
+                      <div className="text-[10px] font-black uppercase text-stone-400 px-2 py-0.5">
+                        Snap Window
+                      </div>
+                      <button
+                        onClick={() => { sounds.playTap(); setWindowSnap('maximize'); setIsSnapMenuOpen(false); }}
+                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
+                          windowSnap === 'maximize' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
+                        }`}
+                      >
+                        <span>🗖 Full Screen</span>
+                        {windowSnap === 'maximize' && <span>✓</span>}
+                      </button>
+                      <button
+                        onClick={() => { sounds.playTap(); setWindowSnap('left'); setIsSnapMenuOpen(false); }}
+                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
+                          windowSnap === 'left' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
+                        }`}
+                      >
+                        <span>◧ Snap Left (50%)</span>
+                        {windowSnap === 'left' && <span>✓</span>}
+                      </button>
+                      <button
+                        onClick={() => { sounds.playTap(); setWindowSnap('right'); setIsSnapMenuOpen(false); }}
+                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
+                          windowSnap === 'right' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
+                        }`}
+                      >
+                        <span>◨ Snap Right (50%)</span>
+                        {windowSnap === 'right' && <span>✓</span>}
+                      </button>
+                      <button
+                        onClick={() => { sounds.playTap(); setWindowSnap('center'); setIsSnapMenuOpen(false); }}
+                        className={`w-full text-left px-2 py-1.5 rounded-xl flex items-center justify-between transition-colors ${
+                          windowSnap === 'center' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
+                        }`}
+                      >
+                        <span>▣ Centered Glass</span>
+                        {windowSnap === 'center' && <span>✓</span>}
+                      </button>
+                    </div>
+                  )}
+
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}

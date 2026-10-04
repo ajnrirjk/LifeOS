@@ -27,6 +27,7 @@ interface LifeOSContextType {
   addDesktopWidget: (id: WidgetId) => void;
   removeDesktopWidget: (id: WidgetId) => void;
   resetDesktopWidgets: () => void;
+  moveDesktopWidget: (id: WidgetId, direction: 'prev' | 'next') => void;
 }
 
 const LifeOSContext = createContext<LifeOSContextType | null>(null);
@@ -157,6 +158,21 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setDesktopWidgets(DEFAULT_ACTIVE_WIDGETS);
   };
 
+  const moveDesktopWidget = (id: WidgetId, direction: 'prev' | 'next') => {
+    sounds.playTap();
+    setDesktopWidgets(prev => {
+      const index = prev.indexOf(id);
+      if (index === -1) return prev;
+      const targetIndex = direction === 'prev' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[targetIndex];
+      copy[targetIndex] = temp;
+      return copy;
+    });
+  };
+
   const closeApp = (appId: string) => {
     sounds.playTap();
     setOpenWindows(prev => {
@@ -244,7 +260,8 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         desktopWidgets,
         addDesktopWidget,
         removeDesktopWidget,
-        resetDesktopWidgets
+        resetDesktopWidgets,
+        moveDesktopWidget
       }}
     >
       {children}

@@ -5,7 +5,8 @@ export type MiniGameId =
   | 'demon_buster'
   | 'eden_snake'
   | 'scripture_matrix'
-  | 'slingshot_target';
+  | 'slingshot_target'
+  | 'samson_smash';
 
 export interface MiniGameMeta {
   id: MiniGameId;

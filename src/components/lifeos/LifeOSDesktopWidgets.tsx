@@ -22,7 +22,9 @@ import {
   Wand2,
   Layers,
   ArrowRight,
-  Send
+  Send,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface LifeOSDesktopWidgetsProps {
@@ -48,7 +50,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
   onRemoveWidget,
   onOpenAddModal
 }) => {
-  const { launchApp } = useLifeOS();
+  const { launchApp, moveDesktopWidget } = useLifeOS();
   const { userStats, todayHighlight } = useApp();
 
   const streak = userStats?.streak ?? 7;
@@ -271,6 +273,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
             return (
               <motion.div
                 key={widgetId}
+                layout
                 initial={{ opacity: 0, scale: 0.94, y: 15 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.92, y: 10 }}
@@ -278,19 +281,43 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                 whileHover={{ y: -4, transition: { duration: 0.2 } }}
                 className="group relative rounded-2xl sm:rounded-3xl bg-stone-900/60 hover:bg-stone-900/80 backdrop-blur-2xl border border-white/15 p-3.5 sm:p-5 shadow-2xl transition-colors duration-200 flex flex-col justify-between overflow-hidden"
               >
-                {/* Delete Widget Button */}
-                <motion.button
-                  whileHover={{ scale: 1.15 }}
-                  whileTap={{ scale: 0.85 }}
-                  onClick={() => {
-                    sounds.playTap();
-                    onRemoveWidget(widgetId);
-                  }}
-                  className="absolute top-3.5 right-3.5 w-7 h-7 rounded-full bg-black/40 hover:bg-rose-600 text-stone-400 hover:text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-all z-20"
-                  title="Remove widget from desktop"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </motion.button>
+                {/* Widget Action Bar: Reorder & Remove Controls */}
+                <div className="absolute top-3.5 right-3.5 flex items-center gap-1 z-20">
+                  {index > 0 && (
+                    <motion.button
+                      whileHover={{ scale: 1.15 }}
+                      whileTap={{ scale: 0.85 }}
+                      onClick={() => moveDesktopWidget(widgetId, 'prev')}
+                      className="w-6 h-6 rounded-lg bg-black/40 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-all shadow-sm"
+                      title="Move widget left / up"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </motion.button>
+                  )}
+                  {index < activeWidgets.length - 1 && (
+                    <motion.button
+                      whileHover={{ scale: 1.15 }}
+                      whileTap={{ scale: 0.85 }}
+                      onClick={() => moveDesktopWidget(widgetId, 'next')}
+                      className="w-6 h-6 rounded-lg bg-black/40 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-all shadow-sm"
+                      title="Move widget right / down"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </motion.button>
+                  )}
+                  <motion.button
+                    whileHover={{ scale: 1.15 }}
+                    whileTap={{ scale: 0.85 }}
+                    onClick={() => {
+                      sounds.playTap();
+                      onRemoveWidget(widgetId);
+                    }}
+                    className="w-6 h-6 rounded-lg bg-black/40 hover:bg-rose-600 text-stone-400 hover:text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-all shadow-sm ml-0.5"
+                    title="Remove widget from desktop"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </motion.button>
+                </div>
 
                 {/* Widget Header */}
                 <div className="flex items-center gap-2.5 mb-3 select-none">
@@ -683,7 +710,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         </div>
                       </div>
                       <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 text-xs text-stone-300">
-                        <span>🕹️ 6 Mini Games Installed</span>
+                        <span>🕹️ 8 Arcade Games Installed</span>
                         <span className="text-amber-400 font-black">Tokens & Best Scores</span>
                       </div>
                     </div>

@@ -11,6 +11,7 @@ import { DemonBusterGame } from './DemonBusterGame';
 import { EdenSnakeGame } from './EdenSnakeGame';
 import { ScriptureMatrixGame } from './ScriptureMatrixGame';
 import { SlingshotTargetGame } from './SlingshotTargetGame';
+import { SamsonSmashGame } from './SamsonSmashGame';
 import {
   Gamepad2,
   Sparkles,
@@ -112,6 +113,17 @@ const GAMES_LIST: MiniGameMeta[] = [
     badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
     accentGradient: 'from-indigo-600 via-purple-600 to-pink-600',
     instructions: ['Watch crystal pads flash with sound', 'Repeat the melody sequence', 'Level up speed and pattern length']
+  },
+  {
+    id: 'samson_smash',
+    title: "Samson's Pillar Smash",
+    tagline: 'Rhythmic precision power meter to topple pagan temple columns & release divine fury',
+    emoji: '🏛️',
+    genre: 'Rhythm / Timing',
+    difficulty: 'Challenging',
+    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    accentGradient: 'from-amber-500 via-orange-600 to-red-600',
+    instructions: ['Tap or press Spacebar when needle hits golden center', 'Shatter pillars before the collapse timer runs out', 'Fill Spirit of God meter for devastating 3x crit fury']
   }
 ];
 
@@ -124,7 +136,8 @@ const INITIAL_STATS: ArcadeStats = {
     demon_buster: 0,
     eden_snake: 0,
     scripture_matrix: 0,
-    slingshot_target: 0
+    slingshot_target: 0,
+    samson_smash: 0
   },
   gamesPlayed: {
     pilgrim_go: 0,
@@ -133,7 +146,8 @@ const INITIAL_STATS: ArcadeStats = {
     demon_buster: 0,
     eden_snake: 0,
     scripture_matrix: 0,
-    slingshot_target: 0
+    slingshot_target: 0,
+    samson_smash: 0
   },
   unlockedSkins: ['classic'],
   activeSkin: 'classic'
@@ -182,6 +196,12 @@ const FELLOWSHIP_CHAMPIONS: Record<MiniGameId, Array<{ name: string; score: numb
     { name: 'Timothy_Disciple', score: 29, date: 'Yesterday', badge: '📖 Scripture Sage' },
     { name: 'Luke_Physician', score: 22, date: '2 days ago', badge: '🕊️ Melodic Scholar' },
     { name: 'Priscilla_Teacher', score: 16, date: '3 days ago', badge: '💡 Student' },
+  ],
+  samson_smash: [
+    { name: 'Samson_Nazarite', score: 9800, date: 'Today', badge: '🦁 Mighty Judge' },
+    { name: 'Manoah_Son', score: 7400, date: 'Yesterday', badge: '🏛️ Pillar Breaker' },
+    { name: 'Gaza_Gate_Lifter', score: 5200, date: '2 days ago', badge: '⚡ Colossus' },
+    { name: 'Danite_Hero', score: 3600, date: '3 days ago', badge: '💥 Smasher' },
   ]
 };
 
@@ -381,6 +401,13 @@ export const ArcadeVaultApp: React.FC = () => {
             highScore={stats.highScores.slingshot_target}
             onBack={() => setActiveGame(null)}
             onGameOver={(sc, tk) => handleGameOver('slingshot_target', sc, tk)}
+          />
+        )}
+        {activeGame === 'samson_smash' && (
+          <SamsonSmashGame
+            highScore={stats.highScores.samson_smash || 0}
+            onBack={() => setActiveGame(null)}
+            onGameOver={(sc, tk) => handleGameOver('samson_smash', sc, tk)}
           />
         )}
       </div>

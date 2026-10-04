@@ -64,4 +64,15 @@ export interface LifeOSWindowState {
   zIndex: number;
 }
 
-export type LifeOSWallpaper = 'mountain' | 'nebula' | 'olive' | 'slate' | 'aurora';
+export type LifeOSWallpaper = 
+  | 'mountain' 
+  | 'nebula' 
+  | 'olive' 
+  | 'slate' 
+  | 'aurora'
+  | 'stained_glass'
+  | 'golden_temple'
+  | 'celestial'
+  | 'sunset_peaks'
+  | 'cyber_neon'
+  | 'custom';
