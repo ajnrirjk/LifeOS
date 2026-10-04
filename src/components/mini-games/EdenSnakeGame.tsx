@@ -321,7 +321,7 @@ export const EdenSnakeGame: React.FC<EdenSnakeGameProps> = ({ onGameOver, onBack
       <div
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="relative w-full max-w-sm sm:max-w-xl md:max-w-4xl mx-auto aspect-[1/1] sm:aspect-[4/3] md:aspect-[16/9] min-h-[340px] sm:min-h-0 max-h-[55vh] sm:max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-2 border-emerald-500/30 bg-stone-950 touch-none"
+        className="relative w-full max-w-[420px] aspect-square mx-auto rounded-3xl overflow-hidden shadow-2xl border-2 border-emerald-500/30 bg-stone-950 touch-none"
       >
         <canvas
           ref={canvasRef}

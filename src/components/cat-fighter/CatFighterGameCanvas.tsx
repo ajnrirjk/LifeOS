@@ -216,6 +216,17 @@ export const CatFighterGameCanvas: React.FC<CatFighterGameCanvasProps> = ({
   // Keyboard input listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const gameKeys = new Set([
+        p1Keys.up, p1Keys.down, p1Keys.left, p1Keys.right,
+        p1Keys.lightPunch, p1Keys.heavyPunch, p1Keys.special, p1Keys.superArt,
+        p2Keys.up, p2Keys.down, p2Keys.left, p2Keys.right,
+        p2Keys.lightPunch, p2Keys.heavyPunch, p2Keys.special, p2Keys.superArt,
+        'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
+      ]);
+      if (gameKeys.has(e.code)) {
+        e.preventDefault();
+      }
+
       stateRef.current.keysDown[e.code] = true;
 
       // P1 Actions
@@ -852,8 +863,8 @@ export const CatFighterGameCanvas: React.FC<CatFighterGameCanvasProps> = ({
         </div>
       </div>
 
-      {/* Main Street Fighter Arena Viewport (Vertical 9:16 on mobile, Widescreen on desktop) */}
-      <div className="relative w-full max-w-sm sm:max-w-xl md:max-w-4xl mx-auto aspect-[9/16] sm:aspect-[4/3] md:aspect-[16/9] min-h-[500px] sm:min-h-0 max-h-[80vh] sm:max-h-[64vh] rounded-3xl overflow-hidden shadow-2xl border-4 border-amber-500/40 bg-stone-950 flex flex-col justify-between">
+      {/* Main Street Fighter Arena Viewport (Authentic 720:380 widescreen arcade proportions) */}
+      <div className="relative w-full max-w-4xl mx-auto aspect-[720/380] rounded-3xl overflow-hidden shadow-2xl border-4 border-amber-500/40 bg-stone-950 flex flex-col justify-between touch-none select-none">
         <canvas
           ref={canvasRef}
           width={720}
