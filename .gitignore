@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 data/lifeos_meeting_store.json
+dist-server/
+release/

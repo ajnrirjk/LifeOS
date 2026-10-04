@@ -1986,7 +1986,12 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
+    const candidatePaths = [
+      process.env.LIFEOS_DIST_PATH,
+      path.resolve(__dirname, 'dist'),
+      path.resolve(__dirname, '../dist')
+    ].filter(Boolean) as string[];
+    const distPath = candidatePaths.find(p => fs.existsSync(p)) || path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
