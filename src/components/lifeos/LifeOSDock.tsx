@@ -62,159 +62,146 @@ export const LifeOSDock: React.FC = () => {
           onMouseLeave={() => setIsHovered(false)}
           className={`hidden md:block fixed ${positionClasses} z-40 select-none`}
         >
-          <div className="px-2.5 py-1.5 rounded-3xl bg-black/75 dark:bg-black/85 backdrop-blur-2xl border border-white/20 shadow-2xl flex items-center gap-1.5 ring-1 ring-black/50">
+          <div className="px-3 py-2 rounded-2xl bg-stone-950/80 backdrop-blur-2xl border border-white/15 shadow-2xl flex items-center gap-2 ring-1 ring-white/10">
             {/* Desktop Home / Widgets Button */}
-            <motion.button
-              whileHover={{ scale: 1.06, y: -2 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-              onClick={() => {
-                sounds.playTap();
-                showDesktop();
-              }}
-              className={`flex items-center gap-2 px-2.5 py-1 rounded-2xl transition-colors duration-200 ${
-                isDesktopView
-                  ? 'bg-emerald-500/30 text-white shadow-inner ring-1 ring-emerald-400/40'
-                  : 'hover:bg-white/10 text-stone-200'
-              }`}
-              title="LifeOS Desktop & Widgets"
-            >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-700 to-green-800 flex items-center justify-center text-lg shadow-md shrink-0">
+            <div className="relative group flex flex-col items-center">
+              <motion.button
+                whileHover={{ scale: 1.15, y: -4 }}
+                whileTap={{ scale: 0.92 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                onClick={() => {
+                  sounds.playTap();
+                  showDesktop();
+                }}
+                className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl transition-all relative ${
+                  isDesktopView
+                    ? 'bg-emerald-600/30 text-white border border-emerald-400/40 shadow-md ring-1 ring-emerald-400/30'
+                    : 'hover:bg-white/15 bg-white/5 text-stone-200 border border-white/10'
+                }`}
+                title="LifeOS Desktop Dashboard"
+              >
                 <span>🌿</span>
+              </motion.button>
+              {/* Active Indicator Dot */}
+              <div className="h-2 flex items-center justify-center mt-1">
+                {isDesktopView && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                )}
               </div>
-              <div className="flex flex-col text-left">
-                <span className="font-black text-xs text-white tracking-wide whitespace-nowrap">
-                  Desktop
-                </span>
-                <span className="text-[9px] text-stone-300/80 font-bold whitespace-nowrap">
-                  App Widgets
-                </span>
+              {/* Tooltip */}
+              <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-stone-900/95 border border-white/20 text-white text-[11px] font-bold shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                Desktop Dashboard
               </div>
-            </motion.button>
+            </div>
 
-            <div className="h-5 w-px bg-white/20 mx-0.5 shrink-0" />
+            {/* Launchpad / All Apps Button */}
+            <div className="relative group flex flex-col items-center">
+              <motion.button
+                whileHover={{ scale: 1.15, y: -4 }}
+                whileTap={{ scale: 0.92 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                onClick={() => {
+                  sounds.playTap();
+                  setIsAppDrawerOpen(true);
+                }}
+                className="w-11 h-11 rounded-xl flex items-center justify-center text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 transition-all"
+                title="All Apps Drawer"
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </motion.button>
+              <div className="h-2 mt-1" />
+              <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-stone-900/95 border border-white/20 text-white text-[11px] font-bold shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                All Apps Drawer
+              </div>
+            </div>
 
+            <div className="h-6 w-px bg-white/15 mx-0.5 shrink-0" />
+
+            {/* App Icons */}
             {desktopDockApps.map((app) => {
               const isActive = !isDesktopView && activeAppId === app.id && openWindows[app.id] && !openWindows[app.id].isMinimized;
               const isMinimized = !!openWindows[app.id]?.isMinimized;
 
               return (
-                <motion.button
-                  key={app.id}
-                  whileHover={{ scale: 1.06, y: -2 }}
-                  whileTap={{ scale: 0.95 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-                  onClick={() => {
-                    sounds.playTap();
-                    if (isActive) {
-                      minimizeApp(app.id);
-                    } else {
-                      launchApp(app.id);
-                    }
-                  }}
-                  className={`flex items-center gap-2 px-2.5 py-1 rounded-2xl transition-colors duration-200 ${
-                    isActive
-                      ? 'bg-white/20 text-white shadow-inner ring-1 ring-white/30'
-                      : isMinimized
-                      ? 'bg-amber-400/20 text-white ring-1 ring-amber-400/40 shadow-sm'
-                      : 'hover:bg-white/10 text-stone-200'
-                  }`}
-                  title={
-                    isActive
-                      ? `Click to minimize ${app.title}`
-                      : isMinimized
-                      ? `Click to restore ${app.title}`
-                      : `${app.title} — ${app.description}`
-                  }
-                >
-                  {/* App Icon */}
-                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${app.color} flex items-center justify-center text-lg shadow-md shrink-0`}>
+                <div key={app.id} className="relative group flex flex-col items-center">
+                  <motion.button
+                    whileHover={{ scale: 1.15, y: -4 }}
+                    whileTap={{ scale: 0.92 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                    onClick={() => {
+                      sounds.playTap();
+                      if (isActive) {
+                        minimizeApp(app.id);
+                      } else {
+                        launchApp(app.id);
+                      }
+                    }}
+                    className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl transition-all relative ${
+                      isActive
+                        ? 'bg-white/25 text-white shadow-md border border-white/40 ring-1 ring-white/30'
+                        : isMinimized
+                        ? 'bg-amber-400/20 text-white border border-amber-400/40 shadow-sm'
+                        : 'bg-white/10 hover:bg-white/20 text-stone-200 border border-white/10'
+                    }`}
+                  >
                     <span>{app.emoji}</span>
+                  </motion.button>
+
+                  {/* Active / Minimized dot indicator */}
+                  <div className="h-2 flex items-center justify-center mt-1">
+                    {isActive ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                    ) : isMinimized ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    ) : null}
                   </div>
 
-                  {/* App Label */}
-                  <div className="flex flex-col text-left">
-                    <span className="font-black text-xs text-white tracking-wide flex items-center gap-1.5 whitespace-nowrap">
-                      {app.title}
-                      {isActive && (
-                        <motion.span
-                          animate={{ scale: [1, 1.3, 1] }}
-                          transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                          className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-                          title="Active Window"
-                        />
-                      )}
-                      {isMinimized && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Minimized Window" />
-                      )}
-                    </span>
-                    <span className="text-[9px] text-stone-300/80 font-bold whitespace-nowrap">
-                      {app.id === 'faithlingo'
-                        ? 'Scripture Study'
-                        : app.id === 'bible_journal'
-                        ? 'Sermon Notes'
-                        : app.id === 'fellowship_chat'
-                        ? 'Group Chat'
-                        : app.id === 'faith_meet'
-                        ? 'Group Calls'
-                        : app.id === 'lifeai'
-                        ? 'AI Companion'
-                        : app.id === 'mini_cats'
-                        ? 'Cat Fighter Turbo'
-                        : app.id === 'mini_games'
-                        ? 'Retro Arcade'
-                        : app.id === 'youtube'
-                        ? 'Videos & Worship'
-                        : 'App'}
-                    </span>
+                  {/* Hover Tooltip */}
+                  <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-stone-900/95 border border-white/20 text-white text-[11px] font-bold shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-1.5">
+                    <span>{app.emoji}</span>
+                    <span>{app.title}</span>
                   </div>
-                </motion.button>
+                </div>
               );
             })}
 
             {/* Divider */}
-            <div className="h-5 w-px bg-white/20 mx-0.5 shrink-0" />
+            <div className="h-6 w-px bg-white/15 mx-0.5 shrink-0" />
 
-            {/* Move Position: Toggle Left / Center / Right */}
-            <motion.button
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={handlePositionToggle}
-              className="p-1.5 rounded-xl hover:bg-white/15 text-white/70 hover:text-white transition-colors shrink-0"
-              title={`Dock Position: ${currentDockPosition.toUpperCase()} (Click to cycle)`}
-            >
-              <MoveHorizontal className="w-3.5 h-3.5" />
-            </motion.button>
+            {/* Utility group: Position, Pin, Minimize */}
+            <div className="flex items-center gap-1 pl-0.5">
+              <button
+                onClick={handlePositionToggle}
+                className="w-7 h-7 rounded-lg hover:bg-white/15 text-stone-400 hover:text-white flex items-center justify-center transition-colors"
+                title={`Dock Position: ${currentDockPosition.toUpperCase()} (Cycle)`}
+              >
+                <MoveHorizontal className="w-3.5 h-3.5" />
+              </button>
 
-            {/* Pin / Unpin Dock */}
-            <motion.button
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                sounds.playTap();
-                setIsPinned(!isPinned);
-              }}
-              className={`p-1.5 rounded-xl transition-colors shrink-0 ${
-                isPinned ? 'bg-amber-500/30 text-amber-300' : 'hover:bg-white/15 text-white/70 hover:text-white'
-              }`}
-              title={isPinned ? "Unpin Dock (Auto-Hide in Apps)" : "Pin Dock (Always Visible)"}
-            >
-              <span className="text-xs">📌</span>
-            </motion.button>
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setIsPinned(!isPinned);
+                }}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  isPinned ? 'bg-amber-500/30 text-amber-300' : 'hover:bg-white/15 text-stone-400 hover:text-white'
+                }`}
+                title={isPinned ? "Unpin Dock (Auto-Hide in Apps)" : "Pin Dock (Always Visible)"}
+              >
+                <span className="text-xs">📌</span>
+              </button>
 
-            {/* Minimize / Hide Dock button */}
-            <motion.button
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                sounds.playTap();
-                setIsCollapsed(true);
-              }}
-              className="p-1.5 rounded-xl hover:bg-white/15 text-white/70 hover:text-white transition-colors shrink-0"
-              title="Minimize Dock completely"
-            >
-              <ChevronDown className="w-3.5 h-3.5" />
-            </motion.button>
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setIsCollapsed(true);
+                }}
+                className="w-7 h-7 rounded-lg hover:bg-white/15 text-stone-400 hover:text-white flex items-center justify-center transition-colors"
+                title="Minimize Dock"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </motion.div>
       )}
@@ -234,7 +221,7 @@ export const LifeOSDock: React.FC = () => {
               sounds.playTap();
               setIsHovered(true);
             }}
-            className="px-3 py-1 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-xl border border-white/20 text-white/80 hover:text-white text-[11px] font-extrabold flex items-center gap-1.5 shadow-2xl transition-all"
+            className="px-3 py-1 rounded-full bg-stone-950/80 hover:bg-stone-900/90 backdrop-blur-xl border border-white/20 text-stone-200 hover:text-white text-[11px] font-bold flex items-center gap-1.5 shadow-2xl transition-all"
             title="Hover or click to show Dock"
           >
             <span>🌿</span>
@@ -258,12 +245,10 @@ export const LifeOSDock: React.FC = () => {
               setIsCollapsed(false);
               setIsHovered(true);
             }}
-            className="px-3 py-1.5 rounded-full bg-black/75 hover:bg-black/90 backdrop-blur-xl border border-white/20 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xl transition-all"
+            className="px-3 py-1.5 rounded-full bg-stone-950/85 hover:bg-stone-900/95 backdrop-blur-xl border border-white/20 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xl transition-all"
             title="Show LifeOS Dock"
           >
             <span>🌿</span>
-            <span>🕊️</span>
-            <span>📖</span>
             <ChevronUp className="w-3.5 h-3.5 opacity-80" />
           </motion.button>
         </div>

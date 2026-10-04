@@ -212,22 +212,24 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-col gap-3.5 sm:gap-6 p-2.5 sm:p-6 pb-[calc(76px+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-y-auto max-h-full">
+    <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col gap-4 sm:gap-6 px-4 sm:px-6 py-5 pb-28 md:pb-28 overflow-y-auto max-h-full">
       {/* Top Welcome & Actions Header */}
-      <div className="flex items-center justify-between gap-3 select-none pb-2 border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <span className="text-xl sm:text-2xl">🌿</span>
+      <div className="flex items-center justify-between gap-3 select-none pb-3 border-b border-white/10">
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center text-xl shadow-inner shrink-0">
+            🌿
+          </div>
           <div>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <h1 className="text-base sm:text-2xl font-black text-white tracking-tight leading-none">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight leading-none">
                 LifeOS <span className="hidden sm:inline">Desktop</span>
               </h1>
-              <span className="px-2 py-0.5 rounded-full bg-white/15 text-stone-200 text-[10px] sm:text-xs font-bold border border-white/20 backdrop-blur-md">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] sm:text-xs font-bold border border-emerald-500/30 backdrop-blur-md">
                 Dashboard
               </span>
             </div>
-            <p className="text-[11px] sm:text-xs text-stone-300 mt-0.5 line-clamp-1">
-              Spiritual command center & widgets
+            <p className="text-xs text-stone-300 mt-1 line-clamp-1 font-medium">
+              Spiritual command center, daily scripture & live fellowship
             </p>
           </div>
         </div>
@@ -238,7 +240,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
               sounds.playTap();
               onOpenAddModal();
             }}
-            className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+            className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all active:scale-95"
             title="Add or remove desktop widgets"
           >
             <Plus className="w-3.5 h-3.5 text-emerald-400" />
@@ -265,7 +267,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
           {activeWidgets.map((widgetId, index) => {
             const config = ALL_DESKTOP_WIDGETS.find(w => w.id === widgetId);
             if (!config) return null;
@@ -279,65 +281,61 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                 exit={{ opacity: 0, scale: 0.92, y: 10 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 350, delay: index * 0.04 }}
                 whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                className="group relative rounded-2xl sm:rounded-3xl bg-stone-900/60 hover:bg-stone-900/80 backdrop-blur-2xl border border-white/15 p-3.5 sm:p-5 shadow-2xl transition-colors duration-200 flex flex-col justify-between overflow-hidden"
+                className="group relative rounded-3xl bg-stone-900/60 hover:bg-stone-900/80 backdrop-blur-2xl border border-white/10 hover:border-white/20 p-4 sm:p-5 shadow-xl transition-all duration-200 flex flex-col justify-between overflow-hidden min-h-[235px]"
               >
-                {/* Widget Action Bar: Reorder & Remove Controls */}
-                <div className="absolute top-3.5 right-3.5 flex items-center gap-1 z-20">
-                  {index > 0 && (
-                    <motion.button
-                      whileHover={{ scale: 1.15 }}
-                      whileTap={{ scale: 0.85 }}
-                      onClick={() => moveDesktopWidget(widgetId, 'prev')}
-                      className="w-6 h-6 rounded-lg bg-black/40 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-all shadow-sm"
-                      title="Move widget left / up"
+                {/* Widget Header with Integrated Action Controls */}
+                <div className="flex items-center justify-between gap-2 mb-3 select-none">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <motion.div 
+                      whileHover={{ scale: 1.12, rotate: 4 }}
+                      transition={{ type: 'spring', stiffness: 400 }}
+                      className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-lg shadow-sm shrink-0"
                     >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </motion.button>
-                  )}
-                  {index < activeWidgets.length - 1 && (
-                    <motion.button
-                      whileHover={{ scale: 1.15 }}
-                      whileTap={{ scale: 0.85 }}
-                      onClick={() => moveDesktopWidget(widgetId, 'next')}
-                      className="w-6 h-6 rounded-lg bg-black/40 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-all shadow-sm"
-                      title="Move widget right / down"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </motion.button>
-                  )}
-                  <motion.button
-                    whileHover={{ scale: 1.15 }}
-                    whileTap={{ scale: 0.85 }}
-                    onClick={() => {
-                      sounds.playTap();
-                      onRemoveWidget(widgetId);
-                    }}
-                    className="w-6 h-6 rounded-lg bg-black/40 hover:bg-rose-600 text-stone-400 hover:text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-all shadow-sm ml-0.5"
-                    title="Remove widget from desktop"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </motion.button>
-                </div>
+                      {config.emoji}
+                    </motion.div>
+                    <div className="min-w-0">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-white truncate">
+                        {config.title}
+                      </h3>
+                      <p className="text-[11px] text-stone-400 font-medium truncate">{config.subtitle}</p>
+                    </div>
+                  </div>
 
-                {/* Widget Header */}
-                <div className="flex items-center gap-2.5 mb-3 select-none">
-                  <motion.div 
-                    whileHover={{ scale: 1.15, rotate: 5 }}
-                    transition={{ type: 'spring', stiffness: 400 }}
-                    className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-lg shadow-sm"
-                  >
-                    {config.emoji}
-                  </motion.div>
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
-                      {config.title}
-                    </h3>
-                    <p className="text-[11px] text-stone-400 font-medium line-clamp-1">{config.subtitle}</p>
+                  {/* Reorder & Remove Controls */}
+                  <div className="flex items-center gap-1 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
+                    {index > 0 && (
+                      <button
+                        onClick={() => moveDesktopWidget(widgetId, 'prev')}
+                        className="w-6 h-6 rounded-lg bg-black/40 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center transition-all shadow-sm"
+                        title="Move left"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {index < activeWidgets.length - 1 && (
+                      <button
+                        onClick={() => moveDesktopWidget(widgetId, 'next')}
+                        className="w-6 h-6 rounded-lg bg-black/40 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center transition-all shadow-sm"
+                        title="Move right"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        sounds.playTap();
+                        onRemoveWidget(widgetId);
+                      }}
+                      className="w-6 h-6 rounded-lg bg-black/40 hover:bg-rose-600 text-stone-400 hover:text-white flex items-center justify-center transition-all shadow-sm"
+                      title="Remove widget"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
 
                 {/* Widget Specific Body */}
-                <div className="flex-1 my-1">
+                <div className="flex-1 my-2 flex flex-col justify-center">
                   {/* 1. ChurchNotes Scribe Widget */}
                   {widgetId === 'church_notes' && (
                     <div className="flex flex-col gap-2.5">
@@ -345,7 +343,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         {latestNote ? (
                           <>
                             <div className="flex items-center justify-between gap-1 mb-1">
-                              <span className="text-xs font-extrabold text-amber-300 line-clamp-1">
+                              <span className="text-xs font-extrabold text-amber-300 truncate">
                                 {latestNote.title || 'Untitled Sermon'}
                               </span>
                               <span className="text-[10px] text-stone-400 shrink-0 font-bold">
@@ -364,7 +362,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                       </div>
 
                       <div className="flex items-center justify-between text-[11px] font-bold text-stone-300 px-1">
-                        <span>📁 {totalNotesCount} Sermon Notes Saved</span>
+                        <span>📁 {totalNotesCount} Sermon Notes</span>
                         <span className="text-emerald-400 flex items-center gap-1">☁️ Google Drive Ready</span>
                       </div>
                     </div>
@@ -372,91 +370,72 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
 
                   {/* YouTube Player Widget */}
                   {widgetId === 'youtube' && (
-                    <div className="flex flex-col gap-3">
-                      <div className="p-3 rounded-2xl bg-red-600/15 border border-red-500/20 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-8 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-md">
-                            <span className="text-sm font-black">▶️</span>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black text-white">YouTube Stream</h4>
-                            <p className="text-[11px] text-stone-300">
-                              Worship music, BibleProject & lofi beats
-                            </p>
-                          </div>
+                    <div className="flex flex-col gap-2.5">
+                      <div className="p-3 rounded-2xl bg-red-600/15 border border-red-500/20 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-md shrink-0">
+                          <span className="text-sm font-black">▶️</span>
                         </div>
-                        <button
-                          onClick={() => launchApp('youtube')}
-                          className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black shadow-md transition-transform active:scale-95 flex items-center gap-1"
-                        >
-                          <span>Open</span>
-                          <span>▶</span>
-                        </button>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-black text-white truncate">Worship & Study Stream</h4>
+                          <p className="text-[11px] text-stone-300 truncate">
+                            Elevation, Maverick City, BibleProject & Lofi
+                          </p>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between text-[11px] font-bold text-stone-300 px-1">
-                        <span className="text-stone-400">Jireh · Elevation · BibleProject</span>
-                        <span className="text-red-400 font-black">HD Player</span>
+                        <span className="text-stone-400">Picture-in-Picture Ready</span>
+                        <span className="text-red-400 font-black">1080p HD</span>
                       </div>
                     </div>
                   )}
 
-                  {/* Pocket Paws Miniature Cats Sanctuary Widget */}
+                  {/* Cat Fighter Turbo Widget */}
                   {widgetId === 'mini_cats' && (
-                    <div className="flex flex-col gap-3">
-                      <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-3xl animate-bounce">🐱</span>
-                          <div>
-                            <h4 className="text-xs font-black text-amber-300">Pocket Paws Sanctuary</h4>
-                            <p className="text-[11px] text-stone-300">
-                              Miniature breeds · Silly costumes · Live animations
-                            </p>
-                          </div>
+                    <div className="flex flex-col gap-2.5">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center">
+                          <div className="text-xl mb-0.5">🥋</div>
+                          <div className="text-[10px] font-bold text-white truncate">Ryu-Paw</div>
                         </div>
+                        <div className="p-2.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-center">
+                          <div className="text-xl mb-0.5">🎀</div>
+                          <div className="text-[10px] font-bold text-white truncate">Chun-Meow</div>
+                        </div>
+                        <div className="p-2.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
+                          <div className="text-xl mb-0.5">👹</div>
+                          <div className="text-[10px] font-bold text-white truncate">Akuma-Cat</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between px-2 text-[11px] text-stone-300 font-bold">
+                        <span>🥊 16-Bit Engine</span>
                         <button
                           onClick={() => {
                             sounds.playMeow();
                             sounds.playPurr();
                           }}
-                          className="px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-bold transition-all active:scale-95"
-                          title="Pet Kitty"
+                          className="px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold transition-all"
                         >
-                          Pet 💖
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <span className="p-1 rounded-lg bg-white/5 border border-white/10">🧙‍♂️ Wizard</span>
-                          <span className="p-1 rounded-lg bg-white/5 border border-white/10">🌮 Taco</span>
-                          <span className="p-1 rounded-lg bg-white/5 border border-white/10">👑 Royal</span>
-                        </div>
-                        <button
-                          onClick={() => launchApp('mini_cats')}
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white text-xs font-black shadow-md transition-transform active:scale-95 flex items-center gap-1"
-                        >
-                          <span>Open Sanctuary</span>
-                          <span>🐾</span>
+                          Pet Kitty 💖
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* 2. Fellowship Group Chat Widget */}
+                  {/* Fellowship Group Chat Widget */}
                   {widgetId === 'fellowship_chat' && (
                     <div className="flex flex-col gap-2.5">
                       <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-stone-200">
                         {latestChatMessage ? (
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-blue-300 flex items-center gap-1">
+                              <span className="text-xs font-black text-blue-300 flex items-center gap-1 truncate">
                                 {latestChatMessage.senderName}
                                 {latestChatMessage.isGoogleUser && (
                                   <span className="text-[10px] text-emerald-400">✓</span>
                                 )}
                               </span>
-                              <span className="text-[10px] text-stone-400">
+                              <span className="text-[10px] text-stone-400 shrink-0">
                                 {new Date(latestChatMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
@@ -490,7 +469,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
-                  {/* 2. FaithLingo Stats Widget */}
+                  {/* FaithLingo Stats Widget */}
                   {widgetId === 'faithlingo_stats' && (
                     <div className="flex flex-col gap-3">
                       <div className="grid grid-cols-2 gap-2">
@@ -530,7 +509,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
-                  {/* 3. Verse of the Day Widget */}
+                  {/* Verse of the Day Widget */}
                   {widgetId === 'verse_of_day' && (
                     <div className="flex flex-col gap-2.5">
                       <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-stone-100">
@@ -538,12 +517,12 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                           <span>{todayHighlight.reference}</span>
                           <span className="text-[10px] text-stone-400 font-semibold">{todayHighlight.theme}</span>
                         </div>
-                        <p className="text-xs italic font-serif leading-relaxed text-stone-200">
+                        <p className="text-xs italic font-serif leading-relaxed text-stone-200 line-clamp-3">
                           “{todayHighlight.text}”
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-end gap-2 pt-1">
+                      <div className="flex items-center justify-end gap-2 pt-0.5">
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
@@ -578,7 +557,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
-                  {/* 4. Fast Sermon Voice Listener Widget */}
+                  {/* Quick Sermon Listen Widget */}
                   {widgetId === 'quick_listen' && (
                     <div className="flex flex-col gap-2.5">
                       <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-stone-200">
@@ -591,16 +570,16 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         </p>
                       </div>
                       <div className="flex items-center justify-between text-[11px] font-bold text-stone-400 px-1">
-                        <span>🎙️ Sanctuary (+8dB) Boost</span>
+                        <span>🎙️ Sanctuary Boost</span>
                         <span>✨ AI Structured</span>
                       </div>
                     </div>
                   )}
 
-                  {/* 5. Daily Prayer Wall Widget */}
+                  {/* Daily Prayer Wall Widget */}
                   {widgetId === 'prayer_focus' && (
                     <div className="flex flex-col gap-2">
-                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                      <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
                         {prayers.slice(0, 3).map((item) => (
                           <div
                             key={item.id}
@@ -622,7 +601,7 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         ))}
                       </div>
 
-                      <form onSubmit={handleAddPrayer} className="flex items-center gap-1.5 pt-1">
+                      <form onSubmit={handleAddPrayer} className="flex items-center gap-1.5 pt-0.5">
                         <input
                           type="text"
                           value={newPrayerText}
@@ -640,10 +619,10 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
-                  {/* 6. Spiritual Disciplines Widget */}
+                  {/* Spiritual Disciplines Widget */}
                   {widgetId === 'spiritual_habits' && (
                     <div className="flex flex-col gap-2">
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         {[
                           { key: 'scripture', label: 'Daily Bible Reading (15 min)' },
                           { key: 'notes', label: 'Sermon / Devotional Journal' },
@@ -668,30 +647,6 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
-                  {/* Cat Fighter Turbo Widget */}
-                  {widgetId === 'mini_cats' && (
-                    <div className="flex flex-col gap-2.5">
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center">
-                          <div className="text-xl mb-0.5">🥋</div>
-                          <div className="text-[10px] font-bold text-white truncate">Ryu-Paw</div>
-                        </div>
-                        <div className="p-2.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-center">
-                          <div className="text-xl mb-0.5">🎀</div>
-                          <div className="text-[10px] font-bold text-white truncate">Chun-Meow</div>
-                        </div>
-                        <div className="p-2.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
-                          <div className="text-xl mb-0.5">👹</div>
-                          <div className="text-[10px] font-bold text-white truncate">Akuma-Cat</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 text-xs text-stone-300">
-                        <span>🥊 16-Bit Street Fighter Engine</span>
-                        <span className="text-amber-400 font-black">Hadou-Paw & Custom Keys</span>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Mini Games Arcade Widget */}
                   {widgetId === 'mini_games' && (
                     <div className="flex flex-col gap-2.5">
@@ -709,14 +664,14 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                           <div className="text-[10px] font-bold text-white truncate">Demon Buster</div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 text-xs text-stone-300">
-                        <span>🕹️ 8 Arcade Games Installed</span>
-                        <span className="text-amber-400 font-black">Tokens & Best Scores</span>
+                      <div className="flex items-center justify-between px-2 text-[11px] font-bold text-stone-300">
+                        <span>🕹️ 8 Retro Games</span>
+                        <span className="text-amber-400">Tokens & High Scores</span>
                       </div>
                     </div>
                   )}
 
-                  {/* 7. App Studio Widget */}
+                  {/* App Studio Widget */}
                   {widgetId === 'app_studio' && (
                     <div className="flex flex-col gap-2.5">
                       <div className="p-3.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-stone-200">
@@ -731,38 +686,30 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                     </div>
                   )}
 
+                  {/* Life Meet Widget */}
                   {widgetId === 'life_meet' && (
-                    <div className="flex flex-col h-full justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-2xl shrink-0">
+                    <div className="flex flex-col gap-2.5">
+                      <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-xl shrink-0">
                           📹
                         </div>
-                        <div>
-                          <h4 className="font-black text-sm text-white">Fellowship Video Calls</h4>
-                          <p className="text-xs text-stone-300">
-                            WebRTC group video calling, live screen sharing & prayer fellowship.
+                        <div className="min-w-0">
+                          <h4 className="font-black text-xs text-white truncate">Fellowship Video Calls</h4>
+                          <p className="text-[11px] text-stone-300 truncate">
+                            WebRTC group audio/video & screen sharing
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            sounds.playTap();
-                            launchApp('faith_meet');
-                          }}
-                          className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                        >
-                          <span>Join LifeMeet</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="flex items-center justify-between text-[11px] font-bold text-stone-300 px-1">
+                        <span className="text-stone-400">Prayer Rooms & Bible Study</span>
+                        <span className="text-emerald-400 font-black">Live WebRTC</span>
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* Widget Action Footer */}
-                <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between select-none">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
                     {config.category}
                   </span>
@@ -782,6 +729,8 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                         launchApp('app_studio');
                       } else if (widgetId === 'life_meet') {
                         launchApp('faith_meet');
+                      } else if (widgetId === 'youtube') {
+                        launchApp('youtube');
                       } else {
                         launchApp('faithlingo');
                       }
@@ -792,18 +741,26 @@ export const LifeOSDesktopWidgets: React.FC<LifeOSDesktopWidgetsProps> = ({
                       {widgetId === 'church_notes'
                         ? 'Open ChurchNotes'
                         : widgetId === 'fellowship_chat'
-                        ? 'Open Fellowship Chat'
+                        ? 'Open Chat'
                         : widgetId === 'mini_games'
-                        ? 'Play Arcade Vault'
+                        ? 'Play Arcade'
+                        : widgetId === 'mini_cats'
+                        ? 'Play Cat Fighter'
                         : widgetId === 'quick_listen'
                         ? 'Record Sermon'
                         : widgetId === 'app_studio'
                         ? 'Open Studio'
                         : widgetId === 'life_meet'
-                        ? 'Open LifeMeet'
+                        ? 'Join LifeMeet'
+                        : widgetId === 'youtube'
+                        ? 'Open YouTube'
+                        : widgetId === 'prayer_focus'
+                        ? 'View Prayer Wall'
+                        : widgetId === 'spiritual_habits'
+                        ? 'Track Disciplines'
                         : 'Open FaithLingo'}
                     </span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
                   </button>
                 </div>
               </motion.div>

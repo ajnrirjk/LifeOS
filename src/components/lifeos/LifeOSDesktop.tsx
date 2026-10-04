@@ -232,7 +232,7 @@ export const LifeOSDesktop: React.FC = () => {
       <div className={`flex-1 relative overflow-hidden flex flex-col ${
         !isDesktopView && (splitScreen.isSplit || (activeApp && activeWindowState && !activeWindowState.isMinimized))
           ? 'p-0 pb-0'
-          : 'p-2 sm:p-3 pb-0 md:pb-24'
+          : 'p-0 pb-0'
       }`}>
         <AnimatePresence mode="wait">
           {!isDesktopView && splitScreen.isSplit ? (
