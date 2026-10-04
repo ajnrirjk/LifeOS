@@ -25,6 +25,7 @@ import { CatFighterApp } from '../cat-fighter/CatFighterApp';
 import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
 import { LifeMeetApp } from '../meet/LifeMeetApp';
+import { LifeMeetFloatingPiP } from '../meet/LifeMeetFloatingPiP';
 import { useApp } from '../../context/AppContext';
 import { useSettings } from '../../context/SettingsContext';
 import { Minus, Square, X, Maximize2, Minimize2, ArrowLeft, Megaphone } from 'lucide-react';
@@ -403,6 +404,9 @@ export const LifeOSDesktop: React.FC = () => {
 
       {/* Floating System Dock */}
       <LifeOSDock />
+
+      {/* Floating Picture-in-Picture Bar for Active Calls when Navigating other Apps */}
+      <LifeMeetFloatingPiP />
 
       {/* Full-screen Launchpad Modal */}
       <LaunchpadModal />

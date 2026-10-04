@@ -1,6 +1,7 @@
 // ==========================================
 // REAL-TIME WEBRTC GROUP CALL SERVICE (Google Meet Architecture)
 // Powered by Serverless MQTT WebSockets + BroadcastChannel Signaling
+// With Mobile Background Audio Keep-Alive & WakeLock Protection
 // ==========================================
 
 import mqtt, { MqttClient } from 'mqtt';
@@ -84,15 +85,22 @@ class MeetService {
   private screenStream: MediaStream | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
   private remoteStreams: Map<string, MediaStream> = new Map();
+  private remoteAudioElements: Map<string, HTMLAudioElement> = new Map();
   private pendingIceCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
   private processedSignalIds: Set<string> = new Set();
   private listeners: Set<MeetEventListener> = new Set();
+
   private currentRoomId: string | null = null;
+  private currentRoomInfo: MeetRoomInfo | null = null;
   private currentUser: { id: string; name: string; photoURL?: string; isGoogleUser?: boolean } | null = null;
+  private callStartTime: number | null = null;
+  public isInCall: boolean = false;
+
   private isAudioMuted: boolean = false;
   private isVideoMuted: boolean = false;
   private isScreenSharing: boolean = false;
   private isHandRaised: boolean = false;
+
   private audioAnalyser: AnalyserNode | null = null;
   private audioContext: AudioContext | null = null;
   private audioAnimationId: number | null = null;
@@ -102,6 +110,10 @@ class MeetService {
   private participantsMap: Map<string, ParticipantRecord> = new Map();
   private chatHistory: Map<string, MeetChatMessage[]> = new Map();
   private knownRooms: Map<string, MeetRoomInfo> = new Map();
+
+  // Mobile Background & WakeLock
+  private wakeLock: any = null;
+  private backgroundAudio: HTMLAudioElement | null = null;
 
   // Real-time Transport
   private mqttClient: MqttClient | null = null;
@@ -124,6 +136,7 @@ class MeetService {
     this.initDefaultRooms();
     this.initBroadcastChannel();
     this.initMqttTransport();
+    this.setupVisibilityAndFocusListeners();
   }
 
   private initDefaultRooms() {
@@ -160,6 +173,148 @@ class MeetService {
     this.listeners.forEach(l => {
       try { l({ type, data }); } catch {}
     });
+  }
+
+  // ==========================================
+  // MOBILE BACKGROUND & WAKELOCK MANAGEMENT
+  // ==========================================
+
+  private setupVisibilityAndFocusListeners() {
+    if (typeof document === 'undefined') return;
+
+    const onVisible = async () => {
+      if (document.visibilityState === 'visible') {
+        if (this.isInCall) {
+          this.requestWakeLock();
+          await this.ensureTracksActive();
+          if (this.audioContext && this.audioContext.state === 'suspended') {
+            try { await this.audioContext.resume(); } catch {}
+          }
+          if (this.currentRoomId && (!this.mqttClient || !this.mqttClient.connected)) {
+            this.initMqttTransport();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+  }
+
+  private async requestWakeLock() {
+    try {
+      if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && (navigator as any).wakeLock) {
+        if (!this.wakeLock) {
+          this.wakeLock = await (navigator as any).wakeLock.request('screen');
+          this.wakeLock.addEventListener('release', () => {
+            this.wakeLock = null;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('WakeLock request error:', err);
+    }
+  }
+
+  private releaseWakeLock() {
+    if (this.wakeLock) {
+      try { this.wakeLock.release(); } catch {}
+      this.wakeLock = null;
+    }
+  }
+
+  private startBackgroundAudioKeepAlive() {
+    if (typeof window === 'undefined') return;
+    try {
+      if (!this.backgroundAudio) {
+        // Silent WAV sound looping in an HTMLAudioElement signals to mobile OS media subsystems that playback is active
+        const silentWavUri = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        this.backgroundAudio = new Audio(silentWavUri);
+        this.backgroundAudio.loop = true;
+        this.backgroundAudio.volume = 0.001;
+      }
+      this.backgroundAudio.play().catch(() => {});
+    } catch {}
+  }
+
+  private stopBackgroundAudioKeepAlive() {
+    if (this.backgroundAudio) {
+      try {
+        this.backgroundAudio.pause();
+        this.backgroundAudio.currentTime = 0;
+      } catch {}
+    }
+  }
+
+  // Guarantee mic and camera tracks resume immediately after mobile app switching
+  public async ensureTracksActive() {
+    if (!this.isInCall || !this.localStream) return;
+
+    // 1. Microphone track recovery
+    const audioTracks = this.localStream.getAudioTracks();
+    const isAudioDead = audioTracks.length === 0 || audioTracks.some(t => t.readyState === 'ended' || t.muted);
+    if (isAudioDead && !this.isAudioMuted) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        const newTrack = stream.getAudioTracks()[0];
+        if (newTrack) {
+          audioTracks.forEach(t => {
+            try { t.stop(); } catch {}
+            this.localStream?.removeTrack(t);
+          });
+          this.localStream.addTrack(newTrack);
+          newTrack.enabled = !this.isAudioMuted;
+
+          this.peerConnections.forEach(pc => {
+            const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+            if (sender) sender.replaceTrack(newTrack);
+          });
+        }
+      } catch (err) {
+        console.warn('Microphone recovery error:', err);
+      }
+    } else {
+      audioTracks.forEach(t => {
+        t.enabled = !this.isAudioMuted;
+      });
+    }
+
+    // 2. Camera track recovery (if user has camera on)
+    if (!this.isVideoMuted && !this.isScreenSharing) {
+      const videoTracks = this.localStream.getVideoTracks();
+      const isVideoDead = videoTracks.length === 0 || videoTracks.some(t => t.readyState === 'ended' || t.muted);
+      if (isVideoDead) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+          });
+          const newTrack = stream.getVideoTracks()[0];
+          if (newTrack) {
+            videoTracks.forEach(t => {
+              try { t.stop(); } catch {}
+              this.localStream?.removeTrack(t);
+            });
+            this.localStream.addTrack(newTrack);
+            newTrack.enabled = true;
+
+            this.peerConnections.forEach(pc => {
+              const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+              if (sender) sender.replaceTrack(newTrack);
+            });
+
+            this.emit('local_stream', { stream: this.localStream });
+          }
+        } catch (err) {
+          console.warn('Camera recovery error:', err);
+        }
+      } else {
+        videoTracks.forEach(t => {
+          t.enabled = true;
+        });
+      }
+    }
   }
 
   // ==========================================
@@ -215,7 +370,6 @@ class MeetService {
 
       client.on('connect', () => {
         this.isMqttConnected = true;
-        // If already in a room, resubscribe and announce presence
         if (this.currentRoomId && this.currentUser) {
           this.subscribeRoomMqtt(this.currentRoomId, this.currentUser.id);
           this.publishPresence('peer_join');
@@ -250,7 +404,6 @@ class MeetService {
       client.on('error', (err) => {
         console.warn('Meet MQTT error:', err);
         if (!useFallback && !this.isMqttConnected) {
-          // Attempt fallback broker
           this.initMqttTransport(true);
         }
       });
@@ -333,8 +486,12 @@ class MeetService {
 
   public async startLocalPreview(video: boolean = true, audio: boolean = true): Promise<MediaStream | null> {
     try {
-      if (this.localStream) {
-        this.stopLocalStream();
+      if (this.localStream && !this.isInCall) {
+        this.stopLocalStream(true);
+      }
+
+      if (this.localStream && this.isInCall) {
+        return this.localStream;
       }
 
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -382,7 +539,7 @@ class MeetService {
         const ctxAudio = new AudioCtx();
         const osc = ctxAudio.createOscillator();
         const gain = ctxAudio.createGain();
-        gain.gain.value = 0.0001; // Silent
+        gain.gain.value = 0.0001;
         const dst = ctxAudio.createMediaStreamDestination();
         osc.connect(gain);
         gain.connect(dst);
@@ -520,7 +677,6 @@ class MeetService {
       lastSeen: Date.now()
     };
 
-    // Check if room metadata is known
     let room = this.knownRooms.get(roomId);
     if (!room) {
       room = {
@@ -532,17 +688,20 @@ class MeetService {
       this.knownRooms.set(roomId, room);
     }
 
-    // Set self in participant map
+    this.currentRoomInfo = room;
+    this.isInCall = true;
+    this.callStartTime = Date.now();
+
+    // Enable mobile background keep-alive & screen wake lock
+    this.requestWakeLock();
+    this.startBackgroundAudioKeepAlive();
+
     this.participantsMap.clear();
     this.participantsMap.set(user.id, localParticipant);
 
-    // Subscribe to MQTT topics for this room
     this.subscribeRoomMqtt(roomId, user.id);
-
-    // Announce presence immediately via MQTT and BroadcastChannel
     this.publishPresence('peer_join');
 
-    // Start 3.5s Heartbeat to continuously discover and retain peers
     if (this.heartbeatIntervalId) clearInterval(this.heartbeatIntervalId);
     this.heartbeatIntervalId = setInterval(() => {
       if (this.currentRoomId && this.currentUser) {
@@ -550,7 +709,6 @@ class MeetService {
       }
     }, 3500);
 
-    // Start 4s Stale Participant Pruning
     if (this.pruneIntervalId) clearInterval(this.pruneIntervalId);
     this.pruneIntervalId = setInterval(() => {
       this.pruneStaleParticipants();
@@ -572,6 +730,13 @@ class MeetService {
       this.unsubscribeRoomMqtt(this.currentRoomId, this.currentUser.id);
     }
 
+    this.isInCall = false;
+    this.currentRoomInfo = null;
+    this.callStartTime = null;
+
+    this.releaseWakeLock();
+    this.stopBackgroundAudioKeepAlive();
+
     if (this.heartbeatIntervalId) {
       clearInterval(this.heartbeatIntervalId);
       this.heartbeatIntervalId = null;
@@ -590,7 +755,16 @@ class MeetService {
     this.remoteAnalysers.clear();
     this.participantsMap.clear();
 
-    this.stopLocalStream();
+    // Clean up dedicated remote audio elements
+    this.remoteAudioElements.forEach(audioEl => {
+      try {
+        audioEl.pause();
+        audioEl.srcObject = null;
+      } catch {}
+    });
+    this.remoteAudioElements.clear();
+
+    this.stopLocalStream(true);
     this.stopScreenSharing();
 
     if (this.audioAnimationId) {
@@ -609,7 +783,7 @@ class MeetService {
   // REAL-TIME SIGNALING & PRESENCE PROTOCOL
   // ==========================================
 
-  private getParticipantsList(): MeetParticipant[] {
+  public getParticipantsList(): MeetParticipant[] {
     return Array.from(this.participantsMap.values()).map(p => ({
       id: p.id,
       name: p.name,
@@ -650,7 +824,6 @@ class MeetService {
       timestamp: Date.now()
     };
 
-    // 1. Send via MQTT
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         `lifeos/meet/v2/rooms/${this.currentRoomId}/presence`,
@@ -658,7 +831,6 @@ class MeetService {
       );
     }
 
-    // 2. Send via BroadcastChannel (local cross-tab sync)
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage({
@@ -697,7 +869,6 @@ class MeetService {
       });
 
       if (isNewPeer) {
-        // Immediately reply with targeted heartbeat so the new peer registers us without delay
         this.publishPresence('heartbeat', peerId);
 
         this.emit('peer_joined', {
@@ -705,7 +876,6 @@ class MeetService {
           participants: this.getParticipantsList()
         });
       } else if (existing) {
-        // Check if any state changed
         if (
           existing.isAudioMuted !== participant.isAudioMuted ||
           existing.isVideoMuted !== participant.isVideoMuted ||
@@ -724,7 +894,6 @@ class MeetService {
         participants: this.getParticipantsList()
       });
 
-      // Deterministically establish WebRTC connection if not already created
       if (!this.peerConnections.has(peerId)) {
         const isInitiator = this.currentUser.id.localeCompare(peerId) < 0;
         this.createPeerConnection(peerId, isInitiator);
@@ -745,6 +914,15 @@ class MeetService {
     this.remoteStreams.delete(peerId);
     this.pendingIceCandidates.delete(peerId);
     this.remoteAnalysers.delete(peerId);
+
+    const audioEl = this.remoteAudioElements.get(peerId);
+    if (audioEl) {
+      try {
+        audioEl.pause();
+        audioEl.srcObject = null;
+      } catch {}
+      this.remoteAudioElements.delete(peerId);
+    }
 
     this.emit('peer_left', {
       peerId,
@@ -782,6 +960,14 @@ class MeetService {
         ...updates,
         lastSeen: Date.now()
       });
+
+      if (typeof updates.isAudioMuted === 'boolean') {
+        const audioEl = this.remoteAudioElements.get(peerId);
+        if (audioEl) {
+          audioEl.muted = updates.isAudioMuted;
+        }
+      }
+
       this.emit('peer_state_changed', {
         peerId,
         updates,
@@ -820,7 +1006,6 @@ class MeetService {
     const pc = new RTCPeerConnection(this.iceServers);
     this.peerConnections.set(remotePeerId, pc);
 
-    // Add local media tracks
     const currentStream = this.isScreenSharing && this.screenStream ? this.screenStream : this.localStream;
     if (currentStream) {
       currentStream.getTracks().forEach(track => {
@@ -832,7 +1017,6 @@ class MeetService {
       });
     }
 
-    // Handle incoming remote tracks
     pc.ontrack = (event) => {
       let stream = this.remoteStreams.get(remotePeerId);
       if (!stream) {
@@ -846,11 +1030,24 @@ class MeetService {
         }
       }
 
+      // Continuous background audio playback for remote peer
+      if (stream.getAudioTracks().length > 0) {
+        let audioEl = this.remoteAudioElements.get(remotePeerId);
+        if (!audioEl) {
+          audioEl = new Audio();
+          audioEl.autoplay = true;
+          this.remoteAudioElements.set(remotePeerId, audioEl);
+        }
+        if (audioEl.srcObject !== stream) {
+          audioEl.srcObject = stream;
+        }
+        audioEl.play().catch(() => {});
+      }
+
       this.setupRemoteAudioAnalysis(remotePeerId, stream);
       this.emit('remote_stream', { peerId: remotePeerId, stream });
     };
 
-    // Gather and send ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.sendSignal(remotePeerId, event.candidate.toJSON(), 'ice');
@@ -863,7 +1060,6 @@ class MeetService {
       }
     };
 
-    // If deterministic initiator, produce WebRTC Offer
     if (isInitiator) {
       pc.onnegotiationneeded = async () => {
         try {
@@ -877,7 +1073,6 @@ class MeetService {
         }
       };
 
-      // Fallback timer to guarantee offer generation even if onnegotiationneeded was delayed
       setTimeout(async () => {
         try {
           if (pc.signalingState === 'stable' && !pc.localDescription) {
@@ -909,7 +1104,6 @@ class MeetService {
       timestamp: Date.now()
     };
 
-    // 1. MQTT directed to target peer's signal topic
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         `lifeos/meet/v2/rooms/${this.currentRoomId}/signals/${targetId}`,
@@ -917,7 +1111,6 @@ class MeetService {
       );
     }
 
-    // 2. BroadcastChannel local delivery
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage({
@@ -941,7 +1134,6 @@ class MeetService {
 
     const { id, senderId, type, signalData } = sig;
 
-    // Deduplicate
     if (id) {
       if (this.processedSignalIds.has(id)) return;
       this.processedSignalIds.add(id);
@@ -1007,7 +1199,7 @@ class MeetService {
   }
 
   // ==========================================
-  // IN-CALL CONTROLS & FEATURES
+  // IN-CALL CONTROLS & GETTERS
   // ==========================================
 
   public async toggleAudio(): Promise<boolean> {
@@ -1154,7 +1346,6 @@ class MeetService {
       message
     };
 
-    // 1. MQTT
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         `lifeos/meet/v2/rooms/${this.currentRoomId}/chat`,
@@ -1162,7 +1353,6 @@ class MeetService {
       );
     }
 
-    // 2. BroadcastChannel
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage({
@@ -1173,7 +1363,6 @@ class MeetService {
       } catch {}
     }
 
-    // Emit locally
     this.emit('chat_message', message);
     return true;
   }
@@ -1194,7 +1383,6 @@ class MeetService {
       updates
     };
 
-    // 1. MQTT
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         `lifeos/meet/v2/rooms/${this.currentRoomId}/state`,
@@ -1202,7 +1390,6 @@ class MeetService {
       );
     }
 
-    // 2. BroadcastChannel
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage({
@@ -1214,7 +1401,11 @@ class MeetService {
     }
   }
 
-  public stopLocalStream() {
+  public stopLocalStream(force: boolean = false) {
+    if (this.isInCall && !force) {
+      // Protect active call from being muted/stopped on component unmount
+      return;
+    }
     if (this.localStream) {
       this.localStream.getTracks().forEach(t => t.stop());
       this.localStream = null;
@@ -1229,8 +1420,47 @@ class MeetService {
     return this.screenStream;
   }
 
+  public getIsInCall(): boolean {
+    return this.isInCall;
+  }
+
+  public getCurrentRoomInfo(): MeetRoomInfo | null {
+    return this.currentRoomInfo;
+  }
+
+  public getCurrentRoomId(): string | null {
+    return this.currentRoomId;
+  }
+
+  public getCurrentUser(): { id: string; name: string; photoURL?: string; isGoogleUser?: boolean } | null {
+    return this.currentUser;
+  }
+
+  public getCallDuration(): number {
+    return this.callStartTime ? Math.floor((Date.now() - this.callStartTime) / 1000) : 0;
+  }
+
+  public getCallStartTime(): number | null {
+    return this.callStartTime;
+  }
+
+  public getRemoteStreamsObject(): Record<string, MediaStream> {
+    const result: Record<string, MediaStream> = {};
+    this.remoteStreams.forEach((stream, peerId) => {
+      result[peerId] = stream;
+    });
+    return result;
+  }
+
+  public getChatHistory(roomId?: string): MeetChatMessage[] {
+    const id = roomId || this.currentRoomId;
+    if (!id) return [];
+    return this.chatHistory.get(id) || [];
+  }
+
   public getState() {
     return {
+      isInCall: this.isInCall,
       isAudioMuted: this.isAudioMuted,
       isVideoMuted: this.isVideoMuted,
       isScreenSharing: this.isScreenSharing,

@@ -53,13 +53,19 @@ interface ParticipantTileProps {
 const VideoStreamPlayer = React.memo(({
   stream,
   isLocal = false,
-  className = ''
+  className = '',
+  onVideoRef
 }: {
   stream: MediaStream | null;
   isLocal?: boolean;
   className?: string;
+  onVideoRef?: (el: HTMLVideoElement | null) => void;
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (onVideoRef) onVideoRef(videoRef.current);
+  }, [onVideoRef]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -84,6 +90,8 @@ const VideoStreamPlayer = React.memo(({
       ref={videoRef}
       autoPlay
       playsInline
+      // @ts-ignore
+      autoPictureInPicture="true"
       muted={true}
       className={className}
     />
@@ -142,6 +150,17 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
   isPinned,
   onPin,
 }) => {
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+
+  const handleTogglePiP = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (document.pictureInPictureElement) {
+      document.exitPictureInPicture().catch(() => {});
+    } else if (document.pictureInPictureEnabled && videoEl) {
+      videoEl.requestPictureInPicture().catch(() => {});
+    }
+  };
+
   return (
     <div
       className={`relative w-full h-full bg-[#1e293b] rounded-2xl sm:rounded-3xl overflow-hidden flex items-center justify-center border transition-all duration-200 group shadow-lg ${
@@ -157,6 +176,7 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
         <VideoStreamPlayer
           stream={stream}
           isLocal={isLocal}
+          onVideoRef={setVideoEl}
           className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`}
         />
       ) : (
@@ -203,20 +223,31 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
         </motion.div>
       )}
 
-      {/* Top Right Pin Button */}
-      {onPin && (
-        <button
-          onClick={onPin}
-          className={`absolute top-3 right-3 p-1.5 rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 ${
-            isPinned
-              ? 'bg-amber-500 text-stone-950 opacity-100'
-              : 'bg-black/60 hover:bg-black/80 text-stone-300 hover:text-white'
-          }`}
-          title={isPinned ? 'Unpin participant' : 'Pin to spotlight'}
-        >
-          <Pin className="w-3.5 h-3.5" />
-        </button>
-      )}
+      {/* Top Right Controls: PiP & Pin Buttons */}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        {typeof document !== 'undefined' && 'pictureInPictureEnabled' in document && document.pictureInPictureEnabled && !participant.isVideoMuted && stream && (
+          <button
+            onClick={handleTogglePiP}
+            className="p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-stone-300 hover:text-white backdrop-blur-md transition-all shadow-md"
+            title="Pop out Picture-in-Picture window"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {onPin && (
+          <button
+            onClick={onPin}
+            className={`p-1.5 rounded-full backdrop-blur-md transition-all shadow-md ${
+              isPinned
+                ? 'bg-amber-500 text-stone-950 opacity-100'
+                : 'bg-black/60 hover:bg-black/80 text-stone-300 hover:text-white'
+            }`}
+            title={isPinned ? 'Unpin participant' : 'Pin to spotlight'}
+          >
+            <Pin className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
 
       {/* Bottom Information Overlay */}
       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
@@ -251,9 +282,9 @@ export const LifeMeetApp: React.FC = () => {
   const { settings, googleUser } = useSettings();
   const { launchApp } = useLifeOS();
 
-  // Call / Room State
-  const [isInCall, setIsInCall] = useState(false);
-  const [roomInfo, setRoomInfo] = useState<MeetRoomInfo | null>(null);
+  // Call / Room State (Restored from meetService singleton)
+  const [isInCall, setIsInCall] = useState(() => meetService.getIsInCall());
+  const [roomInfo, setRoomInfo] = useState<MeetRoomInfo | null>(() => meetService.getCurrentRoomInfo());
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [publicRooms, setPublicRooms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -261,22 +292,22 @@ export const LifeMeetApp: React.FC = () => {
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   // Local Media & Participant State
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
-  const [isVideoMuted, setIsVideoMuted] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(() => meetService.getLocalStream());
+  const [isAudioMuted, setIsAudioMuted] = useState(() => meetService.getState().isAudioMuted);
+  const [isVideoMuted, setIsVideoMuted] = useState(() => meetService.getState().isVideoMuted);
+  const [isScreenSharing, setIsScreenSharing] = useState(() => meetService.getState().isScreenSharing);
+  const [isHandRaised, setIsHandRaised] = useState(() => meetService.getState().isHandRaised);
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const [isLocalSpeaking, setIsLocalSpeaking] = useState(false);
 
   // Remote Participants & Streams
-  const [participants, setParticipants] = useState<MeetParticipant[]>([]);
-  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [participants, setParticipants] = useState<MeetParticipant[]>(() => meetService.getParticipantsList());
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>(() => meetService.getRemoteStreamsObject());
   const [speakingPeers, setSpeakingPeers] = useState<Record<string, boolean>>({});
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
 
   // In-Call Features
-  const [chatMessages, setChatMessages] = useState<MeetChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<MeetChatMessage[]>(() => meetService.getChatHistory(meetService.getCurrentRoomId() || undefined));
   const [chatInput, setChatInput] = useState('');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -290,7 +321,7 @@ export const LifeMeetApp: React.FC = () => {
   const [currentCaption, setCurrentCaption] = useState<{ speaker: string; text: string } | null>(null);
 
   // Call Duration Timer
-  const [callDuration, setCallDuration] = useState(0);
+  const [callDuration, setCallDuration] = useState(() => meetService.getCallDuration());
 
   // Create User Identity with guaranteed unique persistent client ID for multi-device support
   const currentUser = useMemo(() => {
@@ -337,7 +368,9 @@ export const LifeMeetApp: React.FC = () => {
     startPreview();
 
     return () => {
-      meetService.stopLocalStream();
+      if (!meetService.getIsInCall()) {
+        meetService.stopLocalStream();
+      }
     };
   }, []);
 
@@ -347,6 +380,10 @@ export const LifeMeetApp: React.FC = () => {
   };
 
   const startPreview = async () => {
+    if (meetService.getIsInCall()) {
+      setLocalStream(meetService.getLocalStream());
+      return;
+    }
     const stream = await meetService.startLocalPreview(true, true);
     setLocalStream(stream);
   };
@@ -429,9 +466,9 @@ export const LifeMeetApp: React.FC = () => {
   useEffect(() => {
     let interval: any = null;
     if (isInCall) {
-      setCallDuration(0);
+      setCallDuration(meetService.getCallDuration());
       interval = setInterval(() => {
-        setCallDuration(prev => prev + 1);
+        setCallDuration(meetService.getCallDuration());
       }, 1000);
     }
     return () => {
