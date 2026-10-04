@@ -523,7 +523,7 @@ export const LifeOSDesktop: React.FC = () => {
 
       {/* Site-Wide Maintenance Mode Lockdown Overlay for non-admins */}
       {settings.maintenanceMode && !isAuthorizedAdmin && (
-        <div className="fixed inset-0 z-50 bg-stone-950/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center text-white select-none">
+        <div className="fixed inset-0 z-[99999] bg-stone-950/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center text-white select-none">
           <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-4xl mb-4 shadow-2xl animate-pulse">
             🔒
           </div>

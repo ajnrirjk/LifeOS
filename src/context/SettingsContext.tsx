@@ -46,7 +46,7 @@ interface SettingsContextType {
   // Announcements & Maintenance (Admin)
   announcement: SystemAnnouncement | null;
   setAnnouncement: (announcement: SystemAnnouncement | null) => void;
-  toggleMaintenanceMode: (enabled: boolean, message?: string) => void;
+  toggleMaintenanceMode: (enabled: boolean, message?: string) => Promise<void> | void;
   
   // Feature Flags & App Ecosystem (Admin)
   toggleAppVisibility: (appId: string) => void;
@@ -145,6 +145,7 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<UserSettings>(() => {
+    const globalCfg = firebaseGlobalService.getGlobalConfig();
     try {
       const saved = localStorage.getItem('lifeos_system_settings_v1');
       if (saved) {
@@ -152,9 +153,22 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (parsed?.profile && (parsed.profile.id === 'usr_me_001' || !parsed.profile.id)) {
           parsed.profile.id = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         }
-        return { ...DEFAULT_SETTINGS, ...parsed };
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          maintenanceMode: globalCfg.maintenanceMode !== undefined ? globalCfg.maintenanceMode : parsed.maintenanceMode,
+          maintenanceMessage: globalCfg.maintenanceMessage || parsed.maintenanceMessage,
+          activeAnnouncement: globalCfg.activeAnnouncement !== undefined ? globalCfg.activeAnnouncement : parsed.activeAnnouncement,
+          appVisibility: globalCfg.appVisibility || parsed.appVisibility || DEFAULT_SETTINGS.appVisibility
+        };
       }
-      return DEFAULT_SETTINGS;
+      return {
+        ...DEFAULT_SETTINGS,
+        maintenanceMode: globalCfg.maintenanceMode ?? DEFAULT_SETTINGS.maintenanceMode,
+        maintenanceMessage: globalCfg.maintenanceMessage ?? DEFAULT_SETTINGS.maintenanceMessage,
+        activeAnnouncement: globalCfg.activeAnnouncement ?? DEFAULT_SETTINGS.activeAnnouncement,
+        appVisibility: globalCfg.appVisibility || DEFAULT_SETTINGS.appVisibility
+      };
     } catch {
       return DEFAULT_SETTINGS;
     }
@@ -476,13 +490,17 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await firebaseGlobalService.publishAnnouncement(announcement);
   };
 
-  const toggleMaintenanceMode = (enabled: boolean, message?: string) => {
+  const toggleMaintenanceMode = async (enabled: boolean, message?: string) => {
+    const finalMsg = message || settings.maintenanceMessage || 'System maintenance in progress. Master Admin access only.';
     setSettings(prev => ({
       ...prev,
       maintenanceMode: enabled,
-      maintenanceMessage: message || prev.maintenanceMessage
+      maintenanceMessage: finalMsg
     }));
     logAuditEvent('Maintenance Mode Toggle', `Status: ${enabled ? 'ENABLED' : 'DISABLED'}`, 'admin');
+
+    // Transmit to all global devices across the globe via MQTT retained message, ntfy cloud relay, and server API
+    await firebaseGlobalService.publishMaintenanceMode(enabled, finalMsg);
   };
 
   const toggleAppVisibility = async (appId: string) => {

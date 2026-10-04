@@ -1608,6 +1608,24 @@ app.post('/api/global/app-visibility', (req: Request, res: Response) => {
   return res.status(400).json({ error: 'Invalid appVisibility payload' });
 });
 
+// POST Update Maintenance Mode (Lockdown)
+app.post('/api/global/maintenance', (req: Request, res: Response) => {
+  const { maintenanceMode, maintenanceMessage } = req.body;
+  if (typeof maintenanceMode === 'boolean') {
+    globalConfig.maintenanceMode = maintenanceMode;
+    if (maintenanceMessage) {
+      globalConfig.maintenanceMessage = String(maintenanceMessage);
+    }
+    globalConfig.lastUpdated = Date.now();
+    saveGlobalConfigToDisk();
+
+    // Broadcast change to all devices
+    broadcastToChat('global_config_updated', globalConfig);
+    return res.json({ success: true, config: globalConfig });
+  }
+  return res.status(400).json({ error: 'Invalid maintenanceMode payload' });
+});
+
 // GET Real Fellowship Members List
 app.get('/api/fellowship/members', (_req: Request, res: Response) => {
   const list = Array.from(realFellowshipMembers.values()).map(m => {

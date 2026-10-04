@@ -335,22 +335,29 @@ export const LifeMeetApp: React.FC = () => {
   const currentUser = useMemo(() => {
     let persistentId = '';
     try {
-      persistentId = localStorage.getItem('lifemeet_client_id') || '';
+      persistentId = sessionStorage.getItem('lifemeet_device_sid') || '';
       if (!persistentId) {
-        persistentId = `user_${Math.random().toString(36).substring(2, 8)}_${Date.now().toString(36)}`;
-        localStorage.setItem('lifemeet_client_id', persistentId);
+        persistentId = `dev_${Math.random().toString(36).substring(2, 7)}_${Date.now().toString(36).slice(-4)}`;
+        sessionStorage.setItem('lifemeet_device_sid', persistentId);
       }
     } catch {
-      persistentId = `user_${Math.random().toString(36).substring(2, 8)}`;
+      persistentId = `dev_${Math.random().toString(36).substring(2, 7)}`;
     }
 
+    const email = googleUser?.email?.toLowerCase().trim() || '';
+    const isMaster = isAuthorizedAdmin || email === 'aw03102008@gmail.com';
+    const slug = email ? email.replace(/[^a-z0-9]/g, '_') : 'guest';
+    const uniquePeerId = `usr_${slug}_${persistentId}`;
+
     return {
-      id: googleUser?.uid || googleUser?.email || persistentId,
-      name: googleUser?.displayName || settings.profile.name || `Believer (${persistentId.slice(-4)})`,
+      id: uniquePeerId,
+      name: googleUser?.displayName || settings.profile.name || (email ? email.split('@')[0] : `Believer (${persistentId.slice(-4)})`),
+      email,
       photoURL: googleUser?.photoURL || undefined,
-      isGoogleUser: !!googleUser
+      isGoogleUser: !!googleUser,
+      role: isMaster ? ('host' as const) : ('participant' as const)
     };
-  }, [googleUser, settings.profile.name]);
+  }, [googleUser, settings.profile.name, isAuthorizedAdmin]);
 
   // Check URL hash for direct meeting invite link (e.g. /#meet=fellowship-prayer-room)
   useEffect(() => {
@@ -457,6 +464,20 @@ export const LifeMeetApp: React.FC = () => {
           setUnreadChatCount(prev => prev + 1);
         }
         sounds.playTap();
+      } else if (type === 'host_directive') {
+        sounds.playTap();
+        alert(data.message || 'Host Directive issued');
+      } else if (type === 'room_lock_changed') {
+        setIsRoomLocked(data.locked);
+      } else if (type === 'meeting_ended_by_host') {
+        sounds.playIncorrect();
+        alert(data.message || 'The Host has ended this meeting.');
+        setIsInCall(false);
+        setRoomInfo(null);
+        setParticipants([]);
+        setRemoteStreams({});
+        setSpeakingPeers({});
+        startPreview();
       } else if (type === 'call_ended') {
         setIsInCall(false);
         setRoomInfo(null);
@@ -505,8 +526,10 @@ export const LifeMeetApp: React.FC = () => {
         setIsInCall(true);
         sounds.playVictory();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error joining meeting:', err);
+      sounds.playIncorrect();
+      alert(err?.message || 'Could not join meeting call. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -531,7 +554,7 @@ export const LifeMeetApp: React.FC = () => {
       }
 
       await handleJoinMeeting(targetCode);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating meeting:', err);
       const fallbackCode = `meet-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
       await handleJoinMeeting(fallbackCode);
@@ -576,7 +599,7 @@ export const LifeMeetApp: React.FC = () => {
   // Master Host Control Handlers (aw03102008@gmail.com)
   const handleHostMuteAll = async () => {
     sounds.playTap();
-    await meetService.sendChatMessage('👑 [HOST DIRECTIVE]: Host has muted all participant microphones in the room.');
+    await meetService.hostMuteAllPeers();
     setIsHostControlsOpen(false);
   };
 
@@ -584,17 +607,13 @@ export const LifeMeetApp: React.FC = () => {
     sounds.playTap();
     const newLockState = !isRoomLocked;
     setIsRoomLocked(newLockState);
-    await meetService.sendChatMessage(
-      newLockState
-        ? '🔒 [HOST DIRECTIVE]: Meeting room is now LOCKED by the Host. No new entries permitted.'
-        : '🔓 [HOST DIRECTIVE]: Meeting room has been UNLOCKED by the Host.'
-    );
+    await meetService.hostSetRoomLock(newLockState);
   };
 
   const handleHostEndMeeting = async () => {
     if (confirm('Are you sure you want to end this meeting for everyone?')) {
       sounds.playIncorrect();
-      await meetService.sendChatMessage('🛑 [HOST DIRECTIVE]: Meeting has been ended by the Host for all participants.');
+      await meetService.hostEndMeeting();
       setIsHostControlsOpen(false);
       setTimeout(() => {
         handleLeaveCall();
@@ -614,7 +633,10 @@ export const LifeMeetApp: React.FC = () => {
   };
 
   return (
-    <div className="relative flex flex-col h-full w-full bg-[#0b0f19] text-white select-none overflow-hidden font-sans">
+    <div
+      onClick={() => meetService.resumeAllAudioElements()}
+      className="relative flex flex-col h-full w-full bg-[#0b0f19] text-white select-none overflow-hidden font-sans"
+    >
       {/* ========================================================================= */}
       {/* 1. LOBBY / PRE-JOIN SCREEN                                               */}
       {/* ========================================================================= */}

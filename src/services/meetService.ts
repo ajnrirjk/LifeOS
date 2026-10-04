@@ -92,9 +92,10 @@ class MeetService {
 
   private currentRoomId: string | null = null;
   private currentRoomInfo: MeetRoomInfo | null = null;
-  private currentUser: { id: string; name: string; photoURL?: string; isGoogleUser?: boolean } | null = null;
+  private currentUser: { id: string; name: string; email?: string; photoURL?: string; isGoogleUser?: boolean; role?: 'host' | 'participant' } | null = null;
   private callStartTime: number | null = null;
   public isInCall: boolean = false;
+  private isRoomLocked: boolean = false;
 
   private isAudioMuted: boolean = false;
   private isVideoMuted: boolean = false;
@@ -122,14 +123,25 @@ class MeetService {
   private heartbeatIntervalId: any = null;
   private pruneIntervalId: any = null;
 
-  private iceServers = {
+  private iceServers: RTCConfiguration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-    ]
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      {
+        urls: [
+          'stun:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp'
+        ],
+        username: 'openrelay',
+        credential: 'openrelay'
+      }
+    ],
+    iceCandidatePoolSize: 10
   };
 
   constructor() {
@@ -336,6 +348,8 @@ class MeetService {
             this.handleStatePayload(data);
           } else if (topic === 'chat') {
             this.handleChatPayload(data);
+          } else if (topic === 'control') {
+            this.handleControlPayload(data);
           } else if (topic === 'signal') {
             this.handleIncomingSignal(data);
           }
@@ -393,6 +407,8 @@ class MeetService {
             this.handleStatePayload(parsed);
           } else if (subTopic === 'chat') {
             this.handleChatPayload(parsed);
+          } else if (subTopic === 'controls') {
+            this.handleControlPayload(parsed);
           } else if (subTopic.startsWith('signals/')) {
             this.handleIncomingSignal(parsed);
           }
@@ -426,6 +442,7 @@ class MeetService {
       `${prefix}/presence`,
       `${prefix}/state`,
       `${prefix}/chat`,
+      `${prefix}/controls`,
       `${prefix}/signals/${userId}`
     ];
     this.mqttClient.subscribe(topics, (err) => {
@@ -442,6 +459,7 @@ class MeetService {
       `${prefix}/presence`,
       `${prefix}/state`,
       `${prefix}/chat`,
+      `${prefix}/controls`,
       `${prefix}/signals/${userId}`
     ];
     this.mqttClient.unsubscribe(topics);
@@ -646,14 +664,21 @@ class MeetService {
   public async joinRoom(roomId: string, user: {
     id: string;
     name: string;
+    email?: string;
     photoURL?: string;
     isGoogleUser?: boolean;
+    role?: 'host' | 'participant';
   }): Promise<{
     room: MeetRoomInfo;
     participant: MeetParticipant;
     allParticipants: MeetParticipant[];
     messages: MeetChatMessage[];
   } | null> {
+    const isMasterAdmin = (user.email?.toLowerCase().trim() === 'aw03102008@gmail.com');
+    if (this.isRoomLocked && !isMasterAdmin) {
+      throw new Error('This room has been locked by the Host. No new participants may join.');
+    }
+
     this.currentRoomId = roomId;
     this.currentUser = user;
 
@@ -661,6 +686,8 @@ class MeetService {
     if (!this.localStream) {
       await this.startLocalPreview(true, true);
     }
+
+    const assignedRole = (isMasterAdmin || user.role === 'host') ? 'host' : 'participant';
 
     // Initialize local participant
     const localParticipant: ParticipantRecord = {
@@ -672,7 +699,7 @@ class MeetService {
       isVideoMuted: this.isVideoMuted,
       isScreenSharing: this.isScreenSharing,
       isHandRaised: this.isHandRaised,
-      role: 'participant',
+      role: assignedRole,
       joinedAt: Date.now(),
       lastSeen: Date.now()
     };
@@ -994,6 +1021,56 @@ class MeetService {
     }
   }
 
+  private handleControlPayload(payload: {
+    type?: string;
+    action: 'mute_all' | 'lock_room' | 'end_meeting';
+    locked?: boolean;
+    hostId: string;
+    hostName?: string;
+    timestamp: number;
+  }) {
+    if (!payload || !this.currentRoomId) return;
+
+    if (payload.action === 'mute_all') {
+      // Don't auto-mute the host who initiated the command
+      if (this.currentUser && payload.hostId !== this.currentUser.id) {
+        if (!this.isAudioMuted) {
+          this.isAudioMuted = true;
+          if (this.localStream) {
+            this.localStream.getAudioTracks().forEach(track => {
+              track.enabled = false;
+            });
+          }
+          this.updateParticipantState({ isAudioMuted: true });
+          this.emit('local_state_changed', { isAudioMuted: true, isVideoMuted: this.isVideoMuted });
+        }
+        this.emit('host_directive', {
+          type: 'mute_all',
+          message: '👑 The Host has muted all participant microphones in this room.'
+        });
+      }
+    } else if (payload.action === 'lock_room') {
+      this.isRoomLocked = !!payload.locked;
+      this.emit('room_lock_changed', { locked: this.isRoomLocked });
+      this.emit('host_directive', {
+        type: 'lock_room',
+        locked: this.isRoomLocked,
+        message: this.isRoomLocked
+          ? '🔒 The Host has locked this meeting room. No new participants may join.'
+          : '🔓 The Host has unlocked this meeting room.'
+      });
+    } else if (payload.action === 'end_meeting') {
+      if (this.currentUser && payload.hostId !== this.currentUser.id) {
+        this.emit('meeting_ended_by_host', {
+          message: '🛑 The Host has ended this meeting for all participants.'
+        });
+        setTimeout(() => {
+          this.leaveRoom();
+        }, 500);
+      }
+    }
+  }
+
   // ==========================================
   // WEBRTC PEER CONNECTION & SIGNALING
   // ==========================================
@@ -1036,6 +1113,8 @@ class MeetService {
         if (!audioEl) {
           audioEl = new Audio();
           audioEl.autoplay = true;
+          audioEl.setAttribute('playsinline', 'true');
+          (audioEl as any).playsInline = true;
           this.remoteAudioElements.set(remotePeerId, audioEl);
         }
         if (audioEl.srcObject !== stream) {
@@ -1458,6 +1537,98 @@ class MeetService {
     return this.chatHistory.get(id) || [];
   }
 
+  // ==========================================
+  // MASTER HOST COMMANDS (aw03102008@gmail.com)
+  // ==========================================
+
+  public async hostMuteAllPeers(): Promise<boolean> {
+    if (!this.currentRoomId || !this.currentUser) return false;
+    const payload = {
+      type: 'control',
+      action: 'mute_all' as const,
+      hostId: this.currentUser.id,
+      hostName: this.currentUser.name,
+      timestamp: Date.now()
+    };
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(`lifeos/meet/v2/rooms/${this.currentRoomId}/controls`, JSON.stringify(payload));
+    }
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({ topic: 'control', roomId: this.currentRoomId, data: payload });
+      } catch {}
+    }
+    await this.sendChatMessage('👑 [HOST DIRECTIVE]: All participant microphones have been muted by Host.');
+    return true;
+  }
+
+  public async hostSetRoomLock(locked: boolean): Promise<boolean> {
+    if (!this.currentRoomId || !this.currentUser) return false;
+    this.isRoomLocked = locked;
+    const payload = {
+      type: 'control',
+      action: 'lock_room' as const,
+      locked,
+      hostId: this.currentUser.id,
+      hostName: this.currentUser.name,
+      timestamp: Date.now()
+    };
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(
+        `lifeos/meet/v2/rooms/${this.currentRoomId}/controls`,
+        JSON.stringify(payload),
+        { retain: true, qos: 1 }
+      );
+    }
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({ topic: 'control', roomId: this.currentRoomId, data: payload });
+      } catch {}
+    }
+    await this.sendChatMessage(
+      locked
+        ? '🔒 [HOST DIRECTIVE]: Meeting room is now LOCKED by the Host. No new entries permitted.'
+        : '🔓 [HOST DIRECTIVE]: Meeting room has been UNLOCKED by the Host.'
+    );
+    this.emit('room_lock_changed', { locked });
+    return true;
+  }
+
+  public async hostEndMeeting(): Promise<boolean> {
+    if (!this.currentRoomId || !this.currentUser) return false;
+    const payload = {
+      type: 'control',
+      action: 'end_meeting' as const,
+      hostId: this.currentUser.id,
+      hostName: this.currentUser.name,
+      timestamp: Date.now()
+    };
+    if (this.mqttClient && this.mqttClient.connected) {
+      this.mqttClient.publish(`lifeos/meet/v2/rooms/${this.currentRoomId}/controls`, JSON.stringify(payload));
+    }
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({ topic: 'control', roomId: this.currentRoomId, data: payload });
+      } catch {}
+    }
+    await this.sendChatMessage('🛑 [HOST DIRECTIVE]: Meeting has been ended by the Host for all participants.');
+    return true;
+  }
+
+  public getIsRoomLocked(): boolean {
+    return this.isRoomLocked;
+  }
+
+  public resumeAllAudioElements() {
+    this.remoteAudioElements.forEach(audioEl => {
+      try {
+        if (audioEl.paused && audioEl.srcObject) {
+          audioEl.play().catch(() => {});
+        }
+      } catch {}
+    });
+  }
+
   public getState() {
     return {
       isInCall: this.isInCall,
@@ -1466,7 +1637,8 @@ class MeetService {
       isScreenSharing: this.isScreenSharing,
       isHandRaised: this.isHandRaised,
       roomId: this.currentRoomId,
-      user: this.currentUser
+      user: this.currentUser,
+      isRoomLocked: this.isRoomLocked
     };
   }
 }

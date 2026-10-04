@@ -223,9 +223,9 @@ export const LifeOSGodModeBar: React.FC = () => {
   };
 
   // --- Maintenance Mode Handler ---
-  const handleToggleMaintenance = () => {
+  const handleToggleMaintenance = async () => {
     const nextState = !settings.maintenanceMode;
-    toggleMaintenanceMode(nextState, maintMsg);
+    await toggleMaintenanceMode(nextState, maintMsg);
     showToast(`Maintenance Mode ${nextState ? 'ENABLED (Locked for Public)' : 'DISABLED (Public Access Restored)'}!`);
   };
 

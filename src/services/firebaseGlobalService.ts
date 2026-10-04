@@ -1,9 +1,13 @@
 import { SystemAnnouncement, FellowshipMember, UserRole, MASTER_ADMIN_EMAIL } from '../types/settings';
 import mqtt, { MqttClient } from 'mqtt';
 
-// Cloud REST & MQTT Endpoints
-const CLOUD_SETTINGS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a10342596a6e98';
-const CLOUD_MEMBERS_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1034264616e99';
+// Cloud Relays & MQTT Topics for Universal Multi-Device Synchronization
+const CLOUD_CONFIG_RELAY = 'https://ntfy.sh/lifeos_global_config_v2';
+const CLOUD_MEMBERS_RELAY = 'https://ntfy.sh/lifeos_fellowship_v2';
+const MQTT_TOPIC_SETTINGS = 'lifeos/global/settings_v3';
+const MQTT_TOPIC_MAINTENANCE = 'lifeos/global/maintenance_mode';
+const MQTT_TOPIC_MEMBERS = 'lifeos/global/members_v3';
+const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
 
 export interface GlobalConfigPayload {
   activeAnnouncement: SystemAnnouncement | null;
@@ -24,7 +28,7 @@ const DEFAULT_CONFIG: GlobalConfigPayload = {
     youtube: true
   },
   maintenanceMode: false,
-  maintenanceMessage: 'System maintenance in progress.',
+  maintenanceMessage: 'System maintenance in progress. Master Admin access only.',
   updatedAt: Date.now()
 };
 
@@ -79,18 +83,42 @@ class FirebaseGlobalService {
   private cachedConfig: GlobalConfigPayload = DEFAULT_CONFIG;
   private cachedMembers: FellowshipMember[] = [];
   private localEventSource: EventSource | null = null;
+  private cloudConfigSSE: EventSource | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private mqttClient: MqttClient | null = null;
 
   constructor() {
+    this.cachedConfig = this.loadInitialConfig();
     this.cachedMembers = this.loadInitialMembers();
     this.initBroadcastChannel();
     this.initServerSSE();
+    this.initCloudSSE();
     this.initMqtt();
     this.startSync();
   }
 
-  // 1. Load from localStorage or defaults on instantiation
+  // 1. Load Initial State from localStorage
+  private loadInitialConfig(): GlobalConfigPayload {
+    if (typeof window === 'undefined') return DEFAULT_CONFIG;
+    try {
+      const saved = localStorage.getItem('lifeos_global_config_cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...DEFAULT_CONFIG, ...parsed };
+        }
+      }
+    } catch {}
+    return DEFAULT_CONFIG;
+  }
+
+  private persistLocalConfig() {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('lifeos_global_config_cache', JSON.stringify(this.cachedConfig));
+    } catch {}
+  }
+
   private loadInitialMembers(): FellowshipMember[] {
     if (typeof window === 'undefined') return DEFAULT_FELLOWSHIP_MEMBERS;
     try {
@@ -112,26 +140,22 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // 2. UNION MERGE: Combines members by handle so NO MEMBER IS EVER DROPPED OR OVERWRITTEN
+  // 2. UNION MERGE for Fellowship Members
   private mergeMembers(incoming: FellowshipMember[]): FellowshipMember[] {
     const map = new Map<string, FellowshipMember>();
 
-    // A. Start with default foundational members (laptop, Phone, Master Admin)
     for (const m of DEFAULT_FELLOWSHIP_MEMBERS) {
       if (m && m.handle) {
         map.set(m.handle.toLowerCase().trim(), m);
       }
     }
 
-    // B. Keep all current cached members
     for (const m of this.cachedMembers) {
       if (m && m.handle) {
-        const key = m.handle.toLowerCase().trim();
-        map.set(key, m);
+        map.set(m.handle.toLowerCase().trim(), m);
       }
     }
 
-    // C. Merge all incoming members from network/SSE/REST
     if (Array.isArray(incoming)) {
       for (const m of incoming) {
         if (!m || !m.name) continue;
@@ -159,14 +183,12 @@ class FirebaseGlobalService {
           map.set(key, {
             ...existing,
             ...m,
-            // Preserve role modifications (e.g. if promoted to admin, keep admin)
             role: (existing?.role === 'admin' || existing?.role === 'superadmin') ? existing.role : m.role
           });
         }
       }
     }
 
-    // D. Guarantee Master Admin is always in the roster
     map.set('@disciple', {
       ...MASTER_ADMIN_MEMBER,
       ...map.get('@disciple'),
@@ -193,6 +215,7 @@ class FirebaseGlobalService {
             this.notifyMembersListeners();
           } else if (e.data && e.data.type === 'global_config_updated' && e.data.data) {
             this.cachedConfig = { ...this.cachedConfig, ...e.data.data };
+            this.persistLocalConfig();
             this.notifyConfigListeners();
           }
         };
@@ -225,6 +248,7 @@ class FirebaseGlobalService {
           const config = JSON.parse(e.data);
           if (config) {
             this.cachedConfig = { ...this.cachedConfig, ...config };
+            this.persistLocalConfig();
             this.notifyConfigListeners();
           }
         } catch {}
@@ -232,28 +256,66 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // 5. MQTT WebSockets fallback
+  // 5. Cloud SSE Stream for Instant Push across all internet devices
+  private initCloudSSE() {
+    if (typeof window === 'undefined') return;
+
+    try {
+      if (this.cloudConfigSSE) {
+        try { this.cloudConfigSSE.close(); } catch {}
+      }
+
+      const sse = new EventSource(`${CLOUD_CONFIG_RELAY}/sse`);
+      this.cloudConfigSSE = sse;
+
+      sse.onmessage = (event) => {
+        try {
+          const raw = JSON.parse(event.data);
+          if (raw.event === 'message' && raw.message) {
+            const payload = JSON.parse(raw.message);
+            if (payload && payload.type === 'config_update' && payload.data) {
+              const incoming = payload.data as GlobalConfigPayload;
+              this.applyIncomingConfig(incoming);
+            }
+          }
+        } catch {}
+      };
+
+      sse.onerror = () => {
+        // EventSource automatically reconnects on error
+      };
+    } catch {}
+  }
+
+  // 6. MQTT WebSockets Connection with Retained Message Support
   private initMqtt() {
     if (typeof window === 'undefined') return;
     try {
-      this.mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+      this.mqttClient = mqtt.connect(MQTT_BROKER_URL, {
         clientId: `lifeos_client_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         clean: true,
-        reconnectPeriod: 3000
+        connectTimeout: 5000,
+        reconnectPeriod: 2500
       });
 
       this.mqttClient.on('connect', () => {
-        this.mqttClient?.subscribe('lifeos/global/settings_v3', { qos: 0 });
-        this.mqttClient?.subscribe('lifeos/global/members_v3', { qos: 0 });
+        this.mqttClient?.subscribe(MQTT_TOPIC_SETTINGS, { qos: 1 });
+        this.mqttClient?.subscribe(MQTT_TOPIC_MAINTENANCE, { qos: 1 });
+        this.mqttClient?.subscribe(MQTT_TOPIC_MEMBERS, { qos: 0 });
       });
 
       this.mqttClient.on('message', (topic, payload) => {
         try {
           const parsed = JSON.parse(payload.toString());
-          if (topic === 'lifeos/global/settings_v3' && parsed) {
-            this.cachedConfig = { ...this.cachedConfig, ...parsed };
-            this.notifyConfigListeners();
-          } else if (topic === 'lifeos/global/members_v3' && Array.isArray(parsed)) {
+          if (topic === MQTT_TOPIC_SETTINGS && parsed) {
+            this.applyIncomingConfig(parsed);
+          } else if (topic === MQTT_TOPIC_MAINTENANCE && parsed) {
+            this.applyIncomingConfig({
+              maintenanceMode: parsed.maintenanceMode,
+              maintenanceMessage: parsed.maintenanceMessage,
+              updatedAt: parsed.updatedAt
+            });
+          } else if (topic === MQTT_TOPIC_MEMBERS && Array.isArray(parsed)) {
             const merged = this.mergeMembers(parsed);
             this.cachedMembers = merged;
             this.persistLocalMembers();
@@ -264,34 +326,79 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  // 6. Fast Startup & Background Sync
+  private applyIncomingConfig(incoming: Partial<GlobalConfigPayload>) {
+    if (!incoming) return;
+    const isNewer = !incoming.updatedAt || !this.cachedConfig.updatedAt || (incoming.updatedAt >= this.cachedConfig.updatedAt - 1000);
+    if (!isNewer) return;
+
+    this.cachedConfig = {
+      ...this.cachedConfig,
+      ...incoming,
+      activeAnnouncement: incoming.activeAnnouncement !== undefined ? incoming.activeAnnouncement : this.cachedConfig.activeAnnouncement,
+      maintenanceMode: incoming.maintenanceMode !== undefined ? incoming.maintenanceMode : this.cachedConfig.maintenanceMode,
+      maintenanceMessage: incoming.maintenanceMessage || this.cachedConfig.maintenanceMessage,
+      appVisibility: incoming.appVisibility ? { ...this.cachedConfig.appVisibility, ...incoming.appVisibility } : this.cachedConfig.appVisibility,
+      updatedAt: Math.max(incoming.updatedAt || 0, this.cachedConfig.updatedAt || 0, Date.now())
+    };
+
+    this.persistLocalConfig();
+    this.notifyConfigListeners();
+  }
+
+  // 7. Periodic Sync and Tab-Focus Refresh
   private startSync() {
     if (typeof window === 'undefined') return;
 
-    // Immediately fetch from both endpoints
-    this.fetchCloudMembers();
+    this.fetchCloudConfig();
+    this.fetchServerConfig();
     this.fetchServerMembers();
-    this.fetchCloudSettings();
 
-    // Redundant poll every 3 seconds
     setInterval(() => {
-      this.fetchCloudMembers();
+      this.fetchCloudConfig();
+      this.fetchServerConfig();
       this.fetchServerMembers();
-    }, 3000);
+    }, 2500);
+
+    window.addEventListener('focus', () => {
+      this.fetchCloudConfig();
+      this.fetchServerConfig();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.fetchCloudConfig();
+        this.fetchServerConfig();
+      }
+    });
   }
 
-  private async fetchCloudMembers() {
+  private async fetchCloudConfig() {
     try {
-      const res = await fetch(CLOUD_MEMBERS_URL, { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.data?.members && Array.isArray(json.data.members)) {
-          const merged = this.mergeMembers(json.data.members as FellowshipMember[]);
-          if (merged.length !== this.cachedMembers.length || JSON.stringify(merged) !== JSON.stringify(this.cachedMembers)) {
-            this.cachedMembers = merged;
-            this.persistLocalMembers();
-            this.notifyMembersListeners();
+      const res = await fetch(`${CLOUD_CONFIG_RELAY}/json?poll=1&since=all`);
+      if (!res.ok) return;
+      const text = await res.text();
+      const lines = text.trim().split('\n').filter(Boolean);
+      for (const line of lines) {
+        try {
+          const raw = JSON.parse(line);
+          if (raw.event === 'message' && raw.message) {
+            const payload = JSON.parse(raw.message);
+            if (payload && payload.type === 'config_update' && payload.data) {
+              this.applyIncomingConfig(payload.data);
+            }
           }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  private async fetchServerConfig() {
+    try {
+      const res = await fetch('/api/global/config', { cache: 'no-store' });
+      if (res.ok) {
+        const config = await res.json();
+        if (config && typeof config === 'object') {
+          this.applyIncomingConfig(config);
         }
       }
     } catch {}
@@ -299,7 +406,7 @@ class FirebaseGlobalService {
 
   private async fetchServerMembers() {
     try {
-      const res = await fetch('/api/fellowship/members');
+      const res = await fetch('/api/fellowship/members', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json?.members && Array.isArray(json.members)) {
@@ -314,33 +421,26 @@ class FirebaseGlobalService {
     } catch {}
   }
 
-  private async fetchCloudSettings() {
-    try {
-      const res = await fetch(CLOUD_SETTINGS_URL, { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.data) {
-          const incoming = json.data as GlobalConfigPayload;
-          this.cachedConfig = incoming;
-          this.notifyConfigListeners();
-        }
-      }
-    } catch {}
-  }
-
   private notifyConfigListeners() {
-    this.configListeners.forEach(cb => cb(this.cachedConfig));
+    this.configListeners.forEach(cb => {
+      try { cb(this.cachedConfig); } catch {}
+    });
   }
 
   private notifyMembersListeners() {
-    this.membersListeners.forEach(cb => cb(this.cachedMembers));
+    this.membersListeners.forEach(cb => {
+      try { cb(this.cachedMembers); } catch {}
+    });
   }
 
   getMembers(): FellowshipMember[] {
     return this.cachedMembers;
   }
 
-  // 7. Subscribe to Global Announcements & App Visibility
+  getGlobalConfig(): GlobalConfigPayload {
+    return this.cachedConfig;
+  }
+
   subscribeToGlobalConfig(callback: (config: GlobalConfigPayload) => void): () => void {
     this.configListeners.push(callback);
     callback(this.cachedConfig);
@@ -350,7 +450,67 @@ class FirebaseGlobalService {
     };
   }
 
-  // 8. Publish Global Announcement to all devices
+  // 8. Publish Maintenance Mode / Lockdown Across ALL Devices
+  async publishMaintenanceMode(enabled: boolean, message?: string) {
+    const nextConfig: GlobalConfigPayload = {
+      ...this.cachedConfig,
+      maintenanceMode: enabled,
+      maintenanceMessage: message || this.cachedConfig.maintenanceMessage || 'System maintenance in progress. Master Admin access only.',
+      updatedAt: Date.now()
+    };
+
+    this.cachedConfig = nextConfig;
+    this.persistLocalConfig();
+    this.notifyConfigListeners();
+
+    // A. BroadcastChannel for instant cross-tab sync
+    try {
+      this.broadcastChannel?.postMessage({ type: 'global_config_updated', data: nextConfig });
+    } catch {}
+
+    // B. MQTT Retained Publication (Delivered instantly to all online & newly connecting devices)
+    try {
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish(MQTT_TOPIC_SETTINGS, JSON.stringify(nextConfig), { retain: true, qos: 1 });
+        this.mqttClient.publish(MQTT_TOPIC_MAINTENANCE, JSON.stringify({
+          maintenanceMode: enabled,
+          maintenanceMessage: nextConfig.maintenanceMessage,
+          updatedAt: nextConfig.updatedAt
+        }), { retain: true, qos: 1 });
+      }
+    } catch {}
+
+    // C. Universal Cloud Relay via ntfy.sh
+    try {
+      await fetch(CLOUD_CONFIG_RELAY, {
+        method: 'POST',
+        headers: {
+          'Title': enabled ? 'LifeOS Emergency Lockdown Enabled' : 'LifeOS Lockdown Disabled',
+          'Priority': 'urgent',
+          'Tags': enabled ? 'lock,warning' : 'unlock,white_check_mark'
+        },
+        body: JSON.stringify({
+          type: 'config_update',
+          data: nextConfig,
+          timestamp: Date.now()
+        })
+      });
+    } catch {}
+
+    // D. Server API
+    try {
+      await fetch('/api/global/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maintenanceMode: enabled,
+          maintenanceMessage: nextConfig.maintenanceMessage
+        })
+      });
+    } catch {}
+  }
+
+  // 9. Publish Global Announcement Across All Devices
   async publishAnnouncement(announcement: SystemAnnouncement | null) {
     const nextConfig: GlobalConfigPayload = {
       ...this.cachedConfig,
@@ -358,14 +518,34 @@ class FirebaseGlobalService {
       updatedAt: Date.now()
     };
     this.cachedConfig = nextConfig;
+    this.persistLocalConfig();
     this.notifyConfigListeners();
 
-    // A. BroadcastChannel
     try {
       this.broadcastChannel?.postMessage({ type: 'global_config_updated', data: nextConfig });
     } catch {}
 
-    // B. Server API
+    try {
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish(MQTT_TOPIC_SETTINGS, JSON.stringify(nextConfig), { retain: true, qos: 1 });
+      }
+    } catch {}
+
+    try {
+      await fetch(CLOUD_CONFIG_RELAY, {
+        method: 'POST',
+        headers: {
+          'Title': announcement ? `Announcement: ${announcement.title}` : 'Announcement Dismissed',
+          'Tags': 'mega,loudspeaker'
+        },
+        body: JSON.stringify({
+          type: 'config_update',
+          data: nextConfig,
+          timestamp: Date.now()
+        })
+      });
+    } catch {}
+
     try {
       if (announcement) {
         await fetch('/api/global/broadcast', {
@@ -377,28 +557,9 @@ class FirebaseGlobalService {
         await fetch('/api/global/dismiss-announcement', { method: 'POST' });
       }
     } catch {}
-
-    // C. MQTT
-    try {
-      if (this.mqttClient && this.mqttClient.connected) {
-        this.mqttClient.publish('lifeos/global/settings_v3', JSON.stringify(nextConfig));
-      }
-    } catch {}
-
-    // D. Cloud REST Store
-    try {
-      await fetch(CLOUD_SETTINGS_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'LifeOS Global System Config',
-          data: nextConfig
-        })
-      });
-    } catch {}
   }
 
-  // 9. Update Global App Visibility Feature Flags across all devices
+  // 10. Update Global App Visibility Feature Flags
   async updateAppVisibility(appVisibility: Record<string, boolean>) {
     const nextConfig: GlobalConfigPayload = {
       ...this.cachedConfig,
@@ -406,10 +567,29 @@ class FirebaseGlobalService {
       updatedAt: Date.now()
     };
     this.cachedConfig = nextConfig;
+    this.persistLocalConfig();
     this.notifyConfigListeners();
 
     try {
       this.broadcastChannel?.postMessage({ type: 'global_config_updated', data: nextConfig });
+    } catch {}
+
+    try {
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.mqttClient.publish(MQTT_TOPIC_SETTINGS, JSON.stringify(nextConfig), { retain: true, qos: 1 });
+      }
+    } catch {}
+
+    try {
+      await fetch(CLOUD_CONFIG_RELAY, {
+        method: 'POST',
+        headers: { 'Title': 'LifeOS Feature Flags Updated' },
+        body: JSON.stringify({
+          type: 'config_update',
+          data: nextConfig,
+          timestamp: Date.now()
+        })
+      });
     } catch {}
 
     try {
@@ -419,26 +599,9 @@ class FirebaseGlobalService {
         body: JSON.stringify({ appVisibility })
       });
     } catch {}
-
-    try {
-      if (this.mqttClient && this.mqttClient.connected) {
-        this.mqttClient.publish('lifeos/global/settings_v3', JSON.stringify(nextConfig));
-      }
-    } catch {}
-
-    try {
-      await fetch(CLOUD_SETTINGS_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'LifeOS Global System Config',
-          data: nextConfig
-        })
-      });
-    } catch {}
   }
 
-  // 10. Subscribe to Real Fellowship Members Roster across all devices
+  // 11. Fellowship Members Subscription & Registration
   subscribeToFellowshipMembers(callback: (members: FellowshipMember[]) => void): () => void {
     this.membersListeners.push(callback);
     callback(this.cachedMembers);
@@ -448,7 +611,6 @@ class FirebaseGlobalService {
     };
   }
 
-  // 11. Register or update a real user - NEVER DROPS OR REPLACES EXISTING MEMBERS
   async registerMember(member: FellowshipMember) {
     const cleanHandle = (member.handle || '').toLowerCase().trim();
     const cleanEmail = (member.email || '').toLowerCase().trim();
@@ -468,13 +630,11 @@ class FirebaseGlobalService {
       lastActive: 'Just now'
     };
 
-    // Merge into local cache non-destructively
     const merged = this.mergeMembers([safeMember]);
     this.cachedMembers = merged;
     this.persistLocalMembers();
     this.notifyMembersListeners();
 
-    // BroadcastChannel
     try {
       this.broadcastChannel?.postMessage({
         type: 'fellowship_members_updated',
@@ -482,7 +642,6 @@ class FirebaseGlobalService {
       });
     } catch {}
 
-    // POST to Server
     try {
       fetch('/api/fellowship/register', {
         method: 'POST',
@@ -491,30 +650,13 @@ class FirebaseGlobalService {
       }).catch(() => {});
     } catch {}
 
-    // MQTT
     try {
       if (this.mqttClient && this.mqttClient.connected) {
-        this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(merged));
+        this.mqttClient.publish(MQTT_TOPIC_MEMBERS, JSON.stringify(merged), { retain: true, qos: 0 });
       }
-    } catch {}
-
-    // Cloud REST Store
-    try {
-      await fetch(CLOUD_MEMBERS_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'LifeOS Global Fellowship Roster',
-          data: {
-            members: merged,
-            updatedAt: Date.now()
-          }
-        })
-      });
     } catch {}
   }
 
-  // 12. Moderate Fellowship Member (role, status, delete)
   async moderateMember(memberId: string, updates: { role?: UserRole; status?: 'active' | 'muted' | 'banned'; action?: string }) {
     let nextMembers: FellowshipMember[];
     if (updates.action === 'delete') {
@@ -537,7 +679,6 @@ class FirebaseGlobalService {
     this.persistLocalMembers();
     this.notifyMembersListeners();
 
-    // BroadcastChannel
     try {
       this.broadcastChannel?.postMessage({
         type: 'fellowship_members_updated',
@@ -545,7 +686,6 @@ class FirebaseGlobalService {
       });
     } catch {}
 
-    // Server API
     try {
       fetch('/api/fellowship/moderate', {
         method: 'POST',
@@ -554,26 +694,10 @@ class FirebaseGlobalService {
       }).catch(() => {});
     } catch {}
 
-    // MQTT
     try {
       if (this.mqttClient && this.mqttClient.connected) {
-        this.mqttClient.publish('lifeos/global/members_v3', JSON.stringify(merged));
+        this.mqttClient.publish(MQTT_TOPIC_MEMBERS, JSON.stringify(merged), { retain: true, qos: 0 });
       }
-    } catch {}
-
-    // Cloud REST Store
-    try {
-      await fetch(CLOUD_MEMBERS_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'LifeOS Global Fellowship Roster',
-          data: {
-            members: merged,
-            updatedAt: Date.now()
-          }
-        })
-      });
     } catch {}
   }
 }
