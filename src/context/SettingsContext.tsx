@@ -120,7 +120,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     mini_cats: true,
     mini_games: true,
     youtube: true,
-    cinema_vault: true
+    life_ai: true
   },
   debugTelemetryEnabled: false
 };

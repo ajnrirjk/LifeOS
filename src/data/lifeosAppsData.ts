@@ -86,14 +86,14 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     isSystem: true
   },
   {
-    id: 'cinema_vault',
-    title: 'CinemaVault',
-    emoji: '🎬',
-    iconName: 'Film',
-    category: 'Learning',
-    type: 'cinema_vault',
-    color: 'from-amber-600 via-rose-600 to-red-700',
-    description: 'Stream movies & TV shows free in HD powered by Cinejoy. Browse genres, search titles & watch online.',
+    id: 'life_ai',
+    title: 'LifeAi',
+    emoji: '✨',
+    iconName: 'Sparkles',
+    category: 'Productivity',
+    type: 'life_ai',
+    color: 'from-cyan-500 via-teal-500 to-emerald-600',
+    description: 'AI companion for LifeOS & daily life: scripture insight, personalized prayer, system guidance, sermon ideas & voice.',
     isPinned: true,
     isSystem: true
   }

@@ -59,7 +59,7 @@ export const LifeOSProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const saved = localStorage.getItem('lifeos_apps_v5');
       if (saved) {
         const parsed = JSON.parse(saved);
-        const filtered = Array.isArray(parsed) ? parsed.filter((a: any) => a.id !== 'tiktok') : [];
+        const filtered = Array.isArray(parsed) ? parsed.filter((a: any) => a.id !== 'tiktok' && a.id !== 'cinema_vault') : [];
         const defaultMap = new Map(DEFAULT_LIFEOS_APPS.map(d => [d.id, d]));
         const updated = filtered.map((a: LifeOSApp) => {
           const sys = defaultMap.get(a.id);

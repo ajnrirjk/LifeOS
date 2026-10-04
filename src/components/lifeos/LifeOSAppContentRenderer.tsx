@@ -8,7 +8,7 @@ import { LifeMeetApp } from '../meet/LifeMeetApp';
 import { CatFighterApp } from '../cat-fighter/CatFighterApp';
 import { ArcadeVaultApp } from '../mini-games/ArcadeVaultApp';
 import { YouTubeApp } from '../youtube/YouTubeApp';
-import { CinemaVaultApp } from '../cinema/CinemaVaultApp';
+import { LifeAiApp } from '../ai/LifeAiApp';
 import { AppStudio } from './AppStudio';
 import { CustomAppRunner } from './CustomAppRunner';
 
@@ -64,7 +64,7 @@ export const LifeOSAppContentRenderer: React.FC<LifeOSAppContentRendererProps> =
       {appId === 'mini_cats' && <CatFighterApp />}
       {appId === 'mini_games' && <ArcadeVaultApp />}
       {appId === 'youtube' && <YouTubeApp />}
-      {appId === 'cinema_vault' && <CinemaVaultApp />}
+      {appId === 'life_ai' && <LifeAiApp />}
       {appId === 'app_studio' && <AppStudio />}
       {appId !== 'faithlingo' &&
         appId !== 'bible_journal' &&
@@ -73,7 +73,7 @@ export const LifeOSAppContentRenderer: React.FC<LifeOSAppContentRendererProps> =
         appId !== 'mini_cats' &&
         appId !== 'mini_games' &&
         appId !== 'youtube' &&
-        appId !== 'cinema_vault' &&
+        appId !== 'life_ai' &&
         appId !== 'app_studio' && (
           <CustomAppRunner app={app} />
         )}
