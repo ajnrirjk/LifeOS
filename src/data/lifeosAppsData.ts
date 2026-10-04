@@ -86,14 +86,14 @@ export const DEFAULT_LIFEOS_APPS: LifeOSApp[] = [
     isSystem: true
   },
   {
-    id: 'tiktok',
-    title: 'TikTok',
+    id: 'cinema_vault',
+    title: 'CinemaVault',
     emoji: '🎬',
-    iconName: 'PlaySquare',
+    iconName: 'Film',
     category: 'Learning',
-    type: 'tiktok',
-    color: 'from-pink-600 via-rose-600 to-cyan-600',
-    description: 'Full TikTok browser & player: watch trending videos, search creators, explore FYP, paste any link & sign in.',
+    type: 'cinema_vault',
+    color: 'from-amber-600 via-rose-600 to-red-700',
+    description: 'Stream movies & TV shows free in HD powered by Cinejoy. Browse genres, search titles & watch online.',
     isPinned: true,
     isSystem: true
   }

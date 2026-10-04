@@ -11,139 +11,153 @@ export interface YouTubeVideo {
   description: string;
 }
 
-export interface TikTokVideo {
+export interface CinemaMovie {
   id: string;
-  tiktokId: string;
   title: string;
-  creator: string;
-  creatorHandle: string;
-  views: string;
-  likes: string;
-  timestamp: string;
-  category: 'Trending' | 'Comedy' | 'Dance' | 'Food' | 'Sports' | 'Music' | 'Life Hacks' | 'Tech' | 'Faith';
-  description: string;
+  year: number;
+  genre: 'Action' | 'Sci-Fi' | 'Family' | 'Faith & Inspiration' | 'Comedy' | 'Drama' | 'Animation';
+  rating: string;
+  duration: string;
+  posterEmoji: string;
+  posterBg: string;
+  overview: string;
+  cinejoyQuery: string;
+  cinejoyUrl: string;
+  featured?: boolean;
 }
 
-export const TIKTOK_CURATED_VIDEOS: TikTokVideo[] = [
+export const CINEMA_FEATURED_MOVIES: CinemaMovie[] = [
   {
-    id: 'tt_1',
-    tiktokId: '6839475182118194437',
-    title: 'Meatballs Madness 🔥 Cooking in Nature',
-    creator: 'Men With The Pot',
-    creatorHandle: '@menwiththepot',
-    views: '48M',
-    likes: '4.9M',
-    timestamp: 'Viral ASMR',
-    category: 'Food',
-    description: 'Campfire cooking meatballs in the deep wilderness. Relaxing forest sounds and outdoor culinary art.'
+    id: 'cine_1',
+    title: 'The Chosen: Holy Land Epic',
+    year: 2024,
+    genre: 'Faith & Inspiration',
+    rating: '9.4',
+    duration: '2h 15m',
+    posterEmoji: '🕊️',
+    posterBg: 'from-amber-600 via-yellow-600 to-stone-900',
+    overview: 'The revolutionary historical drama following the life and teachings of Jesus Christ and those who encountered Him.',
+    cinejoyQuery: 'The Chosen',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=The+Chosen',
+    featured: true
   },
   {
-    id: 'tt_2',
-    tiktokId: '6718335390845095173',
-    title: 'Scramble up ur name & I’ll try to guess it 😍❤️',
-    creator: 'Scout, Suki & Stella',
-    creatorHandle: '@scout2015',
-    views: '92M',
-    likes: '8.4M',
-    timestamp: 'Viral Classic',
-    category: 'Trending',
-    description: 'The mega-viral aesthetic pet video that took over TikTok FYP feeds worldwide.'
+    id: 'cine_2',
+    title: 'Interstellar',
+    year: 2014,
+    genre: 'Sci-Fi',
+    rating: '8.7',
+    duration: '2h 49m',
+    posterEmoji: '🚀',
+    posterBg: 'from-indigo-900 via-sky-900 to-black',
+    overview: 'A team of explorers travels through a wormhole in space in an attempt to ensure humanity\'s survival.',
+    cinejoyQuery: 'Interstellar',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=Interstellar',
+    featured: true
   },
   {
-    id: 'tt_3',
-    tiktokId: '6827479715578678533',
-    title: 'How to Look Expensive on a Budget 💰',
-    creator: 'Tim Dessaint',
-    creatorHandle: '@timdessaint',
-    views: '35M',
-    likes: '3.1M',
-    timestamp: 'Style Guide',
-    category: 'Life Hacks',
-    description: 'Pro styling tips to elevate your wardrobe without breaking the bank.'
+    id: 'cine_3',
+    title: 'Dune: Part Two',
+    year: 2024,
+    genre: 'Sci-Fi',
+    rating: '8.6',
+    duration: '2h 46m',
+    posterEmoji: '🏜️',
+    posterBg: 'from-orange-800 via-amber-700 to-stone-950',
+    overview: 'Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family.',
+    cinejoyQuery: 'Dune Part Two',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=Dune+Part+Two'
   },
   {
-    id: 'tt_4',
-    tiktokId: '6807502301582871814',
-    title: 'Stay-At-Home Rave & Dance Party ✨',
-    creator: 'Rachel Leary',
-    creatorHandle: '@rachleary',
-    views: '22M',
-    likes: '2.5M',
-    timestamp: 'Dance Trend',
-    category: 'Dance',
-    description: 'Energetic lighting and dance party vibes from home.'
+    id: 'cine_4',
+    title: 'Spider-Man: Across the Spider-Verse',
+    year: 2023,
+    genre: 'Animation',
+    rating: '8.6',
+    duration: '2h 20m',
+    posterEmoji: '🕷️',
+    posterBg: 'from-rose-600 via-purple-700 to-cyan-700',
+    overview: 'Miles Morales catapults across the Multiverse, where he encounters a team of Spider-People charged with protecting its very existence.',
+    cinejoyQuery: 'Spider-Man Across the Spider-Verse',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=Spider-Man+Across+the+Spider-Verse'
   },
   {
-    id: 'tt_5',
-    tiktokId: '7359552125262662945',
-    title: 'Stay Unique! The Little Warrior 🐾',
-    creator: 'Wild Life',
-    creatorHandle: '@mpwild',
-    views: '64M',
-    likes: '7.2M',
-    timestamp: 'Animation',
-    category: 'Comedy',
-    description: 'Heartwarming viral animated story about finding your strength and staying unique.'
+    id: 'cine_5',
+    title: 'Jesus Revolution',
+    year: 2023,
+    genre: 'Faith & Inspiration',
+    rating: '7.1',
+    duration: '2h 00m',
+    posterEmoji: '✝️',
+    posterBg: 'from-cyan-800 via-teal-700 to-stone-900',
+    overview: 'The true story of a national spiritual awakening in the early 1970s and its origins within a community of teenage hippies.',
+    cinejoyQuery: 'Jesus Revolution',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=Jesus+Revolution'
   },
   {
-    id: 'tt_6',
-    tiktokId: '7372652121092623648',
-    title: 'Finding Home: Kitten Adventure 🐱',
-    creator: 'Chubby’s Life',
-    creatorHandle: '@chubby_s_life',
-    views: '78M',
-    likes: '8.1M',
-    timestamp: 'Viral Story',
-    category: 'Trending',
-    description: 'Viral animated narrative that captured millions of hearts on TikTok.'
+    id: 'cine_6',
+    title: 'Inception',
+    year: 2010,
+    genre: 'Action',
+    rating: '8.8',
+    duration: '2h 28m',
+    posterEmoji: '🌀',
+    posterBg: 'from-slate-800 via-blue-900 to-black',
+    overview: 'A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O.',
+    cinejoyQuery: 'Inception',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=Inception'
   },
   {
-    id: 'tt_7',
-    tiktokId: '6858267898385812741',
-    title: 'Styling Guide: Elevating Everyday Outfits 🧥',
-    creator: 'Tim Dessaint',
-    creatorHandle: '@timdessaint',
-    views: '18M',
-    likes: '1.9M',
-    timestamp: 'Fashion Tok',
-    category: 'Tech',
-    description: 'Essential outfit proportions and layering secrets for modern fashion.'
+    id: 'cine_7',
+    title: 'The Lion King',
+    year: 2019,
+    genre: 'Family',
+    rating: '8.5',
+    duration: '1h 58m',
+    posterEmoji: '🦁',
+    posterBg: 'from-yellow-700 via-amber-600 to-stone-900',
+    overview: 'After the murder of his father, a young lion prince flees his kingdom only to learn the true meaning of responsibility and bravery.',
+    cinejoyQuery: 'The Lion King',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=The+Lion+King'
   },
   {
-    id: 'tt_8',
-    tiktokId: '7341839949806996769',
-    title: 'The Great Journey: Escape Adventure 🌟',
-    creator: 'Chubby’s Life',
-    creatorHandle: '@chubby_s_life',
-    views: '51M',
-    likes: '5.6M',
-    timestamp: 'Adventure',
-    category: 'Sports',
-    description: 'Action-packed viral animated escapade that went mega-viral across feeds.'
+    id: 'cine_8',
+    title: 'The Pursuit of Happyness',
+    year: 2006,
+    genre: 'Drama',
+    rating: '8.0',
+    duration: '1h 57m',
+    posterEmoji: '💼',
+    posterBg: 'from-stone-800 via-emerald-900 to-stone-950',
+    overview: 'A struggling salesman takes custody of his son as he\'s poised to begin a life-changing professional endeavor.',
+    cinejoyQuery: 'The Pursuit of Happyness',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=The+Pursuit+of+Happyness'
   },
   {
-    id: 'tt_9',
-    tiktokId: '7357355293254225184',
-    title: 'Heart & Family: Journey Together ❤️',
-    creator: 'MPminds',
-    creatorHandle: '@mpminds',
-    views: '42M',
-    likes: '4.8M',
-    timestamp: 'Inspirational',
-    category: 'Faith',
-    description: 'A touching story of persevering through hardship together with love and hope.'
+    id: 'cine_9',
+    title: 'Inside Out 2',
+    year: 2024,
+    genre: 'Animation',
+    rating: '7.8',
+    duration: '1h 36m',
+    posterEmoji: '🧠',
+    posterBg: 'from-orange-600 via-pink-600 to-indigo-800',
+    overview: 'Follow Riley, in her teenage years, encountering new emotions like Anxiety, Envy, Ennui, and Embarrassment.',
+    cinejoyQuery: 'Inside Out 2',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=Inside+Out+2'
   },
   {
-    id: 'tt_10',
-    tiktokId: '7367070877709520161',
-    title: 'Hope Against All Odds 🌈',
-    creator: 'Chubby’s Life',
-    creatorHandle: '@chubby_s_life',
-    views: '39M',
-    likes: '4.3M',
-    timestamp: 'Inspiration',
-    category: 'Faith',
-    description: 'An uplifting reminder that joy and light always follow after the storm.'
+    id: 'cine_10',
+    title: 'Paddington 2',
+    year: 2017,
+    genre: 'Comedy',
+    rating: '7.8',
+    duration: '1h 43m',
+    posterEmoji: '🐻',
+    posterBg: 'from-red-700 via-blue-800 to-stone-900',
+    overview: 'Paddington, now happily settled with the Brown family, picks up a series of odd jobs to buy the perfect present for his Aunt Lucy.',
+    cinejoyQuery: 'Paddington 2',
+    cinejoyUrl: 'https://cinejoy.pk/search?q=Paddington+2'
   }
 ];
 
@@ -273,33 +287,13 @@ export function extractYouTubeId(urlOrId: string): string | null {
   return null;
 }
 
-// Helper to extract TikTok video ID from links or raw numeric ID
-export function extractTikTokId(urlOrId: string): string | null {
-  if (!urlOrId) return null;
-  const trimmed = urlOrId.trim();
-
-  // If already pure digits (TikTok video IDs are usually 15-20 digits)
-  if (/^\d{10,24}$/.test(trimmed)) {
+// Helper to format Cinejoy search URL from movie title or query
+export function formatCinejoySearchUrl(query: string): string {
+  if (!query) return 'https://cinejoy.pk/';
+  const trimmed = query.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
-
-  // Handle standard https://www.tiktok.com/@user/video/VIDEO_ID
-  const videoMatch = trimmed.match(/\/video\/(\d+)/);
-  if (videoMatch && videoMatch[1]) {
-    return videoMatch[1];
-  }
-
-  // Handle mobile links https://m.tiktok.com/v/VIDEO_ID
-  const vMatch = trimmed.match(/\/v\/(\d+)/);
-  if (vMatch && vMatch[1]) {
-    return vMatch[1];
-  }
-
-  // Handle /embed/v2/VIDEO_ID or /player/v1/VIDEO_ID
-  const embedMatch = trimmed.match(/\/(?:embed|player)\/(?:v\d+\/)?(\d+)/);
-  if (embedMatch && embedMatch[1]) {
-    return embedMatch[1];
-  }
-
-  return null;
+  return `https://cinejoy.pk/search?q=${encodeURIComponent(trimmed)}`;
 }
+

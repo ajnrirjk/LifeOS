@@ -6,7 +6,7 @@ export type AppType =
   | 'mini_cats'
   | 'mini_games'
   | 'youtube'
-  | 'tiktok'
+  | 'cinema_vault'
   | 'app_studio' 
   | 'tracker' 
   | 'notes' 
