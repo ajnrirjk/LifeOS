@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { useSettings } from '../../context/SettingsContext';
-import { ChevronDown, Settings, Shield, Crown, Megaphone, AlertTriangle, Sparkles, X, Lock, Columns2, ArrowLeftRight } from 'lucide-react';
+import { ChevronDown, Settings, Shield, Crown, Megaphone, AlertTriangle, Sparkles, X, Lock } from 'lucide-react';
 import { sounds } from '../../services/soundEffects';
 
 interface LifeOSTopBarProps {
@@ -17,15 +17,7 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
     setWallpaper,
     isDesktopView,
     showDesktop,
-    launchApp,
-    splitScreen,
-    enterSplitScreen,
-    exitSplitScreen,
-    toggleSplitScreen,
-    setSplitPreset,
-    swapSplitApps,
-    setPrimaryApp,
-    setSecondaryApp
+    launchApp
   } = useLifeOS();
   const {
     setIsSettingsOpen,
@@ -43,7 +35,6 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isBannerDismissed, setIsBannerDismissed] = useState(false);
-  const [isSplitMenuOpen, setIsSplitMenuOpen] = useState(false);
 
   useEffect(() => {
     setIsBannerDismissed(false);
@@ -193,174 +184,7 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
           <span className="sm:hidden">Widgets</span>
         </button>
 
-        {/* Split Screen Dual-Pane Button & Menu */}
-        <div className="relative">
-          <button
-            onClick={() => {
-              sounds.playTap();
-              setIsSplitMenuOpen(!isSplitMenuOpen);
-            }}
-            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-lg text-xs font-extrabold transition-all ${
-              splitScreen.isSplit
-                ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-sm'
-                : 'hover:bg-white/15 text-stone-300'
-            }`}
-            title="Split-Screen Dual Window View (Alt + Enter)"
-          >
-            <Columns2 className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Split Screen</span>
-            {splitScreen.isSplit && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
-          </button>
 
-          {/* Split Screen Quick Config Dropdown */}
-          <AnimatePresence>
-            {isSplitMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 5 }}
-                className="absolute top-9 left-0 w-72 bg-stone-900/98 border border-white/20 rounded-2xl shadow-2xl p-3 z-50 text-stone-200 backdrop-blur-2xl space-y-3"
-              >
-                <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Columns2 className="w-4 h-4 text-amber-400" />
-                    <span className="font-black text-xs text-white">Dual-App Split Canvas</span>
-                  </div>
-                  <button
-                    onClick={() => setIsSplitMenuOpen(false)}
-                    className="text-stone-400 hover:text-white text-xs"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Preset Chips */}
-                <div className="space-y-1">
-                  <div className="text-[10px] font-black uppercase text-stone-400">Layout Presets</div>
-                  <div className="grid grid-cols-3 gap-1">
-                    <button
-                      onClick={() => {
-                        sounds.playTap();
-                        if (!splitScreen.isSplit) enterSplitScreen(undefined, undefined, '50-50');
-                        else setSplitPreset('50-50');
-                      }}
-                      className={`p-1.5 rounded-lg text-center text-[10px] font-bold transition-all ${
-                        splitScreen.preset === '50-50' && splitScreen.isSplit
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'bg-white/5 hover:bg-white/10 text-stone-300'
-                      }`}
-                    >
-                      50 / 50
-                    </button>
-                    <button
-                      onClick={() => {
-                        sounds.playTap();
-                        if (!splitScreen.isSplit) enterSplitScreen(undefined, undefined, '70-30');
-                        else setSplitPreset('70-30');
-                      }}
-                      className={`p-1.5 rounded-lg text-center text-[10px] font-bold transition-all ${
-                        splitScreen.preset === '70-30' && splitScreen.isSplit
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'bg-white/5 hover:bg-white/10 text-stone-300'
-                      }`}
-                    >
-                      70 / 30
-                    </button>
-                    <button
-                      onClick={() => {
-                        sounds.playTap();
-                        if (!splitScreen.isSplit) enterSplitScreen(undefined, undefined, '30-70');
-                        else setSplitPreset('30-70');
-                      }}
-                      className={`p-1.5 rounded-lg text-center text-[10px] font-bold transition-all ${
-                        splitScreen.preset === '30-70' && splitScreen.isSplit
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'bg-white/5 hover:bg-white/10 text-stone-300'
-                      }`}
-                    >
-                      30 / 70
-                    </button>
-                  </div>
-                </div>
-
-                {/* App Selectors */}
-                <div className="space-y-2 text-xs">
-                  <div>
-                    <label className="text-[10px] text-stone-400 font-bold block mb-1">
-                      Primary App (Left / Top)
-                    </label>
-                    <select
-                      value={splitScreen.primaryAppId}
-                      onChange={(e) => setPrimaryApp(e.target.value)}
-                      className="w-full bg-stone-800 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                    >
-                      {apps.map(a => (
-                        <option key={a.id} value={a.id}>
-                          {a.emoji} {a.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center justify-center">
-                    <button
-                      onClick={() => swapSplitApps()}
-                      className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-amber-400 font-bold text-[10px] flex items-center gap-1 transition-all"
-                    >
-                      <ArrowLeftRight className="w-3 h-3" />
-                      <span>Swap Apps</span>
-                    </button>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-stone-400 font-bold block mb-1">
-                      Secondary App (Right / Bottom)
-                    </label>
-                    <select
-                      value={splitScreen.secondaryAppId}
-                      onChange={(e) => setSecondaryApp(e.target.value)}
-                      className="w-full bg-stone-800 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                    >
-                      {apps.map(a => (
-                        <option key={a.id} value={a.id}>
-                          {a.emoji} {a.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Main Action Button */}
-                <div className="pt-1">
-                  {splitScreen.isSplit ? (
-                    <button
-                      onClick={() => {
-                        sounds.playTap();
-                        exitSplitScreen();
-                        setIsSplitMenuOpen(false);
-                      }}
-                      className="w-full py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition-colors shadow-md"
-                    >
-                      Exit Split Screen
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        sounds.playTap();
-                        enterSplitScreen();
-                        setIsSplitMenuOpen(false);
-                      }}
-                      className="w-full py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs transition-colors shadow-md flex items-center justify-center gap-1.5"
-                    >
-                      <Columns2 className="w-3.5 h-3.5" />
-                      <span>Launch Split-Screen</span>
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
 
         {/* Active App Indicator & Mobile Quick Return */}
         {!isDesktopView && activeApp && (
@@ -462,6 +286,21 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
               />
             </svg>
             <span>{isGoogleSigningIn ? '...' : 'Sign In'}</span>
+          </button>
+        )}
+
+        {/* Master Admin God-Mode Quick Trigger */}
+        {isAuthorizedAdmin && (
+          <button
+            onClick={() => {
+              sounds.playTap();
+              window.dispatchEvent(new CustomEvent('toggle_god_mode'));
+            }}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/40 text-amber-300 font-extrabold text-[11px] transition-all shadow-sm active:scale-95"
+            title="Master Admin God-Mode (aw03102008@gmail.com)"
+          >
+            <span>👑</span>
+            <span className="hidden sm:inline font-mono">God Mode</span>
           </button>
         )}
 

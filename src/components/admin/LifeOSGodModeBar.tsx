@@ -73,6 +73,27 @@ export const LifeOSGodModeBar: React.FC = () => {
   // Maintenance form
   const [maintMsg, setMaintMsg] = useState(settings.maintenanceMessage || 'System maintenance in progress.');
 
+  // Compact mini mode state so it never blocks anything
+  const [isMini, setIsMini] = useState(() => {
+    try {
+      return localStorage.getItem('lifeos_godmode_mini') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Listen to system events to toggle God Mode from TopBar or elsewhere
+  useEffect(() => {
+    const handleToggle = () => setIsOpen(prev => !prev);
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('toggle_god_mode', handleToggle);
+    window.addEventListener('open_god_mode', handleOpen);
+    return () => {
+      window.removeEventListener('toggle_god_mode', handleToggle);
+      window.removeEventListener('open_god_mode', handleOpen);
+    };
+  }, []);
+
   const showToast = (msg: string) => {
     setFeedback(msg);
     sounds.playVictory();
@@ -272,42 +293,86 @@ export const LifeOSGodModeBar: React.FC = () => {
 
   return (
     <>
-      {/* Floating Trigger Pill on Desktop (Only visible to aw03102008@gmail.com) */}
-      <div className="fixed bottom-24 right-5 sm:right-8 z-50 select-none">
-        <motion.button
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.94 }}
-          onClick={() => {
-            sounds.playTap();
-            setIsOpen(!isOpen);
-          }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all ${
-            isOpen
-              ? 'bg-amber-500 text-stone-950 border-amber-400 font-black shadow-amber-500/40 ring-4 ring-amber-500/20'
-              : 'bg-stone-900/90 hover:bg-stone-800 text-amber-300 border-amber-500/40 shadow-stone-950/80 hover:border-amber-400'
-          }`}
-          title="Master Admin God-Mode Panel (aw03102008@gmail.com)"
-        >
-          <span className="text-lg animate-pulse">👑</span>
-          <div className="text-left hidden sm:block">
-            <div className="text-[11px] font-black uppercase tracking-wider leading-none">God Mode</div>
-            <div className="text-[9px] text-stone-400 leading-none mt-0.5 truncate max-w-[120px]">
-              {MASTER_ADMIN_EMAIL}
-            </div>
+      {/* Repositioned Floating Trigger Pill (Draggable & Minimal, only visible to aw03102008@gmail.com) */}
+      <motion.div
+        drag
+        dragMomentum={false}
+        className="fixed top-10 sm:top-11 right-3 sm:right-5 z-50 select-none cursor-grab active:cursor-grabbing"
+      >
+        {isMini ? (
+          <motion.button
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              sounds.playTap();
+              setIsOpen(!isOpen);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setIsMini(false);
+              try { localStorage.setItem('lifeos_godmode_mini', 'false'); } catch {}
+            }}
+            className={`w-9 h-9 rounded-2xl border shadow-xl flex items-center justify-center text-lg backdrop-blur-xl transition-all ${
+              isOpen
+                ? 'bg-amber-500 text-stone-950 border-amber-400 shadow-amber-500/40 ring-4 ring-amber-500/20'
+                : 'bg-stone-900/90 hover:bg-stone-800 text-amber-300 border-amber-500/40 shadow-stone-950/80 hover:border-amber-400'
+            }`}
+            title="Master Admin God-Mode (Click to open, right-click to expand)"
+          >
+            <span className="animate-pulse">👑</span>
+          </motion.button>
+        ) : (
+          <div className="flex items-center gap-1 group">
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                sounds.playTap();
+                setIsOpen(!isOpen);
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all ${
+                isOpen
+                  ? 'bg-amber-500 text-stone-950 border-amber-400 font-black shadow-amber-500/40 ring-4 ring-amber-500/20'
+                  : 'bg-stone-900/90 hover:bg-stone-800 text-amber-300 border-amber-500/40 shadow-stone-950/80 hover:border-amber-400'
+              }`}
+              title="Master Admin God-Mode Panel (Drag to reposition anywhere)"
+            >
+              <span className="text-base animate-pulse">👑</span>
+              <div className="text-left hidden sm:block">
+                <div className="text-[10px] font-black uppercase tracking-wider leading-none">God Mode</div>
+                <div className="text-[9px] text-stone-400 leading-none mt-0.5 truncate max-w-[110px]">
+                  {MASTER_ADMIN_EMAIL}
+                </div>
+              </div>
+              {isOpen ? <ChevronUp className="w-3.5 h-3.5 ml-0.5" /> : <ChevronDown className="w-3.5 h-3.5 ml-0.5 text-amber-400" />}
+            </motion.button>
+
+            {/* Quick Mini Toggle Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                sounds.playTap();
+                setIsMini(true);
+                try { localStorage.setItem('lifeos_godmode_mini', 'true'); } catch {}
+              }}
+              className="w-5 h-5 rounded-lg bg-black/40 hover:bg-stone-800 text-stone-400 hover:text-white border border-white/10 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Minimize to tiny crown icon"
+            >
+              −
+            </button>
           </div>
-          {isOpen ? <ChevronDown className="w-4 h-4 ml-1" /> : <ChevronUp className="w-4 h-4 ml-1 text-amber-400" />}
-        </motion.button>
-      </div>
+        )}
+      </motion.div>
 
       {/* Floating God-Mode Command Center Drawer */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="fixed bottom-[145px] right-3 sm:right-8 w-[calc(100vw-24px)] sm:w-[480px] max-h-[82vh] bg-stone-900/95 border-2 border-amber-500/40 rounded-3xl shadow-2xl backdrop-blur-2xl text-white z-50 flex flex-col overflow-hidden select-none"
+            className="fixed top-12 sm:top-14 right-3 sm:right-6 w-[calc(100vw-24px)] sm:w-[480px] max-h-[85vh] bg-stone-900/95 border-2 border-amber-500/40 rounded-3xl shadow-2xl backdrop-blur-2xl text-white z-50 flex flex-col overflow-hidden select-none"
           >
             {/* Header */}
             <div className="p-4 border-b border-white/10 bg-gradient-to-r from-amber-950/60 via-stone-900 to-stone-900 flex items-center justify-between">
