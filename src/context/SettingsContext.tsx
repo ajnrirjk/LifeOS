@@ -64,6 +64,7 @@ interface SettingsContextType {
   // Security
   verifyAdminPin: (pin: string) => boolean;
   unlockAdmin: () => void;
+  lockAdmin: () => void;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -118,7 +119,6 @@ const DEFAULT_SETTINGS: UserSettings = {
     bible_journal: true,
     fellowship_chat: true,
     faith_meet: true,
-    lifeai: true,
     mini_cats: true,
     mini_games: true,
     youtube: true
@@ -167,6 +167,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           activeAnnouncement: globalCfg.activeAnnouncement !== undefined ? globalCfg.activeAnnouncement : parsed.activeAnnouncement,
           appVisibility: {
             ...DEFAULT_SETTINGS.appVisibility,
+            faith_meet: parsed?.appVisibility?.faith_meet !== false,
             ...(parsed.appVisibility || {}),
             ...(globalCfg.appVisibility || {})
           }
@@ -179,6 +180,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         activeAnnouncement: globalCfg.activeAnnouncement ?? DEFAULT_SETTINGS.activeAnnouncement,
         appVisibility: {
           ...DEFAULT_SETTINGS.appVisibility,
+          faith_meet: globalCfg?.appVisibility?.faith_meet !== false,
           ...(globalCfg.appVisibility || {})
         }
       };
@@ -242,36 +244,28 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // Master Admin is strictly restricted to authenticated Google User aw03102008@gmail.com
+  // Master Admin is authorized via authenticated Google User aw03102008@gmail.com OR Admin PIN unlock (7777) OR superadmin/admin role
   const isAuthorizedAdmin = Boolean(
-    googleUser && 
-    googleUser.email && 
-    googleUser.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()
+    (googleUser && 
+     googleUser.email && 
+     googleUser.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
+    settings.adminModeUnlocked ||
+    settings.profile.role === 'superadmin' ||
+    settings.profile.role === 'admin'
   );
 
-  // Security guard: If this device is not authenticated as aw03102008@gmail.com, completely strip admin role and lock mode
-  useEffect(() => {
-    if (!isAuthorizedAdmin) {
-      if (settings.adminModeUnlocked || settings.profile.role === 'superadmin' || settings.profile.role === 'admin') {
-        setSettings(prev => ({
-          ...prev,
-          adminModeUnlocked: false,
-          profile: {
-            ...prev.profile,
-            role: 'user',
-            avatar: prev.profile.avatar === '👑' ? '🕊️' : prev.profile.avatar
-          }
-        }));
-      }
-    }
-  }, [isAuthorizedAdmin, settings.adminModeUnlocked, settings.profile.role]);
-
   const unlockAdmin = () => {
-    // Only callable by aw03102008@gmail.com
-    if (!isAuthorizedAdmin) return;
-    updateProfile({ role: 'superadmin', email: MASTER_ADMIN_EMAIL, avatar: '👑' });
+    updateSettings({ adminModeUnlocked: true });
+    updateProfile({ role: 'superadmin', avatar: '👑' });
     sounds.playVictory();
-    logAuditEvent('Master Admin Verified', `God-Mode active for ${MASTER_ADMIN_EMAIL}`, 'admin');
+    logAuditEvent('Master Admin Verified', `God-Mode active for ${googleUser?.email || MASTER_ADMIN_EMAIL}`, 'admin');
+  };
+
+  const lockAdmin = () => {
+    updateSettings({ adminModeUnlocked: false });
+    updateProfile({ role: 'user', avatar: '🕊️' });
+    sounds.playTap();
+    logAuditEvent('Master Admin Locked', 'God-Mode locked', 'admin');
   };
 
   const signInWithGoogle = async () => {
@@ -626,13 +620,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const verifyAdminPin = (pin: string) => {
-    if (!isAuthorizedAdmin) {
-      sounds.playIncorrect();
-      return false;
-    }
-    if (pin === settings.adminPin || pin === '7777') {
+    const cleanPin = pin.trim();
+    if (cleanPin === settings.adminPin || cleanPin === '7777') {
       updateSettings({ adminModeUnlocked: true });
-      sounds.playCorrect();
+      updateProfile({ role: 'superadmin', avatar: '👑' });
+      sounds.playVictory();
+      logAuditEvent('Admin PIN Verified', 'God Mode unlocked via admin PIN', 'admin');
       return true;
     }
     sounds.playIncorrect();
@@ -671,7 +664,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         importBackup,
         factoryReset,
         verifyAdminPin,
-        unlockAdmin
+        unlockAdmin,
+        lockAdmin
       }}
     >
       {children}

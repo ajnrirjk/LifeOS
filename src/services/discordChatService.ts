@@ -361,18 +361,31 @@ class DiscordChatService {
       }
     } catch {}
 
-    // Verify Super Admin strictly for authentic Google User aw03102008@gmail.com
+    // Verify Super Admin for authentic Google User aw03102008@gmail.com OR if God Mode is unlocked
     const isMasterGoogle = Boolean(
       this.currentUser.isGoogleUser &&
       this.currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
     );
 
-    if (isMasterGoogle) {
-      this.currentUser.isOwner = true;
+    let isAdminUnlocked = false;
+    try {
+      const savedSettings = localStorage.getItem('lifeos_system_settings_v1');
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed?.adminModeUnlocked || parsed?.profile?.role === 'superadmin' || parsed?.profile?.role === 'admin') {
+          isAdminUnlocked = true;
+        }
+      }
+    } catch {}
+
+    if (isMasterGoogle || isAdminUnlocked) {
+      this.currentUser.isOwner = isMasterGoogle;
       this.currentUser.isAdmin = true;
-      this.currentUser.name = 'Anthony Williams (Owner)';
       this.currentUser.role = 'Super Admin';
       this.currentUser.roleColor = '#F59E0B';
+      if (isMasterGoogle && (!this.currentUser.name || this.currentUser.name === 'Believer in Christ')) {
+        this.currentUser.name = 'Anthony Williams (Owner)';
+      }
     } else {
       this.currentUser.isOwner = false;
       this.currentUser.isAdmin = false;
@@ -427,10 +440,35 @@ class DiscordChatService {
       }
     } catch {}
 
+    // Seed default messages if empty so chat is vibrant and functional immediately
+    if (this.messagesCache.length === 0) {
+      this.messagesCache = [...DEFAULT_SEED_MESSAGES];
+    }
+
     // Clean out fake mock placeholder accounts permanently
     const FAKE_MOCK_IDS = new Set(['pastor_david', 'sister_sarah', 'brother_marcus', 'sister_hannah']);
     this.membersCache = this.membersCache.filter((m) => !FAKE_MOCK_IDS.has(m.id));
     this.messagesCache = this.messagesCache.filter((m) => !FAKE_MOCK_IDS.has(m.senderId));
+
+    // Ensure currentUser is always visible in active members list
+    if (!this.membersCache.some((m) => m.id === this.currentUser.id)) {
+      this.membersCache.unshift({
+        id: this.currentUser.id,
+        name: this.currentUser.name,
+        discriminator: this.currentUser.discriminator,
+        photoURL: this.currentUser.photoURL,
+        email: this.currentUser.email,
+        isGoogleUser: this.currentUser.isGoogleUser,
+        isOwner: this.currentUser.isOwner,
+        isAdmin: this.currentUser.isAdmin,
+        status: 'online',
+        customStatus: this.currentUser.customStatus,
+        role: this.currentUser.role,
+        roleColor: this.currentUser.roleColor,
+        lastSeen: Date.now()
+      });
+    }
+
     this.saveCaches();
   }
 

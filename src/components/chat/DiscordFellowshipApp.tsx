@@ -31,6 +31,7 @@ import {
   Video
 } from 'lucide-react';
 import { useLifeOS } from '../../context/LifeOSContext';
+import { useSettings } from '../../context/SettingsContext';
 import {
   discordChatService,
   DEFAULT_SERVERS,
@@ -58,6 +59,7 @@ interface DiscordFellowshipAppProps {
 
 export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onClose }) => {
   const { launchApp } = useLifeOS();
+  const { settings, isAuthorizedAdmin } = useSettings();
   // Navigation State
   const [activeServerId, setActiveServerId] = useState<string>('server_fellowship');
   const [activeChannelId, setActiveChannelId] = useState<string>('general');
@@ -153,7 +155,11 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     }
     return !isSaved && !isGoogle;
   });
-  const [onboardingName, setOnboardingName] = useState('');
+  const [onboardingName, setOnboardingName] = useState(() => {
+    return settings?.profile?.name && settings.profile.name !== 'Believer in Christ'
+      ? settings.profile.name
+      : '';
+  });
   const [onboardingStatus, setOnboardingStatus] = useState('');
   const [onboardingError, setOnboardingError] = useState('');
 
@@ -161,8 +167,10 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const typingTimeoutRef = useRef<any>(null);
 
   const isSuperAdmin = Boolean(
-    currentUser.isGoogleUser && 
-    currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
+    (currentUser.isGoogleUser && currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()) ||
+    isAuthorizedAdmin ||
+    currentUser.role === 'Super Admin' ||
+    currentUser.isAdmin
   );
 
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
@@ -469,18 +477,14 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
     }
   };
 
-  // Complete mandatory Name onboarding
-  const handleCompleteNameOnboarding = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanName = onboardingName.trim();
-    if (!cleanName || cleanName.length < 2) {
-      setOnboardingError('Please enter your name (at least 2 characters) to join.');
-      return;
-    }
+  // Complete Name onboarding
+  const handleCompleteNameOnboarding = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanName = onboardingName.trim() || settings?.profile?.name || 'Believer in Christ';
 
     const isOwner = Boolean(
-      currentUser.isGoogleUser && 
-      currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
+      (currentUser.isGoogleUser && currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()) ||
+      isAuthorizedAdmin
     );
     const updatedUser = {
       ...currentUser,
@@ -500,7 +504,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
 
     setShowNameRequiredModal(false);
     setOnboardingError('');
-    sounds.playTap();
+    sounds.playVictory();
   };
 
   // Google Sign-In
@@ -2116,6 +2120,19 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
             {/* Top decorative glow */}
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-emerald-500 to-indigo-500" />
 
+            {/* Dismiss button */}
+            <button
+              type="button"
+              onClick={() => {
+                sounds.playTap();
+                setShowNameRequiredModal(false);
+              }}
+              className="absolute top-3.5 right-3.5 p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-stone-400 hover:text-white transition-colors z-20"
+              title="Dismiss and browse chat"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
             <div className="text-center space-y-2 pt-1">
               <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
                 🕊️
@@ -2142,7 +2159,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                 </label>
                 <input
                   type="text"
-                  required
                   autoFocus
                   value={onboardingName}
                   onChange={(e) => {
@@ -2181,13 +2197,22 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={!onboardingName.trim() || onboardingName.trim().length < 2}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-stone-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Enter Fellowship Chat ✨</span>
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Enter Fellowship Chat ✨</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCompleteNameOnboarding()}
+                  className="px-3.5 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white font-bold text-xs transition-colors"
+                  title="Quick join using current profile name"
+                >
+                  Quick Enter
+                </button>
+              </div>
             </form>
 
             <div className="relative flex items-center justify-center my-2">

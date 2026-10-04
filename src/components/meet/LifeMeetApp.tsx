@@ -345,7 +345,7 @@ export const LifeMeetApp: React.FC = () => {
     }
 
     const email = googleUser?.email?.toLowerCase().trim() || '';
-    const isMaster = isAuthorizedAdmin || email === 'aw03102008@gmail.com';
+    const isMaster = isAuthorizedAdmin || email === 'aw03102008@gmail.com' || settings.profile.role === 'superadmin' || settings.profile.role === 'admin';
     const slug = email ? email.replace(/[^a-z0-9]/g, '_') : 'guest';
     const uniquePeerId = `usr_${slug}_${persistentId}`;
 
@@ -357,7 +357,7 @@ export const LifeMeetApp: React.FC = () => {
       isGoogleUser: !!googleUser,
       role: isMaster ? ('host' as const) : ('participant' as const)
     };
-  }, [googleUser, settings.profile.name, isAuthorizedAdmin]);
+  }, [googleUser, settings.profile.name, settings.profile.role, isAuthorizedAdmin]);
 
   // Check URL hash for direct meeting invite link (e.g. /#meet=fellowship-prayer-room)
   useEffect(() => {

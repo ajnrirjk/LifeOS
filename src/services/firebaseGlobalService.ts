@@ -24,7 +24,6 @@ const DEFAULT_CONFIG: GlobalConfigPayload = {
     bible_journal: true,
     fellowship_chat: true,
     faith_meet: true,
-    lifeai: true,
     mini_cats: true,
     mini_games: true,
     youtube: true
