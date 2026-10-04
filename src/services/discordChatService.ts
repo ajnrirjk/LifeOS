@@ -375,29 +375,18 @@ class DiscordChatService {
       }
     } catch {}
 
-    // Verify Super Admin for authentic Google User aw03102008@gmail.com OR if God Mode is unlocked
+    // Verify Super Admin exclusively for authentic Google User aw03102008@gmail.com
     const isMasterGoogle = Boolean(
       this.currentUser.isGoogleUser &&
       this.currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
     );
 
-    let isAdminUnlocked = false;
-    try {
-      const savedSettings = localStorage.getItem('lifeos_system_settings_v1');
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed?.adminModeUnlocked || parsed?.profile?.role === 'superadmin' || parsed?.profile?.role === 'admin') {
-          isAdminUnlocked = true;
-        }
-      }
-    } catch {}
-
-    if (isMasterGoogle || isAdminUnlocked) {
-      this.currentUser.isOwner = isMasterGoogle;
+    if (isMasterGoogle) {
+      this.currentUser.isOwner = true;
       this.currentUser.isAdmin = true;
       this.currentUser.role = 'Super Admin';
       this.currentUser.roleColor = '#F59E0B';
-      if (isMasterGoogle && (!this.currentUser.name || this.currentUser.name === 'Believer in Christ')) {
+      if (!this.currentUser.name || this.currentUser.name === 'Believer in Christ') {
         this.currentUser.name = 'Anthony Williams (Owner)';
       }
     } else {

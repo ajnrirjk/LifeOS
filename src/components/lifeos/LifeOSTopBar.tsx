@@ -290,27 +290,20 @@ export const LifeOSTopBar: React.FC<LifeOSTopBarProps> = ({ onOpenPrivacy }) => 
           </button>
         )}
 
-        {/* Master Admin God-Mode / Admin Quick Trigger */}
-        <button
-          onClick={() => {
-            sounds.playTap();
-            if (isAuthorizedAdmin) {
+        {/* Master Admin God-Mode Quick Trigger (Strictly for aw03102008@gmail.com) */}
+        {isAuthorizedAdmin && (
+          <button
+            onClick={() => {
+              sounds.playTap();
               window.dispatchEvent(new CustomEvent('toggle_god_mode'));
-            } else {
-              setActiveTab('admin');
-              setIsSettingsOpen(true);
-            }
-          }}
-          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border font-extrabold text-[11px] transition-all shadow-sm active:scale-95 ${
-            isAuthorizedAdmin
-              ? 'bg-amber-500/20 hover:bg-amber-500/35 border-amber-500/40 text-amber-300'
-              : 'bg-white/5 hover:bg-white/15 border-white/10 text-stone-300 hover:text-amber-300'
-          }`}
-          title={isAuthorizedAdmin ? "Master Admin God-Mode Panel" : "Unlock Admin Controls (PIN 7777)"}
-        >
-          <span>{isAuthorizedAdmin ? '👑' : '🔒'}</span>
-          <span className="hidden sm:inline font-mono">{isAuthorizedAdmin ? 'God Mode' : 'Admin'}</span>
-        </button>
+            }}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg border font-extrabold text-[11px] transition-all shadow-sm active:scale-95 bg-amber-500/20 hover:bg-amber-500/35 border-amber-500/40 text-amber-300"
+            title="Master Admin God-Mode Panel"
+          >
+            <span>👑</span>
+            <span className="hidden sm:inline font-mono">God Mode</span>
+          </button>
+        )}
 
         {/* Settings & Admin Quick Trigger */}
         <button

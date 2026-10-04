@@ -345,7 +345,7 @@ export const LifeMeetApp: React.FC = () => {
     }
 
     const email = googleUser?.email?.toLowerCase().trim() || '';
-    const isMaster = isAuthorizedAdmin || email === 'aw03102008@gmail.com' || settings.profile.role === 'superadmin' || settings.profile.role === 'admin';
+    const isMaster = email === 'aw03102008@gmail.com';
     const slug = email ? email.replace(/[^a-z0-9]/g, '_') : 'guest';
     const uniquePeerId = `usr_${slug}_${persistentId}`;
 

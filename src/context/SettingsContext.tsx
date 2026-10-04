@@ -244,17 +244,32 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // Master Admin is authorized via authenticated Google User aw03102008@gmail.com OR Admin PIN unlock (7777) OR superadmin/admin role
+  // Master Admin is strictly authorized ONLY via authenticated Google User aw03102008@gmail.com
   const isAuthorizedAdmin = Boolean(
-    (googleUser && 
-     googleUser.email && 
-     googleUser.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()) ||
-    settings.adminModeUnlocked ||
-    settings.profile.role === 'superadmin' ||
-    settings.profile.role === 'admin'
+    googleUser && 
+    googleUser.email && 
+    googleUser.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase()
   );
 
+  // Demote and clear admin flags if not authenticated as Master Admin
+  useEffect(() => {
+    if (!isAuthorizedAdmin) {
+      if (settings.adminModeUnlocked || settings.profile.role === 'superadmin' || settings.profile.role === 'admin') {
+        setSettings(prev => ({
+          ...prev,
+          adminModeUnlocked: false,
+          profile: {
+            ...prev.profile,
+            role: 'user',
+            avatar: prev.profile.avatar === '👑' ? '🕊️' : prev.profile.avatar
+          }
+        }));
+      }
+    }
+  }, [isAuthorizedAdmin]);
+
   const unlockAdmin = () => {
+    if (!isAuthorizedAdmin) return;
     updateSettings({ adminModeUnlocked: true });
     updateProfile({ role: 'superadmin', avatar: '👑' });
     sounds.playVictory();
@@ -263,7 +278,6 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const lockAdmin = () => {
     updateSettings({ adminModeUnlocked: false });
-    updateProfile({ role: 'user', avatar: '🕊️' });
     sounds.playTap();
     logAuditEvent('Master Admin Locked', 'God-Mode locked', 'admin');
   };
@@ -620,10 +634,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const verifyAdminPin = (pin: string) => {
+    if (!isAuthorizedAdmin) {
+      sounds.playIncorrect();
+      return false;
+    }
     const cleanPin = pin.trim();
     if (cleanPin === settings.adminPin || cleanPin === '7777') {
       updateSettings({ adminModeUnlocked: true });
-      updateProfile({ role: 'superadmin', avatar: '👑' });
       sounds.playVictory();
       logAuditEvent('Admin PIN Verified', 'God Mode unlocked via admin PIN', 'admin');
       return true;

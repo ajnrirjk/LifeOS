@@ -167,10 +167,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const typingTimeoutRef = useRef<any>(null);
 
   const isSuperAdmin = Boolean(
-    (currentUser.isGoogleUser && currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()) ||
-    isAuthorizedAdmin ||
-    currentUser.role === 'Super Admin' ||
-    currentUser.isAdmin
+    currentUser.isGoogleUser && currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
   );
 
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
