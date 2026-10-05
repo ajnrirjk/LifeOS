@@ -258,12 +258,13 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
 
 export const DEFAULT_MEMBERS: ActiveChatMember[] = [];
 
-const MQTT_BROKER_PRIMARY = 'wss://mqtt.tyckr.io:8081';
+const MQTT_BROKER_PRIMARY = 'wss://broker.emqx.io:8084/mqtt';
 const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
-const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v6/messages';
-const MQTT_TOPIC_PRESENCE = 'lifeos/fellowship/v6/presence';
-const MQTT_TOPIC_STRUCTURE = 'lifeos/fellowship/v6/structure';
-const MQTT_TOPIC_SYNC = 'lifeos/fellowship/v6/sync';
+const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v7/messages';
+const MQTT_TOPIC_CHANNEL_PREFIX = 'lifeos/fellowship/v7/channel/';
+const MQTT_TOPIC_PRESENCE_PREFIX = 'lifeos/fellowship/v7/presence/';
+const MQTT_TOPIC_STRUCTURE = 'lifeos/fellowship/v7/structure';
+const MQTT_TOPIC_MODERATION = 'lifeos/fellowship/v7/moderation';
 
 type DiscordEventListener = (event: { type: string; data: any }) => void;
 
@@ -518,6 +519,13 @@ class DiscordChatService {
         connectTimeout: 8000,
         reconnectPeriod: 2500,
         keepalive: 60,
+        rejectUnauthorized: false,
+        will: {
+          topic: `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
+          payload: Buffer.from(JSON.stringify({ type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() })),
+          qos: 1,
+          retain: true
+        }
       });
 
       this.mqttClient = client;
@@ -525,40 +533,47 @@ class DiscordChatService {
       client.on('connect', () => {
         this.isConnectedToBroker = true;
         client.subscribe(
-          [MQTT_TOPIC_MESSAGES, MQTT_TOPIC_PRESENCE, MQTT_TOPIC_STRUCTURE, MQTT_TOPIC_SYNC],
+          [
+            MQTT_TOPIC_MESSAGES,
+            `${MQTT_TOPIC_CHANNEL_PREFIX}+`,
+            `${MQTT_TOPIC_PRESENCE_PREFIX}+`,
+            MQTT_TOPIC_STRUCTURE,
+            MQTT_TOPIC_MODERATION
+          ],
+          { qos: 1 },
           (err) => {
             if (!err) {
               this.publishPresence();
-              this.requestSync();
             }
           }
         );
 
-        // Keep real users continuously discovered via 5s presence heartbeat
+        // Keep real users continuously discovered via 8s presence heartbeat
         setInterval(() => {
           if (this.mqttClient && this.mqttClient.connected) {
             this.publishPresence();
           }
-        }, 5000);
+        }, 8000);
       });
 
       client.on('message', (topic, payload) => {
         try {
           const parsed = JSON.parse(payload.toString());
-          if (!parsed || !parsed.type) return;
+          if (!parsed) return;
 
           if (topic === MQTT_TOPIC_MESSAGES) {
             this.handleIncomingPayload(parsed.type, parsed.data, false);
-          } else if (topic === MQTT_TOPIC_PRESENCE) {
-            this.handlePresenceUpdate(parsed.data);
+          } else if (topic.startsWith(MQTT_TOPIC_CHANNEL_PREFIX)) {
+            // Retained messages bundle for this channel across devices
+            if (Array.isArray(parsed)) {
+              this.mergeHistory(parsed);
+            }
+          } else if (topic.startsWith(MQTT_TOPIC_PRESENCE_PREFIX)) {
+            this.handlePresenceUpdate(parsed.data || parsed);
           } else if (topic === MQTT_TOPIC_STRUCTURE) {
             this.handleStructureUpdate(parsed.type, parsed.data);
-          } else if (topic === MQTT_TOPIC_SYNC) {
-            if (parsed.type === 'sync_request' && parsed.fromSessionId !== this.currentSessionId) {
-              this.respondToSync(parsed.fromSessionId);
-            } else if (parsed.type === 'sync_response' && parsed.targetSessionId === this.currentSessionId) {
-              this.mergeHistory(parsed.messages);
-            }
+          } else if (topic === MQTT_TOPIC_MODERATION) {
+            this.handleIncomingPayload(parsed.type, parsed.data, false);
           }
         } catch {}
       });
@@ -801,11 +816,11 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       try {
         this.mqttClient.publish(
-          MQTT_TOPIC_PRESENCE,
+          `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
           JSON.stringify({
-            type: 'presence',
             data: { type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() },
-          })
+          }),
+          { retain: true, qos: 1 }
         );
       } catch {}
     }
@@ -814,50 +829,31 @@ class DiscordChatService {
   private publishPresence() {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
-        MQTT_TOPIC_PRESENCE,
+        `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
         JSON.stringify({
-          type: 'presence',
           data: { user: this.currentUser, sessionId: this.currentSessionId, timestamp: Date.now() },
-        })
-      );
-    }
-  }
-
-  private requestSync() {
-    if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_SYNC,
-        JSON.stringify({
-          type: 'sync_request',
-          fromSessionId: this.currentSessionId,
-        })
-      );
-    }
-  }
-
-  private respondToSync(targetSessionId: string) {
-    if (this.mqttClient && this.mqttClient.connected && this.messagesCache.length > 0) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_SYNC,
-        JSON.stringify({
-          type: 'sync_response',
-          targetSessionId,
-          messages: this.messagesCache.slice(-80),
-        })
+        }),
+        { retain: true, qos: 1 }
       );
     }
   }
 
   private mergeHistory(incomingMsgs: ChatMessage[]) {
-    if (!Array.isArray(incomingMsgs)) return;
+    if (!Array.isArray(incomingMsgs) || incomingMsgs.length === 0) return;
     let hasNew = false;
     const map = new Map<string, ChatMessage>();
     this.messagesCache.forEach((m) => map.set(m.id, m));
 
     incomingMsgs.forEach((m) => {
-      if (m && m.id && m.text && !map.has(m.id)) {
-        map.set(m.id, m);
-        hasNew = true;
+      if (m && m.id && m.text) {
+        const existing = map.get(m.id);
+        if (!existing) {
+          map.set(m.id, m);
+          hasNew = true;
+        } else if (JSON.stringify(existing.reactions) !== JSON.stringify(m.reactions) || existing.pinned !== m.pinned) {
+          map.set(m.id, { ...existing, ...m });
+          hasNew = true;
+        }
       }
     });
 
@@ -1033,11 +1029,12 @@ class DiscordChatService {
 
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
-        MQTT_TOPIC_STRUCTURE,
+        MQTT_TOPIC_MODERATION,
         JSON.stringify({
           type: 'role_assigned',
           data: { memberId, role: roleName, roleColor },
-        })
+        }),
+        { qos: 1 }
       );
     }
 
@@ -1079,11 +1076,21 @@ class DiscordChatService {
     // 1. Optimistic Local Update & Broadcast
     this.handleIncomingPayload('message', newMsg, true);
 
-    // 2. Publish to MQTT WebSocket Network
+    // 2. Publish to MQTT WebSocket Network & retain channel history for other devices
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'message', data: newMsg, sessionId: this.currentSessionId })
+        JSON.stringify({ type: 'message', data: newMsg, sessionId: this.currentSessionId }),
+        { qos: 1 }
+      );
+
+      const channelMsgs = this.messagesCache
+        .filter((m) => m.channelId === payload.channelId)
+        .slice(-80);
+      this.mqttClient.publish(
+        `${MQTT_TOPIC_CHANNEL_PREFIX}${payload.channelId}`,
+        JSON.stringify(channelMsgs),
+        { retain: true, qos: 1 }
       );
     }
 
@@ -1114,8 +1121,13 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'reaction', data: payload })
+        JSON.stringify({ type: 'reaction', data: payload }),
+        { qos: 1 }
       );
+      if (msg.channelId) {
+        const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
+        this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
+      }
     }
   }
 
@@ -1130,21 +1142,33 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'pin_message', data: payload })
+        JSON.stringify({ type: 'pin_message', data: payload }),
+        { qos: 1 }
       );
+      if (msg.channelId) {
+        const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
+        this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
+      }
     }
   }
 
   // Delete message
   public async deleteMessage(messageId: string) {
+    const msg = this.messagesCache.find((m) => m.id === messageId);
+    const channelId = msg?.channelId;
     const payload = { messageId };
     this.handleIncomingPayload('delete_message', payload, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'delete_message', data: payload })
+        JSON.stringify({ type: 'delete_message', data: payload }),
+        { qos: 1 }
       );
+      if (channelId) {
+        const channelMsgs = this.messagesCache.filter((m) => m.channelId === channelId).slice(-80);
+        this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
+      }
     }
   }
 
@@ -1168,7 +1192,13 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'ban_member', data })
+        JSON.stringify({ type: 'ban_member', data }),
+        { qos: 1 }
+      );
+      this.mqttClient.publish(
+        MQTT_TOPIC_MODERATION,
+        JSON.stringify({ type: 'ban_member', data }),
+        { qos: 1 }
       );
     }
   }
@@ -1181,7 +1211,13 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'unban_member', data })
+        JSON.stringify({ type: 'unban_member', data }),
+        { qos: 1 }
+      );
+      this.mqttClient.publish(
+        MQTT_TOPIC_MODERATION,
+        JSON.stringify({ type: 'unban_member', data }),
+        { qos: 1 }
       );
     }
   }
@@ -1194,7 +1230,13 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'kick_member', data })
+        JSON.stringify({ type: 'kick_member', data }),
+        { qos: 1 }
+      );
+      this.mqttClient.publish(
+        MQTT_TOPIC_MODERATION,
+        JSON.stringify({ type: 'kick_member', data }),
+        { qos: 1 }
       );
     }
   }
@@ -1208,7 +1250,13 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'timeout_member', data })
+        JSON.stringify({ type: 'timeout_member', data }),
+        { qos: 1 }
+      );
+      this.mqttClient.publish(
+        MQTT_TOPIC_MODERATION,
+        JSON.stringify({ type: 'timeout_member', data }),
+        { qos: 1 }
       );
     }
   }
@@ -1221,7 +1269,13 @@ class DiscordChatService {
     if (this.mqttClient && this.mqttClient.connected) {
       this.mqttClient.publish(
         MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'purge_user_messages', data })
+        JSON.stringify({ type: 'purge_user_messages', data }),
+        { qos: 1 }
+      );
+      this.mqttClient.publish(
+        MQTT_TOPIC_MODERATION,
+        JSON.stringify({ type: 'purge_user_messages', data }),
+        { qos: 1 }
       );
     }
   }

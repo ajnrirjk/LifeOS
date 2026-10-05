@@ -72,8 +72,12 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
   }
 ];
 
-const CLOUD_RELAY_TOPIC = 'lifeos_fellowship_v2';
-const CLOUD_RELAY_URL = `https://ntfy.sh/${CLOUD_RELAY_TOPIC}`;
+import mqtt, { MqttClient } from 'mqtt';
+
+const MQTT_BROKER_PRIMARY = 'wss://broker.emqx.io:8084/mqtt';
+const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
+const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v7/messages';
+const MQTT_TOPIC_CHANNEL_PREFIX = 'lifeos/fellowship/v7/channel/';
 
 type ChatEventListener = (event: { type: string; data: any }) => void;
 
@@ -81,6 +85,7 @@ class ChatService {
   private localEventSource: EventSource | null = null;
   private cloudEventSource: EventSource | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
+  private mqttClient: MqttClient | null = null;
   private listeners: Set<ChatEventListener> = new Set();
   private historyInterval: any = null;
   private currentUser: ChatUser | null = null;
@@ -92,6 +97,7 @@ class ChatService {
   constructor() {
     this.initCaches();
     this.initBroadcastChannel();
+    this.initMqtt();
     this.initCloudRelay();
     this.fetchHistoryFromCloudRelay();
     this.initLocalSSE();
@@ -101,6 +107,52 @@ class ChatService {
     this.historyInterval = setInterval(() => {
       this.fetchHistoryFromCloudRelay();
     }, 2500);
+  }
+
+  private initMqtt(useFallback: boolean = false) {
+    if (typeof window === 'undefined') return;
+    try {
+      const brokerUrl = useFallback ? MQTT_BROKER_FALLBACK : MQTT_BROKER_PRIMARY;
+      const clientId = `lifeos_chat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      if (this.mqttClient) {
+        try { this.mqttClient.end(true); } catch {}
+      }
+      const client = mqtt.connect(brokerUrl, {
+        clientId,
+        clean: true,
+        connectTimeout: 8000,
+        reconnectPeriod: 2500,
+        keepalive: 60,
+        rejectUnauthorized: false
+      });
+      this.mqttClient = client;
+      client.on('connect', () => {
+        client.subscribe([MQTT_TOPIC_MESSAGES, `${MQTT_TOPIC_CHANNEL_PREFIX}+`], { qos: 1 });
+      });
+      client.on('message', (topic, payload) => {
+        try {
+          const parsed = JSON.parse(payload.toString());
+          if (!parsed) return;
+          if (topic === MQTT_TOPIC_MESSAGES) {
+            this.handleIncomingEvent(parsed.type, parsed.data, false);
+          } else if (topic.startsWith(MQTT_TOPIC_CHANNEL_PREFIX) && Array.isArray(parsed)) {
+            parsed.forEach((m: ChatMessage) => {
+              if (m && m.id && !this.messagesCache.some(x => x.id === m.id)) {
+                this.messagesCache.push(m);
+              }
+            });
+            this.messagesCache.sort((a, b) => a.createdAt - b.createdAt);
+            this.saveCaches();
+            this.emit({ type: 'sync_all', data: this.messagesCache });
+          }
+        } catch {}
+      });
+      client.on('error', () => {
+        if (!useFallback) this.initMqtt(true);
+      });
+    } catch {
+      if (!useFallback) this.initMqtt(true);
+    }
   }
 
   private initCaches() {
@@ -353,7 +405,18 @@ class ChatService {
         this.broadcastChannel?.postMessage({ type, data });
       } catch {}
 
-      // 2. Broadcast persistent events (message, reaction, new_channel) to cloud relay
+      // 2. Broadcast via MQTT for instant cross-device delivery & channel persistence
+      if (this.mqttClient && this.mqttClient.connected) {
+        try {
+          this.mqttClient.publish(MQTT_TOPIC_MESSAGES, JSON.stringify({ type, data }), { qos: 1 });
+          if (type === 'message' && data && data.channelId) {
+            const chanMsgs = this.messagesCache.filter(m => m.channelId === data.channelId).slice(-80);
+            this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${data.channelId}`, JSON.stringify(chanMsgs), { retain: true, qos: 1 });
+          }
+        } catch {}
+      }
+
+      // 3. Broadcast persistent events (message, reaction, new_channel) to cloud relay
       if (type === 'message' || type === 'reaction' || type === 'new_channel') {
         try {
           fetch(CLOUD_RELAY_URL, {

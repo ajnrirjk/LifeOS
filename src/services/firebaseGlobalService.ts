@@ -4,10 +4,10 @@ import mqtt, { MqttClient } from 'mqtt';
 // Cloud Relays & MQTT Topics for Universal Multi-Device Synchronization
 const CLOUD_CONFIG_RELAY = 'https://ntfy.sh/lifeos_global_config_v2';
 const CLOUD_MEMBERS_RELAY = 'https://ntfy.sh/lifeos_fellowship_v2';
-const MQTT_TOPIC_SETTINGS = 'lifeos/global/settings_v3';
-const MQTT_TOPIC_MAINTENANCE = 'lifeos/global/maintenance_mode';
-const MQTT_TOPIC_MEMBERS = 'lifeos/global/members_v3';
-const MQTT_BROKER_PRIMARY = 'wss://mqtt.tyckr.io:8081';
+const MQTT_TOPIC_SETTINGS = 'lifeos/global/settings_v7';
+const MQTT_TOPIC_MAINTENANCE = 'lifeos/global/maintenance_v7';
+const MQTT_TOPIC_MEMBERS = 'lifeos/global/members_v7';
+const MQTT_BROKER_PRIMARY = 'wss://broker.emqx.io:8084/mqtt';
 const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
 
 export interface GlobalConfigPayload {
@@ -306,13 +306,12 @@ class FirebaseGlobalService {
         clean: true,
         connectTimeout: 8000,
         reconnectPeriod: 2500,
-        keepalive: 60
+        keepalive: 60,
+        rejectUnauthorized: false
       });
 
       this.mqttClient.on('connect', () => {
-        this.mqttClient?.subscribe(MQTT_TOPIC_SETTINGS, { qos: 1 });
-        this.mqttClient?.subscribe(MQTT_TOPIC_MAINTENANCE, { qos: 1 });
-        this.mqttClient?.subscribe(MQTT_TOPIC_MEMBERS, { qos: 0 });
+        this.mqttClient?.subscribe([MQTT_TOPIC_SETTINGS, MQTT_TOPIC_MAINTENANCE, MQTT_TOPIC_MEMBERS], { qos: 1 });
       });
 
       this.mqttClient.on('error', (err) => {
@@ -678,7 +677,7 @@ class FirebaseGlobalService {
 
     try {
       if (this.mqttClient && this.mqttClient.connected) {
-        this.mqttClient.publish(MQTT_TOPIC_MEMBERS, JSON.stringify(merged), { retain: true, qos: 0 });
+        this.mqttClient.publish(MQTT_TOPIC_MEMBERS, JSON.stringify(merged), { retain: true, qos: 1 });
       }
     } catch {}
   }
@@ -722,7 +721,7 @@ class FirebaseGlobalService {
 
     try {
       if (this.mqttClient && this.mqttClient.connected) {
-        this.mqttClient.publish(MQTT_TOPIC_MEMBERS, JSON.stringify(merged), { retain: true, qos: 0 });
+        this.mqttClient.publish(MQTT_TOPIC_MEMBERS, JSON.stringify(merged), { retain: true, qos: 1 });
       }
     } catch {}
   }
