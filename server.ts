@@ -769,20 +769,22 @@ Filter out casual greetings and filler, and summarize the valuable spiritual poi
 interface ServerChatMessage {
   id: string;
   channelId: string;
+  serverId?: string;
+  recipientId?: string;
   text: string;
   senderId: string;
   senderName: string;
   senderPhoto?: string;
   senderEmail?: string;
+  senderRole?: string;
+  senderRoleColor?: string;
   isGoogleUser: boolean;
   createdAt: number;
   reactions: Record<string, string[]>;
-  attachment?: {
-    type: 'verse' | 'sermon_note';
-    title: string;
-    content: string;
-    reference?: string;
-  };
+  replyTo?: any;
+  pinned?: boolean;
+  embed?: any;
+  attachment?: any;
 }
 
 interface ServerChatChannel {
@@ -1025,12 +1027,15 @@ app.post('/api/chat/channels', (req: Request, res: Response) => {
   return res.json(newChannel);
 });
 
-// 3. Get messages for a channel
+// 3. Get messages for a channel (or all channels if channelId is omitted or 'all')
 app.get('/api/chat/messages', (req: Request, res: Response) => {
-  const channelId = String(req.query.channelId || 'general');
+  const channelId = req.query.channelId ? String(req.query.channelId) : 'all';
   const since = Number(req.query.since || 0);
 
-  let filtered = chatMessages.filter(m => m.channelId === channelId);
+  let filtered = (!channelId || channelId === 'all')
+    ? chatMessages
+    : chatMessages.filter(m => m.channelId === channelId);
+
   if (since > 0) {
     filtered = filtered.filter(m => m.createdAt > since);
   }
@@ -1040,27 +1045,58 @@ app.get('/api/chat/messages', (req: Request, res: Response) => {
 
 // 4. Post a message to group chat
 app.post('/api/chat/messages', (req: Request, res: Response) => {
-  const { channelId, text, senderId, senderName, senderPhoto, senderEmail, isGoogleUser, attachment } = req.body;
+  const {
+    id,
+    channelId,
+    serverId,
+    recipientId,
+    text,
+    senderId,
+    senderName,
+    senderPhoto,
+    senderEmail,
+    senderRole,
+    senderRoleColor,
+    isGoogleUser,
+    reactions,
+    replyTo,
+    pinned,
+    embed,
+    attachment,
+    createdAt
+  } = req.body;
 
   if (!channelId || !text || !text.trim()) {
     return res.status(400).json({ error: 'channelId and text are required' });
   }
 
   const message: ServerChatMessage = {
-    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    id: id || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     channelId,
+    serverId,
+    recipientId,
     text: text.trim(),
     senderId: senderId || 'guest_user',
     senderName: senderName || 'Anonymous Believer',
     senderPhoto,
     senderEmail,
+    senderRole: senderRole || 'Believer',
+    senderRoleColor: senderRoleColor || '#10B981',
     isGoogleUser: !!isGoogleUser,
-    createdAt: Date.now(),
-    reactions: {},
+    createdAt: createdAt || Date.now(),
+    reactions: reactions || {},
+    replyTo,
+    pinned: !!pinned,
+    embed,
     attachment: attachment || undefined,
   };
 
-  chatMessages.push(message);
+  const existingIdx = chatMessages.findIndex(m => m.id === message.id);
+  if (existingIdx >= 0) {
+    chatMessages[existingIdx] = message;
+  } else {
+    chatMessages.push(message);
+  }
 
   // Keep last 2,000 messages in memory & disk
   if (chatMessages.length > 2000) {

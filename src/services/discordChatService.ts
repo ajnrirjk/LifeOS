@@ -265,13 +265,21 @@ const MQTT_TOPIC_CHANNEL_PREFIX = 'lifeos/fellowship/v7/channel/';
 const MQTT_TOPIC_PRESENCE_PREFIX = 'lifeos/fellowship/v7/presence/';
 const MQTT_TOPIC_STRUCTURE = 'lifeos/fellowship/v7/structure';
 const MQTT_TOPIC_MODERATION = 'lifeos/fellowship/v7/moderation';
+const MQTT_TOPIC_SYNC = 'lifeos/fellowship/v7/sync';
+
+// Universal Cloud HTTPS Relay (ntfy.sh) on standard port 443 for 100% device compatibility
+const CLOUD_RELAY_TOPIC = 'lifeos_fellowship_v7';
+const CLOUD_RELAY_URL = `https://ntfy.sh/${CLOUD_RELAY_TOPIC}`;
 
 type DiscordEventListener = (event: { type: string; data: any }) => void;
 
 class DiscordChatService {
   private mqttClient: MqttClient | null = null;
   private broadcastChannel: BroadcastChannel | null = null;
+  private cloudEventSource: EventSource | null = null;
+  private localEventSource: EventSource | null = null;
   private listeners: Set<DiscordEventListener> = new Set();
+  private cloudPollInterval: any = null;
   public isConnectedToBroker = false;
 
   public currentSessionId: string = (() => {
@@ -311,7 +319,184 @@ class DiscordChatService {
     this.initCaches();
     this.initBroadcastChannel();
     this.initMqttRealtime();
+    this.initCloudRelay();
+    this.initLocalSSE();
+    this.fetchHistoryFromCloudRelay();
+    this.fetchServerHistory();
+    this.initVisibilityListeners();
     this.initLivenessCheck();
+
+    // Fast 3s fallback poll to guarantee real-time delivery even if WebSockets are blocked
+    this.cloudPollInterval = setInterval(() => {
+      this.fetchHistoryFromCloudRelay();
+    }, 3000);
+  }
+
+  private initVisibilityListeners() {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('focus', () => {
+      this.fetchHistoryFromCloudRelay();
+      this.fetchServerHistory();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.fetchHistoryFromCloudRelay();
+        this.fetchServerHistory();
+      }
+    });
+  }
+
+  private initCloudRelay() {
+    if (typeof window === 'undefined') return;
+    try {
+      if (this.cloudEventSource) {
+        try { this.cloudEventSource.close(); } catch {}
+        this.cloudEventSource = null;
+      }
+      const sse = new EventSource(`${CLOUD_RELAY_URL}/sse`);
+      this.cloudEventSource = sse;
+      sse.onmessage = (event) => {
+        try {
+          const raw = JSON.parse(event.data);
+          if (raw.event === 'message' && raw.message) {
+            let payload: any = null;
+            try {
+              payload = JSON.parse(raw.message);
+              if (payload && payload.message && typeof payload.message === 'string') {
+                try { payload = JSON.parse(payload.message); } catch {}
+              }
+            } catch {
+              payload = null;
+            }
+            if (payload && payload.type && payload.data) {
+              if (payload.sessionId && payload.sessionId === this.currentSessionId) return;
+              this.handleIncomingPayload(payload.type, payload.data, false);
+            }
+          }
+        } catch {}
+      };
+      sse.onerror = () => {
+        // EventSource will automatically reconnect
+      };
+    } catch {}
+  }
+
+  public async fetchHistoryFromCloudRelay() {
+    if (typeof window === 'undefined') return;
+    try {
+      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1&since=all`);
+      if (!res.ok) return;
+      const text = await res.text();
+      const lines = text.trim().split('\n').filter(Boolean);
+      const incomingMsgs: ChatMessage[] = [];
+
+      for (const line of lines) {
+        try {
+          const raw = JSON.parse(line);
+          if (raw.event === 'message' && raw.message) {
+            let payload: any = null;
+            try {
+              payload = JSON.parse(raw.message);
+              if (payload && payload.message && typeof payload.message === 'string') {
+                try { payload = JSON.parse(payload.message); } catch {}
+              }
+            } catch {
+              payload = null;
+            }
+
+            if (payload && payload.data) {
+              if (payload.type === 'message') {
+                const msg = payload.data as ChatMessage;
+                if (msg && msg.id && msg.text) {
+                  incomingMsgs.push(msg);
+                }
+              } else if (payload.type === 'reaction') {
+                const { messageId, reactions } = payload.data;
+                this.messagesCache = this.messagesCache.map((m) =>
+                  m.id === messageId ? { ...m, reactions } : m
+                );
+              } else if (payload.type === 'pin_message') {
+                const { messageId, pinned } = payload.data;
+                this.messagesCache = this.messagesCache.map((m) =>
+                  m.id === messageId ? { ...m, pinned } : m
+                );
+              } else if (payload.type === 'delete_message') {
+                const { messageId } = payload.data;
+                this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
+              } else if (payload.type === 'server_created') {
+                const srv = payload.data as DiscordServer;
+                if (srv && srv.id && !this.serversCache.some(s => s.id === srv.id)) {
+                  this.serversCache.push(srv);
+                }
+              } else if (payload.type === 'channel_created') {
+                const ch = payload.data as ChatChannel;
+                if (ch && ch.id && !this.channelsCache.some(c => c.id === ch.id)) {
+                  this.channelsCache.push(ch);
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (incomingMsgs.length > 0) {
+        this.mergeHistory(incomingMsgs);
+      }
+    } catch {}
+  }
+
+  public async fetchServerHistory() {
+    if (typeof window === 'undefined') return;
+    try {
+      const res = await fetch('/api/chat/messages?channelId=all');
+      if (!res.ok) return;
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) return;
+      const serverMsgs = await res.json();
+      if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+        this.mergeHistory(serverMsgs);
+      }
+    } catch {}
+  }
+
+  private initLocalSSE() {
+    if (typeof window === 'undefined') return;
+    try {
+      if (this.localEventSource) {
+        try { this.localEventSource.close(); } catch {}
+      }
+      const sse = new EventSource('/api/chat/stream');
+      this.localEventSource = sse;
+      sse.addEventListener('message', (e) => {
+        try {
+          const parsed = JSON.parse(e.data);
+          if (parsed) this.handleIncomingPayload('message', parsed, false);
+        } catch {}
+      });
+      sse.addEventListener('reaction', (e) => {
+        try {
+          const parsed = JSON.parse(e.data);
+          if (parsed) this.handleIncomingPayload('reaction', parsed, false);
+        } catch {}
+      });
+      sse.addEventListener('typing', (e) => {
+        try {
+          const parsed = JSON.parse(e.data);
+          if (parsed) this.handleIncomingPayload('typing', parsed, false);
+        } catch {}
+      });
+    } catch {}
+  }
+
+  private broadcastCloud(type: string, data: any) {
+    if (typeof window === 'undefined') return;
+    try {
+      fetch(CLOUD_RELAY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, data, sessionId: this.currentSessionId, timestamp: Date.now() })
+      }).catch(() => {});
+    } catch {}
   }
 
   private initLivenessCheck() {
@@ -373,6 +558,17 @@ class DiscordChatService {
           ...this.currentUser,
           ...parsed,
         };
+      }
+
+      // 3. Fallback to System Settings profile name if user has not customized discord name
+      if (!this.currentUser.name || this.currentUser.name === 'Believer in Christ') {
+        const savedSettings = localStorage.getItem('lifeos_settings_v3');
+        if (savedSettings) {
+          const parsedSet = JSON.parse(savedSettings);
+          if (parsedSet?.profile?.name && parsedSet.profile.name.trim().length > 1 && parsedSet.profile.name !== 'Believer in Christ') {
+            this.currentUser.name = parsedSet.profile.name.trim();
+          }
+        }
       }
     } catch {}
 
@@ -522,7 +718,7 @@ class DiscordChatService {
         rejectUnauthorized: false,
         will: {
           topic: `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
-          payload: Buffer.from(JSON.stringify({ type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() })),
+          payload: JSON.stringify({ type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() }),
           qos: 1,
           retain: true
         }
@@ -538,12 +734,14 @@ class DiscordChatService {
             `${MQTT_TOPIC_CHANNEL_PREFIX}+`,
             `${MQTT_TOPIC_PRESENCE_PREFIX}+`,
             MQTT_TOPIC_STRUCTURE,
-            MQTT_TOPIC_MODERATION
+            MQTT_TOPIC_MODERATION,
+            MQTT_TOPIC_SYNC
           ],
           { qos: 1 },
           (err) => {
             if (!err) {
               this.publishPresence();
+              this.requestSync();
             }
           }
         );
@@ -574,6 +772,14 @@ class DiscordChatService {
             this.handleStructureUpdate(parsed.type, parsed.data);
           } else if (topic === MQTT_TOPIC_MODERATION) {
             this.handleIncomingPayload(parsed.type, parsed.data, false);
+          } else if (topic === MQTT_TOPIC_SYNC) {
+            if (parsed.type === 'sync_request' && parsed.fromSessionId !== this.currentSessionId) {
+              this.respondToSync(parsed.fromSessionId);
+            } else if (parsed.type === 'sync_response' && parsed.targetSessionId === this.currentSessionId) {
+              if (Array.isArray(parsed.messages)) {
+                this.mergeHistory(parsed.messages);
+              }
+            }
           }
         } catch {}
       });
@@ -600,12 +806,68 @@ class DiscordChatService {
     }
   }
 
+  private requestSync() {
+    if (this.mqttClient && this.mqttClient.connected) {
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_SYNC,
+          JSON.stringify({ type: 'sync_request', fromSessionId: this.currentSessionId }),
+          { qos: 1 }
+        );
+      } catch {}
+    }
+  }
+
+  private respondToSync(targetSessionId: string) {
+    if (this.mqttClient && this.mqttClient.connected && this.messagesCache.length > 0) {
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_SYNC,
+          JSON.stringify({
+            type: 'sync_response',
+            targetSessionId,
+            messages: this.messagesCache.slice(-80),
+          }),
+          { qos: 1 }
+        );
+      } catch {}
+    }
+  }
+
   private handleIncomingPayload(type: string, data: any, shouldBroadcastLocal = true) {
     if (type === 'message') {
       const msg: ChatMessage = data;
       if (!msg || !msg.id || !msg.text) return;
       if (!this.messagesCache.some((m) => m.id === msg.id)) {
         this.messagesCache.push(msg);
+
+        // Auto-register DM channel if this is a DM message
+        if (msg.channelId && msg.channelId.startsWith('dm_')) {
+          const isForMe = msg.recipientId === this.currentUser.id || msg.senderId === this.currentUser.id;
+          if (isForMe && !this.dmChannelsCache.some((d) => d.id === msg.channelId)) {
+            const otherName = msg.senderId === this.currentUser.id ? 'Direct Message' : msg.senderName;
+            const otherMember: ActiveChatMember = {
+              id: msg.senderId === this.currentUser.id ? (msg.recipientId || 'user') : msg.senderId,
+              name: otherName,
+              photoURL: msg.senderId === this.currentUser.id ? undefined : msg.senderPhoto,
+              email: msg.senderId === this.currentUser.id ? undefined : msg.senderEmail,
+              isGoogleUser: msg.isGoogleUser,
+              status: 'online',
+              lastSeen: Date.now(),
+            };
+            this.dmChannelsCache.push({
+              id: msg.channelId,
+              name: otherName,
+              topic: `Direct message with @${otherName}`,
+              type: 'dm',
+              emoji: '💬',
+              isPrivate: true,
+              dmRecipient: otherMember,
+              createdAt: msg.createdAt,
+            });
+            this.saveCaches();
+          }
+        }
 
         // Auto-register real incoming message senders in members list
         if (msg.senderId && msg.senderId !== 'fellowship_system') {
@@ -973,6 +1235,9 @@ class DiscordChatService {
       );
     }
 
+    this.broadcastCloud('server_created', newServer);
+    this.broadcastCloud('channel_created', initialChannel);
+
     this.emit({ type: 'server_created', data: newServer });
     return newServer;
   }
@@ -1009,6 +1274,8 @@ class DiscordChatService {
       );
     }
 
+    this.broadcastCloud('channel_created', newChan);
+
     this.emit({ type: 'channel_created', data: newChan });
     return newChan;
   }
@@ -1037,6 +1304,8 @@ class DiscordChatService {
         { qos: 1 }
       );
     }
+
+    this.broadcastCloud('role_assigned', { memberId, role: roleName, roleColor });
 
     this.emit({ type: 'role_assigned', data: { memberId, role: roleName, roleColor } });
   }
@@ -1078,21 +1347,35 @@ class DiscordChatService {
 
     // 2. Publish to MQTT WebSocket Network & retain channel history for other devices
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'message', data: newMsg, sessionId: this.currentSessionId }),
-        { qos: 1 }
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'message', data: newMsg, sessionId: this.currentSessionId }),
+          { qos: 1 }
+        );
 
-      const channelMsgs = this.messagesCache
-        .filter((m) => m.channelId === payload.channelId)
-        .slice(-80);
-      this.mqttClient.publish(
-        `${MQTT_TOPIC_CHANNEL_PREFIX}${payload.channelId}`,
-        JSON.stringify(channelMsgs),
-        { retain: true, qos: 1 }
-      );
+        const channelMsgs = this.messagesCache
+          .filter((m) => m.channelId === payload.channelId)
+          .slice(-80);
+        this.mqttClient.publish(
+          `${MQTT_TOPIC_CHANNEL_PREFIX}${payload.channelId}`,
+          JSON.stringify(channelMsgs),
+          { retain: true, qos: 1 }
+        );
+      } catch {}
     }
+
+    // 3. Publish to Universal Cloud Relay (ntfy.sh) on port 443
+    this.broadcastCloud('message', newMsg);
+
+    // 4. Persist to server API if backend server is running
+    try {
+      fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMsg)
+      }).catch(() => {});
+    } catch {}
 
     return newMsg;
   }
@@ -1119,16 +1402,28 @@ class DiscordChatService {
     this.handleIncomingPayload('reaction', payload, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'reaction', data: payload }),
-        { qos: 1 }
-      );
-      if (msg.channelId) {
-        const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
-        this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
-      }
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'reaction', data: payload }),
+          { qos: 1 }
+        );
+        if (msg.channelId) {
+          const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
+          this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
+        }
+      } catch {}
     }
+
+    this.broadcastCloud('reaction', payload);
+
+    try {
+      fetch('/api/chat/react', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, emoji, userName: myName })
+      }).catch(() => {});
+    } catch {}
   }
 
   // Pin / Unpin
@@ -1140,16 +1435,20 @@ class DiscordChatService {
     this.handleIncomingPayload('pin_message', payload, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'pin_message', data: payload }),
-        { qos: 1 }
-      );
-      if (msg.channelId) {
-        const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
-        this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
-      }
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'pin_message', data: payload }),
+          { qos: 1 }
+        );
+        if (msg.channelId) {
+          const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
+          this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
+        }
+      } catch {}
     }
+
+    this.broadcastCloud('pin_message', payload);
   }
 
   // Delete message
@@ -1160,16 +1459,20 @@ class DiscordChatService {
     this.handleIncomingPayload('delete_message', payload, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'delete_message', data: payload }),
-        { qos: 1 }
-      );
-      if (channelId) {
-        const channelMsgs = this.messagesCache.filter((m) => m.channelId === channelId).slice(-80);
-        this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
-      }
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'delete_message', data: payload }),
+          { qos: 1 }
+        );
+        if (channelId) {
+          const channelMsgs = this.messagesCache.filter((m) => m.channelId === channelId).slice(-80);
+          this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
+        }
+      } catch {}
     }
+
+    this.broadcastCloud('delete_message', payload);
   }
 
   // Ban Member from Fellowship (Super Admin only)
@@ -1190,17 +1493,21 @@ class DiscordChatService {
     this.handleIncomingPayload('ban_member', data, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'ban_member', data }),
-        { qos: 1 }
-      );
-      this.mqttClient.publish(
-        MQTT_TOPIC_MODERATION,
-        JSON.stringify({ type: 'ban_member', data }),
-        { qos: 1 }
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'ban_member', data }),
+          { qos: 1 }
+        );
+        this.mqttClient.publish(
+          MQTT_TOPIC_MODERATION,
+          JSON.stringify({ type: 'ban_member', data }),
+          { qos: 1 }
+        );
+      } catch {}
     }
+
+    this.broadcastCloud('ban_member', data);
   }
 
   // Unban Member (Super Admin only)
@@ -1209,17 +1516,21 @@ class DiscordChatService {
     this.handleIncomingPayload('unban_member', data, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'unban_member', data }),
-        { qos: 1 }
-      );
-      this.mqttClient.publish(
-        MQTT_TOPIC_MODERATION,
-        JSON.stringify({ type: 'unban_member', data }),
-        { qos: 1 }
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'unban_member', data }),
+          { qos: 1 }
+        );
+        this.mqttClient.publish(
+          MQTT_TOPIC_MODERATION,
+          JSON.stringify({ type: 'unban_member', data }),
+          { qos: 1 }
+        );
+      } catch {}
     }
+
+    this.broadcastCloud('unban_member', data);
   }
 
   // Kick Member from server
@@ -1228,17 +1539,21 @@ class DiscordChatService {
     this.handleIncomingPayload('kick_member', data, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'kick_member', data }),
-        { qos: 1 }
-      );
-      this.mqttClient.publish(
-        MQTT_TOPIC_MODERATION,
-        JSON.stringify({ type: 'kick_member', data }),
-        { qos: 1 }
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'kick_member', data }),
+          { qos: 1 }
+        );
+        this.mqttClient.publish(
+          MQTT_TOPIC_MODERATION,
+          JSON.stringify({ type: 'kick_member', data }),
+          { qos: 1 }
+        );
+      } catch {}
     }
+
+    this.broadcastCloud('kick_member', data);
   }
 
   // Timeout / Mute Member
@@ -1248,17 +1563,21 @@ class DiscordChatService {
     this.handleIncomingPayload('timeout_member', data, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'timeout_member', data }),
-        { qos: 1 }
-      );
-      this.mqttClient.publish(
-        MQTT_TOPIC_MODERATION,
-        JSON.stringify({ type: 'timeout_member', data }),
-        { qos: 1 }
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'timeout_member', data }),
+          { qos: 1 }
+        );
+        this.mqttClient.publish(
+          MQTT_TOPIC_MODERATION,
+          JSON.stringify({ type: 'timeout_member', data }),
+          { qos: 1 }
+        );
+      } catch {}
     }
+
+    this.broadcastCloud('timeout_member', data);
   }
 
   // Purge all messages by a specific user
@@ -1267,17 +1586,21 @@ class DiscordChatService {
     this.handleIncomingPayload('purge_user_messages', data, true);
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'purge_user_messages', data }),
-        { qos: 1 }
-      );
-      this.mqttClient.publish(
-        MQTT_TOPIC_MODERATION,
-        JSON.stringify({ type: 'purge_user_messages', data }),
-        { qos: 1 }
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'purge_user_messages', data }),
+          { qos: 1 }
+        );
+        this.mqttClient.publish(
+          MQTT_TOPIC_MODERATION,
+          JSON.stringify({ type: 'purge_user_messages', data }),
+          { qos: 1 }
+        );
+      } catch {}
     }
+
+    this.broadcastCloud('purge_user_messages', data);
   }
 
   // Purge all chat messages across the system (Super Admin only)
@@ -1291,11 +1614,15 @@ class DiscordChatService {
     } catch {}
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'purge_all', data: {} })
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'purge_all', data: {} })
+        );
+      } catch {}
     }
+
+    this.broadcastCloud('purge_all', {});
   }
 
   public sendTyping(channelId: string, isTyping: boolean) {
@@ -1312,11 +1639,21 @@ class DiscordChatService {
     } catch {}
 
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MESSAGES,
-        JSON.stringify({ type: 'typing', data: payload })
-      );
+      try {
+        this.mqttClient.publish(
+          MQTT_TOPIC_MESSAGES,
+          JSON.stringify({ type: 'typing', data: payload })
+        );
+      } catch {}
     }
+
+    try {
+      fetch('/api/chat/typing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId, userName: this.currentUser.name, isTyping })
+      }).catch(() => {});
+    } catch {}
   }
 }
 

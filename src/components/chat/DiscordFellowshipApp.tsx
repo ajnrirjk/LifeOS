@@ -153,6 +153,15 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
         }
       } catch {}
     }
+    try {
+      const setts = localStorage.getItem('lifeos_settings_v3');
+      if (setts) {
+        const p = JSON.parse(setts);
+        if (p?.profile?.name && p.profile.name !== 'Believer in Christ' && p.profile.name.trim().length > 1) {
+          return false;
+        }
+      }
+    } catch {}
     return !isSaved && !isGoogle;
   });
   const [onboardingName, setOnboardingName] = useState(() => {
@@ -167,7 +176,8 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const typingTimeoutRef = useRef<any>(null);
 
   const isSuperAdmin = Boolean(
-    currentUser.isGoogleUser && currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase()
+    isAuthorizedAdmin ||
+    (currentUser.isGoogleUser && currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase())
   );
 
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
@@ -2122,6 +2132,9 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               type="button"
               onClick={() => {
                 sounds.playTap();
+                try {
+                  localStorage.setItem('lifeos_discord_name_set_v6', 'true');
+                } catch {}
                 setShowNameRequiredModal(false);
               }}
               className="absolute top-3.5 right-3.5 p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-stone-400 hover:text-white transition-colors z-20"
