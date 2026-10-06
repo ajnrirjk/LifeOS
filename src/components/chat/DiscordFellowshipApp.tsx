@@ -1180,14 +1180,15 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                     >
                       <Pin className="w-3.5 h-3.5" />
                     </button>
-                    {(isMine || isSuperAdmin) && (
+                    {(isMine || isSuperAdmin || isAuthorizedAdmin || currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
                       <button
                         onClick={() => {
                           sounds.playTap();
                           discordChatService.deleteMessage(msg.id);
+                          setMessages((prev) => prev.filter((m) => m.id !== msg.id));
                         }}
-                        className="p-1 sm:p-1.5 hover:bg-rose-500/20 text-[#b5bac1] hover:text-rose-400"
-                        title="Delete Message"
+                        className="p-1 sm:p-1.5 hover:bg-rose-500/20 text-[#b5bac1] hover:text-rose-400 transition-colors"
+                        title="Delete Message Forever"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

@@ -810,6 +810,7 @@ interface ActiveChatMember {
 
 const CHAT_MESSAGES_FILE = path.resolve(__dirname, 'data', 'fellowship_messages.json');
 const CHAT_CHANNELS_FILE = path.resolve(__dirname, 'data', 'fellowship_channels.json');
+const CHAT_DELETED_FILE = path.resolve(__dirname, 'data', 'fellowship_deleted_messages.json');
 
 // In-memory chat storage with disk persistence
 const chatChannels: Map<string, ServerChatChannel> = new Map([
@@ -864,6 +865,7 @@ const chatChannels: Map<string, ServerChatChannel> = new Map([
 ]);
 
 const chatMessages: ServerChatMessage[] = [];
+const deletedMessageIds: Set<string> = new Set();
 const chatClients: Map<string, Response> = new Map();
 const activeMembers: Map<string, ActiveChatMember> = new Map();
 
@@ -874,6 +876,16 @@ function saveMessagesToDisk() {
     fs.writeFileSync(CHAT_MESSAGES_FILE, JSON.stringify(chatMessages, null, 2), 'utf-8');
   } catch (err) {
     console.error('Failed to save messages to disk:', err);
+  }
+}
+
+// Helper to save deleted tombstones to disk
+function saveDeletedToDisk() {
+  try {
+    fs.mkdirSync(path.dirname(CHAT_DELETED_FILE), { recursive: true });
+    fs.writeFileSync(CHAT_DELETED_FILE, JSON.stringify(Array.from(deletedMessageIds), null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save deleted messages to disk:', err);
   }
 }
 
@@ -891,6 +903,17 @@ function saveChannelsToDisk() {
 // Helper to load on startup
 function loadChatData() {
   try {
+    if (fs.existsSync(CHAT_DELETED_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CHAT_DELETED_FILE, 'utf-8'));
+      if (Array.isArray(data)) {
+        data.forEach((id: string) => deletedMessageIds.add(String(id)));
+      }
+    }
+  } catch (err) {
+    console.error('Error loading deleted chat messages:', err);
+  }
+
+  try {
     if (fs.existsSync(CHAT_CHANNELS_FILE)) {
       const data = JSON.parse(fs.readFileSync(CHAT_CHANNELS_FILE, 'utf-8'));
       if (Array.isArray(data)) {
@@ -907,49 +930,31 @@ function loadChatData() {
     if (fs.existsSync(CHAT_MESSAGES_FILE)) {
       const data = JSON.parse(fs.readFileSync(CHAT_MESSAGES_FILE, 'utf-8'));
       if (Array.isArray(data)) {
-        chatMessages.push(...data);
+        const FAKE_MOCK_IDS = new Set(['pastor_david', 'sister_sarah', 'brother_marcus', 'sister_hannah']);
+        const valid = data.filter((m: ServerChatMessage) => m && m.id && !deletedMessageIds.has(m.id) && !FAKE_MOCK_IDS.has(m.senderId));
+        chatMessages.push(...valid);
       }
     }
   } catch (err) {
     console.error('Error loading chat messages:', err);
   }
 
-  // If chatMessages is empty, seed welcoming community messages
-  if (chatMessages.length === 0) {
-    const now = Date.now();
-    const seeds: ServerChatMessage[] = [
-      {
-        id: 'msg_seed_1',
-        channelId: 'general',
-        text: 'Welcome beloved brothers and sisters to Fellowship Chat! "Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another." — Hebrews 10:24-25 🕊️',
-        senderId: 'pastor_david',
-        senderName: 'Pastor David',
-        isGoogleUser: true,
-        createdAt: now - 3600000 * 4,
-        reactions: { '🙏': ['Pastor David'], '❤️': ['Sister Sarah'] },
-      },
-      {
-        id: 'msg_seed_2',
-        channelId: 'general',
-        text: 'Amen Pastor! Blessed to connect with everyone here across all devices and communities. May God’s peace fill everyone today! ✨',
-        senderId: 'sister_sarah',
-        senderName: 'Sister Sarah',
-        isGoogleUser: true,
-        createdAt: now - 3600000 * 2,
-        reactions: { '🙌': ['Pastor David', 'Brother Marcus'] },
-      },
-      {
-        id: 'msg_seed_3',
-        channelId: 'prayer-chain',
-        text: 'Please pray for my mother who is undergoing surgery this Thursday. Believing God for full healing and peace for our family! 🙏',
-        senderId: 'brother_marcus',
-        senderName: 'Deacon Marcus',
-        isGoogleUser: true,
-        createdAt: now - 3600000 * 3,
-        reactions: { '🙏': ['Pastor David', 'Sister Sarah'] },
-      }
-    ];
-    chatMessages.push(...seeds);
+  // If chatMessages is empty, seed welcoming community message unless deleted
+  if (chatMessages.length === 0 && !deletedMessageIds.has('msg_welcome_fellowship')) {
+    const seed: ServerChatMessage = {
+      id: 'msg_welcome_fellowship',
+      channelId: 'general',
+      serverId: 'server_fellowship',
+      text: 'Welcome to Fellowship Chat! 🕊️\n\n"For where two or three are gathered together in my name, there am I in the midst of them." — **Matthew 18:20**\n\nReal-time multi-device text fellowship is active. Every person online appears live in the members list.',
+      senderId: 'fellowship_system',
+      senderName: 'Fellowship Global',
+      senderRole: 'System',
+      senderRoleColor: '#F59E0B',
+      isGoogleUser: false,
+      createdAt: 1790900000000,
+      reactions: { '🙏': ['Anthony Williams'], '❤️': ['Anthony Williams'] },
+    };
+    chatMessages.push(seed);
     saveMessagesToDisk();
   }
 }
@@ -1036,11 +1041,119 @@ app.get('/api/chat/messages', (req: Request, res: Response) => {
     ? chatMessages
     : chatMessages.filter(m => m.channelId === channelId);
 
+  // ALWAYS filter out permanently deleted messages
+  filtered = filtered.filter(m => m && m.id && !deletedMessageIds.has(m.id));
+
   if (since > 0) {
     filtered = filtered.filter(m => m.createdAt > since);
   }
 
   return res.json(filtered);
+});
+
+// 3b. Delete a message by ID forever
+app.delete('/api/chat/messages/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ error: 'Message ID is required' });
+  }
+
+  deletedMessageIds.add(id);
+  saveDeletedToDisk();
+
+  const idx = chatMessages.findIndex(m => m.id === id);
+  let channelId = '';
+  if (idx >= 0) {
+    channelId = chatMessages[idx].channelId;
+    chatMessages.splice(idx, 1);
+    saveMessagesToDisk();
+  }
+
+  if (channelId) {
+    const ch = chatChannels.get(channelId);
+    if (ch) {
+      const remaining = chatMessages.filter(m => m.channelId === channelId && !deletedMessageIds.has(m.id));
+      const lastMsg = remaining[remaining.length - 1];
+      ch.lastMessage = lastMsg ? lastMsg.text : '';
+      ch.lastMessageTime = lastMsg ? lastMsg.createdAt : ch.createdAt;
+      saveChannelsToDisk();
+    }
+  }
+
+  broadcastToChat('delete_message', { messageId: id, channelId });
+  return res.json({ success: true, messageId: id });
+});
+
+// 3c. Delete messages in bulk or by query parameters (purgeAll, channelId, userId)
+app.delete('/api/chat/messages', (req: Request, res: Response) => {
+  const messageId = req.query.id ? String(req.query.id) : req.body?.messageId;
+  const channelId = req.query.channelId ? String(req.query.channelId) : req.body?.channelId;
+  const userId = req.query.userId ? String(req.query.userId) : req.body?.userId;
+  const purgeAll = req.query.purgeAll === 'true' || req.body?.purgeAll === true;
+
+  if (purgeAll) {
+    chatMessages.forEach(m => deletedMessageIds.add(m.id));
+    chatMessages.length = 0;
+    saveDeletedToDisk();
+    saveMessagesToDisk();
+    chatChannels.forEach(c => {
+      c.lastMessage = '';
+      c.lastMessageTime = Date.now();
+    });
+    saveChannelsToDisk();
+    broadcastToChat('purge_all', {});
+    return res.json({ success: true, purged: true });
+  }
+
+  if (channelId) {
+    const toDelete = chatMessages.filter(m => m.channelId === channelId);
+    toDelete.forEach(m => deletedMessageIds.add(m.id));
+    for (let i = chatMessages.length - 1; i >= 0; i--) {
+      if (chatMessages[i].channelId === channelId) {
+        chatMessages.splice(i, 1);
+      }
+    }
+    saveDeletedToDisk();
+    saveMessagesToDisk();
+    const ch = chatChannels.get(channelId);
+    if (ch) {
+      ch.lastMessage = '';
+      ch.lastMessageTime = Date.now();
+      saveChannelsToDisk();
+    }
+    broadcastToChat('purge_channel', { channelId });
+    return res.json({ success: true, channelId, deletedCount: toDelete.length });
+  }
+
+  if (userId) {
+    const toDelete = chatMessages.filter(m => m.senderId === userId);
+    toDelete.forEach(m => deletedMessageIds.add(m.id));
+    for (let i = chatMessages.length - 1; i >= 0; i--) {
+      if (chatMessages[i].senderId === userId) {
+        chatMessages.splice(i, 1);
+      }
+    }
+    saveDeletedToDisk();
+    saveMessagesToDisk();
+    broadcastToChat('purge_user_messages', { userId });
+    return res.json({ success: true, userId, deletedCount: toDelete.length });
+  }
+
+  if (messageId) {
+    deletedMessageIds.add(messageId);
+    saveDeletedToDisk();
+    const idx = chatMessages.findIndex(m => m.id === messageId);
+    let chId = '';
+    if (idx >= 0) {
+      chId = chatMessages[idx].channelId;
+      chatMessages.splice(idx, 1);
+      saveMessagesToDisk();
+    }
+    broadcastToChat('delete_message', { messageId, channelId: chId });
+    return res.json({ success: true, messageId });
+  }
+
+  return res.status(400).json({ error: 'Specify messageId, channelId, userId, or purgeAll' });
 });
 
 // 4. Post a message to group chat
@@ -1068,6 +1181,10 @@ app.post('/api/chat/messages', (req: Request, res: Response) => {
 
   if (!channelId || !text || !text.trim()) {
     return res.status(400).json({ error: 'channelId and text are required' });
+  }
+
+  if (id && deletedMessageIds.has(id)) {
+    return res.status(200).json({ error: 'Message was permanently deleted', ignored: true });
   }
 
   const message: ServerChatMessage = {

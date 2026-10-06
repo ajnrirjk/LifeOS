@@ -1,48 +1,21 @@
 [
   {
-    "id": "msg_seed_1",
+    "id": "msg_welcome_fellowship",
     "channelId": "general",
-    "text": "Welcome beloved brothers and sisters to Fellowship Chat! \"Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another.\" — Hebrews 10:24-25 🕊️",
-    "senderId": "pastor_david",
-    "senderName": "Pastor David",
-    "isGoogleUser": true,
-    "createdAt": 1790976202871,
+    "serverId": "server_fellowship",
+    "text": "Welcome to Fellowship Chat! 🕊️\n\n\"For where two or three are gathered together in my name, there am I in the midst of them.\" — **Matthew 18:20**\n\nReal-time multi-device text fellowship is active. Every person online appears live in the members list.",
+    "senderId": "fellowship_system",
+    "senderName": "Fellowship Global",
+    "senderRole": "System",
+    "senderRoleColor": "#F59E0B",
+    "isGoogleUser": false,
+    "createdAt": 1790900000000,
     "reactions": {
       "🙏": [
-        "Pastor David"
+        "Anthony Williams"
       ],
       "❤️": [
-        "Sister Sarah"
-      ]
-    }
-  },
-  {
-    "id": "msg_seed_2",
-    "channelId": "general",
-    "text": "Amen Pastor! Blessed to connect with everyone here across all devices and communities. May God’s peace fill everyone today! ✨",
-    "senderId": "sister_sarah",
-    "senderName": "Sister Sarah",
-    "isGoogleUser": true,
-    "createdAt": 1790983402871,
-    "reactions": {
-      "🙌": [
-        "Pastor David",
-        "Brother Marcus"
-      ]
-    }
-  },
-  {
-    "id": "msg_seed_3",
-    "channelId": "prayer-chain",
-    "text": "Please pray for my mother who is undergoing surgery this Thursday. Believing God for full healing and peace for our family! 🙏",
-    "senderId": "brother_marcus",
-    "senderName": "Deacon Marcus",
-    "isGoogleUser": true,
-    "createdAt": 1790979802871,
-    "reactions": {
-      "🙏": [
-        "Pastor David",
-        "Sister Sarah"
+        "Anthony Williams"
       ]
     }
   }

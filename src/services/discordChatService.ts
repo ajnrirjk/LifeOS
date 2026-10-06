@@ -311,6 +311,7 @@ class DiscordChatService {
   public channelsCache: ChatChannel[] = DEFAULT_CHANNELS;
   public dmChannelsCache: ChatChannel[] = [];
   public messagesCache: ChatMessage[] = [];
+  public deletedMessageIds: Set<string> = new Set();
   public membersCache: ActiveChatMember[] = DEFAULT_MEMBERS;
   public bannedMembersCache: Record<string, import('../types/chat').BannedMember> = {};
   public roleOverrides: Record<string, { role: string; roleColor: string }> = {};
@@ -325,11 +326,6 @@ class DiscordChatService {
     this.fetchServerHistory();
     this.initVisibilityListeners();
     this.initLivenessCheck();
-
-    // Fast 3s fallback poll to guarantee real-time delivery even if WebSockets are blocked
-    this.cloudPollInterval = setInterval(() => {
-      this.fetchHistoryFromCloudRelay();
-    }, 3000);
   }
 
   private initVisibilityListeners() {
@@ -384,7 +380,10 @@ class DiscordChatService {
   public async fetchHistoryFromCloudRelay() {
     if (typeof window === 'undefined') return;
     try {
-      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1&since=all`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1&since=all`, { signal: controller.signal });
+      clearTimeout(timeout);
       if (!res.ok) return;
       const text = await res.text();
       const lines = text.trim().split('\n').filter(Boolean);
@@ -407,7 +406,7 @@ class DiscordChatService {
             if (payload && payload.data) {
               if (payload.type === 'message') {
                 const msg = payload.data as ChatMessage;
-                if (msg && msg.id && msg.text) {
+                if (msg && msg.id && msg.text && !this.deletedMessageIds.has(msg.id)) {
                   incomingMsgs.push(msg);
                 }
               } else if (payload.type === 'reaction') {
@@ -422,7 +421,10 @@ class DiscordChatService {
                 );
               } else if (payload.type === 'delete_message') {
                 const { messageId } = payload.data;
-                this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
+                if (messageId) {
+                  this.deletedMessageIds.add(messageId);
+                  this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
+                }
               } else if (payload.type === 'server_created') {
                 const srv = payload.data as DiscordServer;
                 if (srv && srv.id && !this.serversCache.some(s => s.id === srv.id)) {
@@ -479,6 +481,12 @@ class DiscordChatService {
           if (parsed) this.handleIncomingPayload('reaction', parsed, false);
         } catch {}
       });
+      sse.addEventListener('delete_message', (e) => {
+        try {
+          const parsed = JSON.parse(e.data);
+          if (parsed) this.handleIncomingPayload('delete_message', parsed, false);
+        } catch {}
+      });
       sse.addEventListener('typing', (e) => {
         try {
           const parsed = JSON.parse(e.data);
@@ -491,11 +499,14 @@ class DiscordChatService {
   private broadcastCloud(type: string, data: any) {
     if (typeof window === 'undefined') return;
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
       fetch(CLOUD_RELAY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, data, sessionId: this.currentSessionId, timestamp: Date.now() })
-      }).catch(() => {});
+        body: JSON.stringify({ type, data, sessionId: this.currentSessionId, timestamp: Date.now() }),
+        signal: controller.signal
+      }).catch(() => {}).finally(() => clearTimeout(timeout));
     } catch {}
   }
 
@@ -631,6 +642,16 @@ class DiscordChatService {
     } catch {}
 
     try {
+      const savedDeleted = localStorage.getItem('lifeos_discord_deleted_messages_v6');
+      if (savedDeleted) {
+        const parsed = JSON.parse(savedDeleted);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id: string) => this.deletedMessageIds.add(String(id)));
+        }
+      }
+    } catch {}
+
+    try {
       const savedMsgs = localStorage.getItem('lifeos_discord_messages_v6');
       if (savedMsgs) {
         const parsed = JSON.parse(savedMsgs);
@@ -640,15 +661,17 @@ class DiscordChatService {
       }
     } catch {}
 
+    // Clean out deleted messages and fake mock placeholder accounts permanently
+    const FAKE_MOCK_IDS = new Set(['pastor_david', 'sister_sarah', 'brother_marcus', 'sister_hannah']);
+    this.messagesCache = this.messagesCache.filter(
+      (m) => m && m.id && !this.deletedMessageIds.has(m.id) && !FAKE_MOCK_IDS.has(m.senderId)
+    );
+    this.membersCache = this.membersCache.filter((m) => !FAKE_MOCK_IDS.has(m.id));
+
     // Seed default messages if empty so chat is vibrant and functional immediately
     if (this.messagesCache.length === 0) {
-      this.messagesCache = [...DEFAULT_SEED_MESSAGES];
+      this.messagesCache = DEFAULT_SEED_MESSAGES.filter((m) => !this.deletedMessageIds.has(m.id));
     }
-
-    // Clean out fake mock placeholder accounts permanently
-    const FAKE_MOCK_IDS = new Set(['pastor_david', 'sister_sarah', 'brother_marcus', 'sister_hannah']);
-    this.membersCache = this.membersCache.filter((m) => !FAKE_MOCK_IDS.has(m.id));
-    this.messagesCache = this.messagesCache.filter((m) => !FAKE_MOCK_IDS.has(m.senderId));
 
     // Ensure currentUser is always visible in active members list
     if (!this.membersCache.some((m) => m.id === this.currentUser.id)) {
@@ -675,6 +698,7 @@ class DiscordChatService {
   private saveCaches() {
     try {
       localStorage.setItem('lifeos_discord_messages_v6', JSON.stringify(this.messagesCache));
+      localStorage.setItem('lifeos_discord_deleted_messages_v6', JSON.stringify(Array.from(this.deletedMessageIds)));
       localStorage.setItem('lifeos_discord_user_v6', JSON.stringify(this.currentUser));
       localStorage.setItem('lifeos_discord_servers_v6', JSON.stringify(this.serversCache));
       localStorage.setItem('lifeos_discord_channels_v6', JSON.stringify(this.channelsCache));
@@ -786,9 +810,6 @@ class DiscordChatService {
 
       client.on('error', (err) => {
         console.warn('Fellowship MQTT error:', err?.message);
-        if (!useFallback && !this.isConnectedToBroker) {
-          this.initMqttRealtime(true);
-        }
       });
 
       client.on('reconnect', () => {
@@ -799,10 +820,7 @@ class DiscordChatService {
         this.isConnectedToBroker = false;
       });
     } catch (err) {
-      console.warn('MQTT init fallback:', err);
-      if (!useFallback) {
-        this.initMqttRealtime(true);
-      }
+      console.warn('MQTT init error:', err);
     }
   }
 
@@ -835,9 +853,13 @@ class DiscordChatService {
   }
 
   private handleIncomingPayload(type: string, data: any, shouldBroadcastLocal = true) {
+    const FAKE_MOCK_IDS = new Set(['pastor_david', 'sister_sarah', 'brother_marcus', 'sister_hannah']);
+
     if (type === 'message') {
       const msg: ChatMessage = data;
       if (!msg || !msg.id || !msg.text) return;
+      if (this.deletedMessageIds.has(msg.id) || FAKE_MOCK_IDS.has(msg.senderId)) return;
+
       if (!this.messagesCache.some((m) => m.id === msg.id)) {
         this.messagesCache.push(msg);
 
@@ -907,13 +929,17 @@ class DiscordChatService {
       this.emit({ type: 'pin_message', data });
     } else if (type === 'delete_message') {
       const { messageId } = data;
-      this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
-      this.saveCaches();
-      this.emit({ type: 'delete_message', data });
+      if (messageId) {
+        this.deletedMessageIds.add(messageId);
+        this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
+        this.saveCaches();
+        this.emit({ type: 'delete_message', data });
+      }
     } else if (type === 'purge_all') {
-      this.messagesCache = DEFAULT_SEED_MESSAGES;
+      this.messagesCache.forEach(m => this.deletedMessageIds.add(m.id));
+      this.messagesCache = [];
       this.saveCaches();
-      this.emit({ type: 'purge_all', data: this.messagesCache });
+      this.emit({ type: 'purge_all', data: [] });
     } else if (type === 'ban_member') {
       const { memberId, reason, email, name } = data;
       this.bannedMembersCache[memberId] = {
@@ -961,10 +987,13 @@ class DiscordChatService {
       this.emit({ type: 'timeout_member', data });
     } else if (type === 'purge_user_messages') {
       const { userId } = data;
-      this.messagesCache = this.messagesCache.filter((m) => m.senderId !== userId);
-      this.saveCaches();
-      this.emit({ type: 'purge_user_messages', data });
-      this.emit({ type: 'sync_all', data: this.messagesCache });
+      if (userId) {
+        this.messagesCache.filter(m => m.senderId === userId).forEach(m => this.deletedMessageIds.add(m.id));
+        this.messagesCache = this.messagesCache.filter((m) => m.senderId !== userId);
+        this.saveCaches();
+        this.emit({ type: 'purge_user_messages', data });
+        this.emit({ type: 'sync_all', data: this.messagesCache });
+      }
     } else if (type === 'typing') {
       this.emit({ type: 'typing', data });
     }
@@ -1103,11 +1132,16 @@ class DiscordChatService {
   private mergeHistory(incomingMsgs: ChatMessage[]) {
     if (!Array.isArray(incomingMsgs) || incomingMsgs.length === 0) return;
     let hasNew = false;
+    const FAKE_MOCK_IDS = new Set(['pastor_david', 'sister_sarah', 'brother_marcus', 'sister_hannah']);
     const map = new Map<string, ChatMessage>();
-    this.messagesCache.forEach((m) => map.set(m.id, m));
+    this.messagesCache.forEach((m) => {
+      if (m && m.id && !this.deletedMessageIds.has(m.id) && !FAKE_MOCK_IDS.has(m.senderId)) {
+        map.set(m.id, m);
+      }
+    });
 
     incomingMsgs.forEach((m) => {
-      if (m && m.id && m.text) {
+      if (m && m.id && m.text && !this.deletedMessageIds.has(m.id) && !FAKE_MOCK_IDS.has(m.senderId)) {
         const existing = map.get(m.id);
         if (!existing) {
           map.set(m.id, m);
@@ -1163,7 +1197,7 @@ class DiscordChatService {
 
   public getMessages(channelId: string): ChatMessage[] {
     return this.messagesCache
-      .filter((m) => m.channelId === channelId)
+      .filter((m) => m.channelId === channelId && !this.deletedMessageIds.has(m.id))
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
@@ -1451,13 +1485,26 @@ class DiscordChatService {
     this.broadcastCloud('pin_message', payload);
   }
 
-  // Delete message
+  // Delete message forever
   public async deleteMessage(messageId: string) {
+    if (!messageId) return;
+    this.deletedMessageIds.add(messageId);
     const msg = this.messagesCache.find((m) => m.id === messageId);
     const channelId = msg?.channelId;
-    const payload = { messageId };
+    this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
+    this.saveCaches();
+
+    const payload = { messageId, channelId };
     this.handleIncomingPayload('delete_message', payload, true);
 
+    // 1. Delete permanently on backend server if running
+    try {
+      fetch(`/api/chat/messages/${encodeURIComponent(messageId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+    } catch {}
+
+    // 2. Publish to MQTT WebSocket Network & update retained channel history
     if (this.mqttClient && this.mqttClient.connected) {
       try {
         this.mqttClient.publish(
@@ -1466,12 +1513,15 @@ class DiscordChatService {
           { qos: 1 }
         );
         if (channelId) {
-          const channelMsgs = this.messagesCache.filter((m) => m.channelId === channelId).slice(-80);
+          const channelMsgs = this.messagesCache
+            .filter((m) => m.channelId === channelId && !this.deletedMessageIds.has(m.id))
+            .slice(-80);
           this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
         }
       } catch {}
     }
 
+    // 3. Broadcast to cloud relay
     this.broadcastCloud('delete_message', payload);
   }
 
@@ -1580,10 +1630,18 @@ class DiscordChatService {
     this.broadcastCloud('timeout_member', data);
   }
 
-  // Purge all messages by a specific user
+  // Purge all messages by a specific user forever
   public purgeUserMessages(userId: string) {
     const data = { userId };
     this.handleIncomingPayload('purge_user_messages', data, true);
+
+    try {
+      fetch('/api/chat/messages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      }).catch(() => {});
+    } catch {}
 
     if (this.mqttClient && this.mqttClient.connected) {
       try {
@@ -1603,14 +1661,23 @@ class DiscordChatService {
     this.broadcastCloud('purge_user_messages', data);
   }
 
-  // Purge all chat messages across the system (Super Admin only)
+  // Purge all chat messages across the system forever (Super Admin only)
   public purgeAllMessages() {
-    this.messagesCache = DEFAULT_SEED_MESSAGES;
+    this.messagesCache.forEach(m => this.deletedMessageIds.add(m.id));
+    this.messagesCache = [];
     this.saveCaches();
-    this.emit({ type: 'purge_all', data: this.messagesCache });
+    this.emit({ type: 'purge_all', data: [] });
 
     try {
-      this.broadcastChannel?.postMessage({ type: 'purge_all', data: this.messagesCache });
+      fetch('/api/chat/messages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purgeAll: true }),
+      }).catch(() => {});
+    } catch {}
+
+    try {
+      this.broadcastChannel?.postMessage({ type: 'purge_all', data: [] });
     } catch {}
 
     if (this.mqttClient && this.mqttClient.connected) {
