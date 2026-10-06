@@ -22,8 +22,7 @@ import {
   AlertTriangle,
   Edit2,
   Check,
-  HeartHandshake,
-  Trash2
+  HeartHandshake
 } from 'lucide-react';
 
 export const FellowshipChatApp: React.FC = () => {
@@ -161,15 +160,6 @@ export const FellowshipChatApp: React.FC = () => {
         setMessages((prev) =>
           prev.map((m) => (m.id === messageId ? { ...m, reactions } : m))
         );
-      } else if (event.type === 'delete_message') {
-        const { messageId } = event.data;
-        setMessages((prev) => prev.filter((m) => m.id !== messageId));
-      } else if (event.type === 'purge_all') {
-        setMessages([]);
-      } else if (event.type === 'purge_channel') {
-        if (event.data.channelId === activeChannelId) {
-          setMessages([]);
-        }
       } else if (event.type === 'new_channel') {
         const channel: ChatChannel = event.data;
         setChannels((prev) => {
@@ -806,7 +796,7 @@ export const FellowshipChatApp: React.FC = () => {
                           );
                         })}
 
-                      {/* Quick Emoji Triggers & Delete */}
+                      {/* Quick Emoji Triggers */}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 ml-1">
                         {['❤️', '🙏', '✝️', '🕊️', '🙌'].map((e) => (
                           <button
@@ -818,19 +808,6 @@ export const FellowshipChatApp: React.FC = () => {
                             {e}
                           </button>
                         ))}
-                        {(isMine || currentUser.isGoogleUser) && (
-                          <button
-                            onClick={() => {
-                              sounds.playTap();
-                              chatService.deleteMessage(msg.id);
-                              setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-                            }}
-                            className="w-5 h-5 rounded-full hover:bg-rose-500/20 text-stone-400 hover:text-rose-400 flex items-center justify-center transition-colors ml-1"
-                            title="Delete message forever"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
                       </div>
                     </div>
                   </div>

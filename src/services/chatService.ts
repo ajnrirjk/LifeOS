@@ -80,14 +80,6 @@ export class ChatService {
     discordChatService.sendTyping(channelId, isTyping);
   }
 
-  public async deleteMessage(messageId: string): Promise<void> {
-    return discordChatService.deleteMessage(messageId);
-  }
-
-  public async clearChannelMessages(channelId: string): Promise<void> {
-    return discordChatService.clearChannelMessages(channelId);
-  }
-
   public async fetchHistoryFromCloudRelay(): Promise<void> {
     return discordChatService.fetchHistoryFromCloudRelay();
   }

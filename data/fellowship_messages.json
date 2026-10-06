@@ -1,1 +1,49 @@
-[]
+[
+  {
+    "id": "msg_seed_1",
+    "channelId": "general",
+    "text": "Welcome beloved brothers and sisters to Fellowship Chat! \"Let us consider how to stir up one another to love and good works, not neglecting to meet together... but encouraging one another.\" — Hebrews 10:24-25 🕊️",
+    "senderId": "pastor_david",
+    "senderName": "Pastor David",
+    "isGoogleUser": true,
+    "createdAt": 1790976202871,
+    "reactions": {
+      "🙏": [
+        "Pastor David"
+      ],
+      "❤️": [
+        "Sister Sarah"
+      ]
+    }
+  },
+  {
+    "id": "msg_seed_2",
+    "channelId": "general",
+    "text": "Amen Pastor! Blessed to connect with everyone here across all devices and communities. May God’s peace fill everyone today! ✨",
+    "senderId": "sister_sarah",
+    "senderName": "Sister Sarah",
+    "isGoogleUser": true,
+    "createdAt": 1790983402871,
+    "reactions": {
+      "🙌": [
+        "Pastor David",
+        "Brother Marcus"
+      ]
+    }
+  },
+  {
+    "id": "msg_seed_3",
+    "channelId": "prayer-chain",
+    "text": "Please pray for my mother who is undergoing surgery this Thursday. Believing God for full healing and peace for our family! 🙏",
+    "senderId": "brother_marcus",
+    "senderName": "Deacon Marcus",
+    "isGoogleUser": true,
+    "createdAt": 1790979802871,
+    "reactions": {
+      "🙏": [
+        "Pastor David",
+        "Sister Sarah"
+      ]
+    }
+  }
+]

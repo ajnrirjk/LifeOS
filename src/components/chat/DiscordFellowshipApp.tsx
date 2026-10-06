@@ -277,9 +277,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
         event.type === 'reaction' ||
         event.type === 'pin_message' ||
         event.type === 'delete_message' ||
-        event.type === 'purge_channel' ||
-        event.type === 'purge_user_messages' ||
-        event.type === 'dms_updated' ||
         event.type === 'sync_all'
       ) {
         setMessages(discordChatService.getMessages(activeChannelId));
@@ -799,18 +796,18 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                     const unread = unreadCounts[dm.id] || 0;
 
                     return (
-                      <div
+                      <button
                         key={dm.id}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-[6px] text-xs font-semibold group transition-all cursor-pointer ${
+                        onClick={() => selectChannel(dm.id, true, recipient || null)}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-[6px] text-xs font-semibold group transition-all ${
                           isActive
                             ? 'bg-[#35373c] text-white font-bold'
                             : unread > 0
                             ? 'text-white font-bold bg-[#35373c]/30'
                             : 'text-[#949ba4] hover:bg-[#35373c]/50 hover:text-[#dbdee1]'
                         }`}
-                        onClick={() => selectChannel(dm.id, true, recipient || null)}
                       >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
                           <div className="relative shrink-0">
                             <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white text-[10px] font-bold">
                               {recipient?.name?.charAt(0) || dm.name.charAt(0)}
@@ -820,31 +817,13 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                           <span className="truncate">{recipient?.name || dm.name}</span>
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
-                          {/* Unread number badge */}
-                          {unread > 0 && (
-                            <span className="px-1.5 py-0.5 rounded-full bg-[#f23f43] text-white text-[10px] font-black leading-none shadow">
-                              {unread > 99 ? '99+' : unread}
-                            </span>
-                          )}
-
-                          {/* Delete DM chat forever button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              sounds.playTap();
-                              discordChatService.closeOrDeleteDM(dm.id);
-                              if (activeChannelId === dm.id) {
-                                selectChannel('general');
-                              }
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-rose-500/20 rounded text-[#949ba4] hover:text-rose-400 transition-opacity"
-                            title="Delete DM chat forever"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                        {/* Unread number badge */}
+                        {unread > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-[#f23f43] text-white text-[10px] font-black leading-none shrink-0 shadow">
+                            {unread > 99 ? '99+' : unread}
+                          </span>
+                        )}
+                      </button>
                     );
                   })
                 )}
@@ -1115,36 +1094,6 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                 <Users className="w-4 h-4" />
               </button>
 
-              {/* Delete chat / Clear channel button */}
-              {isDMView ? (
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Delete this 1-on-1 direct message conversation forever?`)) {
-                      sounds.playTap();
-                      discordChatService.closeOrDeleteDM(activeChannel.id);
-                      selectChannel('general');
-                    }
-                  }}
-                  className="p-1.5 rounded hover:bg-rose-500/20 text-[#b5bac1] hover:text-rose-400 transition-colors"
-                  title="Delete DM chat forever"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              ) : (isSuperAdmin || isAuthorizedAdmin || currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Clear and delete all messages in #${activeChannel.name} forever?`)) {
-                      sounds.playTap();
-                      discordChatService.clearChannelMessages(activeChannel.id);
-                    }
-                  }}
-                  className="p-1.5 rounded hover:bg-rose-500/20 text-[#b5bac1] hover:text-rose-400 transition-colors"
-                  title="Clear all chats in this channel forever"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-
               {onClose && (
                 <button
                   onClick={onClose}
@@ -1231,14 +1180,14 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
                     >
                       <Pin className="w-3.5 h-3.5" />
                     </button>
-                    {(isMine || isSuperAdmin || isAuthorizedAdmin || currentUser.role === 'Admin' || currentUser.role === 'Pastor' || currentUser.role === 'Moderator') && (
+                    {(isMine || isSuperAdmin) && (
                       <button
                         onClick={() => {
                           sounds.playTap();
                           discordChatService.deleteMessage(msg.id);
                         }}
                         className="p-1 sm:p-1.5 hover:bg-rose-500/20 text-[#b5bac1] hover:text-rose-400"
-                        title="Delete Message Forever"
+                        title="Delete Message"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
