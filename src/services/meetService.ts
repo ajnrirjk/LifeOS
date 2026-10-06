@@ -72,8 +72,8 @@ export const DEFAULT_PUBLIC_MEET_ROOMS: MeetRoomInfo[] = [
   }
 ];
 
-const MQTT_BROKER_PRIMARY = 'wss://mqtt.tyckr.io:8081';
-const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
+const MQTT_BROKER_PRIMARY = 'wss://broker.hivemq.com:8884/mqtt';
+const MQTT_BROKER_FALLBACK = 'wss://test.mosquitto.org:8081';
 const BROADCAST_BUS_NAME = 'lifeos_meet_sync_bus_v2';
 
 interface ParticipantRecord extends MeetParticipant {

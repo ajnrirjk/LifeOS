@@ -7,8 +7,8 @@ const CLOUD_MEMBERS_RELAY = 'https://ntfy.sh/lifeos_fellowship_v2';
 const MQTT_TOPIC_SETTINGS = 'lifeos/global/settings_v7';
 const MQTT_TOPIC_MAINTENANCE = 'lifeos/global/maintenance_v7';
 const MQTT_TOPIC_MEMBERS = 'lifeos/global/members_v7';
-const MQTT_BROKER_PRIMARY = 'wss://broker.emqx.io:8084/mqtt';
-const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
+const MQTT_BROKER_PRIMARY = 'wss://broker.hivemq.com:8884/mqtt';
+const MQTT_BROKER_FALLBACK = 'wss://test.mosquitto.org:8081';
 
 export interface GlobalConfigPayload {
   activeAnnouncement: SystemAnnouncement | null;
@@ -375,10 +375,9 @@ class FirebaseGlobalService {
     this.fetchServerMembers();
 
     setInterval(() => {
-      this.fetchCloudConfig();
       this.fetchServerConfig();
       this.fetchServerMembers();
-    }, 2500);
+    }, 15000);
 
     window.addEventListener('focus', () => {
       this.fetchCloudConfig();

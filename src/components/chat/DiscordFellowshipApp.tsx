@@ -113,6 +113,7 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [members, setMembers] = useState<ActiveChatMember[]>(discordChatService.membersCache);
   const [currentUser, setCurrentUser] = useState(discordChatService.currentUser);
+  const [isLiveConnected, setIsLiveConnected] = useState<boolean>(discordChatService.isConnectedToBroker);
 
   // Input & Reply State
   const [inputText, setInputText] = useState<string>('');
@@ -302,6 +303,8 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
         }
       } else if (event.type === 'user_status') {
         setMembers([...discordChatService.membersCache]);
+      } else if (event.type === 'broker_status') {
+        setIsLiveConnected(Boolean(event.data?.connected));
       }
     });
 
@@ -1031,6 +1034,12 @@ export const DiscordFellowshipApp: React.FC<DiscordFellowshipAppProps> = ({ onCl
               <h2 className="font-extrabold text-white text-xs sm:text-sm truncate">
                 {activeChannel.name}
               </h2>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#232428] border border-[#3f4147] shrink-0" title={isLiveConnected ? 'Connected to Fellowship Real-Time Network' : 'Connecting to Real-Time Network...'}>
+                <div className={`w-2 h-2 rounded-full ${isLiveConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                <span className={isLiveConnected ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-medium'}>
+                  {isLiveConnected ? 'Live' : 'Syncing'}
+                </span>
+              </div>
               <div className="w-[1px] h-4 bg-[#3f4147] mx-1 hidden sm:block" />
               <p className="text-xs text-[#949ba4] truncate font-medium hidden md:block">
                 {activeChannel.topic}

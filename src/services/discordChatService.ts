@@ -258,8 +258,11 @@ export const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
 
 export const DEFAULT_MEMBERS: ActiveChatMember[] = [];
 
-const MQTT_BROKER_PRIMARY = 'wss://broker.emqx.io:8084/mqtt';
-const MQTT_BROKER_FALLBACK = 'wss://broker.hivemq.com:8884/mqtt';
+export const MQTT_BROKERS = [
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://test.mosquitto.org:8081',
+  'wss://broker.emqx.io:8084/mqtt',
+];
 const MQTT_TOPIC_MESSAGES = 'lifeos/fellowship/v7/messages';
 const MQTT_TOPIC_CHANNEL_PREFIX = 'lifeos/fellowship/v7/channel/';
 const MQTT_TOPIC_PRESENCE_PREFIX = 'lifeos/fellowship/v7/presence/';
@@ -267,19 +270,47 @@ const MQTT_TOPIC_STRUCTURE = 'lifeos/fellowship/v7/structure';
 const MQTT_TOPIC_MODERATION = 'lifeos/fellowship/v7/moderation';
 const MQTT_TOPIC_SYNC = 'lifeos/fellowship/v7/sync';
 
-// Universal Cloud HTTPS Relay (ntfy.sh) on standard port 443 for 100% device compatibility
-const CLOUD_RELAY_TOPIC = 'lifeos_fellowship_v7';
-const CLOUD_RELAY_URL = `https://ntfy.sh/${CLOUD_RELAY_TOPIC}`;
+function decodeMqttPayload(payload: any): string {
+  if (typeof payload === 'string' && !/^\d+(,\d+)+$/.test(payload)) return payload;
+  if (!payload) return '';
+  try {
+    if (typeof TextDecoder !== 'undefined') {
+      if (payload instanceof Uint8Array || payload instanceof ArrayBuffer) {
+        return new TextDecoder().decode(payload);
+      }
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(payload)) {
+        return payload.toString('utf-8');
+      }
+      if (payload.buffer instanceof ArrayBuffer) {
+        return new TextDecoder().decode(new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength));
+      }
+    }
+    const str = payload.toString();
+    if (str && !str.startsWith('[object') && !/^\d+(,\d+)+$/.test(str)) {
+      return str;
+    }
+    if (Array.isArray(payload) || /^\d+(,\d+)+$/.test(str)) {
+      const arr = Array.isArray(payload) ? payload : str.split(',').map(Number);
+      return new TextDecoder().decode(new Uint8Array(arr));
+    }
+    return str;
+  } catch {
+    return String(payload);
+  }
+}
 
 type DiscordEventListener = (event: { type: string; data: any }) => void;
 
 class DiscordChatService {
   private mqttClient: MqttClient | null = null;
+  private currentBrokerIndex = 0;
+  private brokerConnectTimeoutTimer: any = null;
+  private pendingPublishQueue: Array<{ topic: string; message: string; options: { retain?: boolean; qos?: 0 | 1 } }> = [];
+  public activeBrokerUrl: string = MQTT_BROKERS[0];
   private broadcastChannel: BroadcastChannel | null = null;
   private cloudEventSource: EventSource | null = null;
   private localEventSource: EventSource | null = null;
   private listeners: Set<DiscordEventListener> = new Set();
-  private cloudPollInterval: any = null;
   public isConnectedToBroker = false;
 
   public currentSessionId: string = (() => {
@@ -320,9 +351,7 @@ class DiscordChatService {
     this.initCaches();
     this.initBroadcastChannel();
     this.initMqttRealtime();
-    this.initCloudRelay();
     this.initLocalSSE();
-    this.fetchHistoryFromCloudRelay();
     this.fetchServerHistory();
     this.initVisibilityListeners();
     this.initLivenessCheck();
@@ -331,120 +360,23 @@ class DiscordChatService {
   private initVisibilityListeners() {
     if (typeof window === 'undefined') return;
     window.addEventListener('focus', () => {
-      this.fetchHistoryFromCloudRelay();
       this.fetchServerHistory();
+      if (!this.isConnectedToBroker) {
+        this.initMqttRealtime();
+      } else {
+        this.requestSync();
+      }
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
-        this.fetchHistoryFromCloudRelay();
         this.fetchServerHistory();
+        if (!this.isConnectedToBroker) {
+          this.initMqttRealtime();
+        } else {
+          this.requestSync();
+        }
       }
     });
-  }
-
-  private initCloudRelay() {
-    if (typeof window === 'undefined') return;
-    try {
-      if (this.cloudEventSource) {
-        try { this.cloudEventSource.close(); } catch {}
-        this.cloudEventSource = null;
-      }
-      const sse = new EventSource(`${CLOUD_RELAY_URL}/sse`);
-      this.cloudEventSource = sse;
-      sse.onmessage = (event) => {
-        try {
-          const raw = JSON.parse(event.data);
-          if (raw.event === 'message' && raw.message) {
-            let payload: any = null;
-            try {
-              payload = JSON.parse(raw.message);
-              if (payload && payload.message && typeof payload.message === 'string') {
-                try { payload = JSON.parse(payload.message); } catch {}
-              }
-            } catch {
-              payload = null;
-            }
-            if (payload && payload.type && payload.data) {
-              if (payload.sessionId && payload.sessionId === this.currentSessionId) return;
-              this.handleIncomingPayload(payload.type, payload.data, false);
-            }
-          }
-        } catch {}
-      };
-      sse.onerror = () => {
-        // EventSource will automatically reconnect
-      };
-    } catch {}
-  }
-
-  public async fetchHistoryFromCloudRelay() {
-    if (typeof window === 'undefined') return;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(`${CLOUD_RELAY_URL}/json?poll=1&since=all`, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (!res.ok) return;
-      const text = await res.text();
-      const lines = text.trim().split('\n').filter(Boolean);
-      const incomingMsgs: ChatMessage[] = [];
-
-      for (const line of lines) {
-        try {
-          const raw = JSON.parse(line);
-          if (raw.event === 'message' && raw.message) {
-            let payload: any = null;
-            try {
-              payload = JSON.parse(raw.message);
-              if (payload && payload.message && typeof payload.message === 'string') {
-                try { payload = JSON.parse(payload.message); } catch {}
-              }
-            } catch {
-              payload = null;
-            }
-
-            if (payload && payload.data) {
-              if (payload.type === 'message') {
-                const msg = payload.data as ChatMessage;
-                if (msg && msg.id && msg.text && !this.deletedMessageIds.has(msg.id)) {
-                  incomingMsgs.push(msg);
-                }
-              } else if (payload.type === 'reaction') {
-                const { messageId, reactions } = payload.data;
-                this.messagesCache = this.messagesCache.map((m) =>
-                  m.id === messageId ? { ...m, reactions } : m
-                );
-              } else if (payload.type === 'pin_message') {
-                const { messageId, pinned } = payload.data;
-                this.messagesCache = this.messagesCache.map((m) =>
-                  m.id === messageId ? { ...m, pinned } : m
-                );
-              } else if (payload.type === 'delete_message') {
-                const { messageId } = payload.data;
-                if (messageId) {
-                  this.deletedMessageIds.add(messageId);
-                  this.messagesCache = this.messagesCache.filter((m) => m.id !== messageId);
-                }
-              } else if (payload.type === 'server_created') {
-                const srv = payload.data as DiscordServer;
-                if (srv && srv.id && !this.serversCache.some(s => s.id === srv.id)) {
-                  this.serversCache.push(srv);
-                }
-              } else if (payload.type === 'channel_created') {
-                const ch = payload.data as ChatChannel;
-                if (ch && ch.id && !this.channelsCache.some(c => c.id === ch.id)) {
-                  this.channelsCache.push(ch);
-                }
-              }
-            }
-          }
-        } catch {}
-      }
-
-      if (incomingMsgs.length > 0) {
-        this.mergeHistory(incomingMsgs);
-      }
-    } catch {}
   }
 
   public async fetchServerHistory() {
@@ -496,18 +428,12 @@ class DiscordChatService {
     } catch {}
   }
 
-  private broadcastCloud(type: string, data: any) {
-    if (typeof window === 'undefined') return;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
-      fetch(CLOUD_RELAY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, data, sessionId: this.currentSessionId, timestamp: Date.now() }),
-        signal: controller.signal
-      }).catch(() => {}).finally(() => clearTimeout(timeout));
-    } catch {}
+  private broadcastCloud(_type: string, _data: any) {
+    // Cloud relay replaced by resilient multi-broker MQTT WebSocket architecture
+  }
+
+  public async fetchHistoryFromCloudRelay(): Promise<void> {
+    this.requestSync();
   }
 
   private initLivenessCheck() {
@@ -521,12 +447,19 @@ class DiscordChatService {
       this.publishOffline();
     });
 
-    // Periodic sweep: If user hasn't sent a heartbeat in 20 seconds, mark as offline
+    // Periodic 8s presence heartbeat across network
+    setInterval(() => {
+      if (this.mqttClient && this.mqttClient.connected) {
+        this.publishPresence();
+      }
+    }, 8000);
+
+    // Periodic sweep: If user hasn't sent a heartbeat in 25 seconds, mark as offline
     setInterval(() => {
       let changed = false;
       const now = Date.now();
       this.membersCache.forEach((m) => {
-        if (m.status !== 'offline' && now - m.lastSeen > 20000) {
+        if (m.status !== 'offline' && now - m.lastSeen > 25000) {
           m.status = 'offline';
           changed = true;
         }
@@ -721,28 +654,61 @@ class DiscordChatService {
     }
   }
 
-  private initMqttRealtime(useFallback: boolean = false) {
+  private publishMqtt(topic: string, message: string, options: { retain?: boolean; qos?: 0 | 1 } = { qos: 1 }) {
+    if (this.mqttClient && this.mqttClient.connected) {
+      try {
+        this.mqttClient.publish(topic, message, options);
+      } catch (err) {
+        console.warn('MQTT publish error, queuing:', err);
+        this.pendingPublishQueue.push({ topic, message, options });
+      }
+    } else {
+      this.pendingPublishQueue.push({ topic, message, options });
+    }
+  }
+
+  private flushPendingPublishQueue() {
+    if (!this.mqttClient || !this.mqttClient.connected) return;
+    while (this.pendingPublishQueue.length > 0) {
+      const item = this.pendingPublishQueue.shift();
+      if (item) {
+        try {
+          this.mqttClient.publish(item.topic, item.message, item.options);
+        } catch {}
+      }
+    }
+  }
+
+  private initMqttRealtime() {
     if (typeof window === 'undefined') return;
 
+    if (this.brokerConnectTimeoutTimer) {
+      clearTimeout(this.brokerConnectTimeoutTimer);
+      this.brokerConnectTimeoutTimer = null;
+    }
+
+    if (this.mqttClient) {
+      try { this.mqttClient.end(true); } catch {}
+      this.mqttClient = null;
+    }
+
+    const brokerUrl = MQTT_BROKERS[this.currentBrokerIndex % MQTT_BROKERS.length];
+    this.activeBrokerUrl = brokerUrl;
+    const clientId = `lifeos_${this.currentSessionId}_${Math.random().toString(36).substring(2, 6)}`;
+
     try {
-      const brokerUrl = useFallback ? MQTT_BROKER_FALLBACK : MQTT_BROKER_PRIMARY;
-      const clientId = `lifeos_${this.currentSessionId}_${Math.random().toString(36).substring(2, 6)}`;
-
-      if (this.mqttClient) {
-        try { this.mqttClient.end(true); } catch {}
-        this.mqttClient = null;
-      }
-
       const client = mqtt.connect(brokerUrl, {
         clientId,
         clean: true,
-        connectTimeout: 8000,
+        connectTimeout: 5000,
         reconnectPeriod: 2500,
         keepalive: 60,
         rejectUnauthorized: false,
         will: {
           topic: `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
-          payload: JSON.stringify({ type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() }),
+          payload: JSON.stringify({
+            data: { type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() }
+          }),
           qos: 1,
           retain: true
         }
@@ -750,8 +716,24 @@ class DiscordChatService {
 
       this.mqttClient = client;
 
+      // Failover timer: if not connected within 4500ms, try next broker in pool
+      this.brokerConnectTimeoutTimer = setTimeout(() => {
+        if (!client.connected) {
+          console.warn(`MQTT broker timeout on ${brokerUrl}, switching to next broker...`);
+          try { client.end(true); } catch {}
+          this.currentBrokerIndex = (this.currentBrokerIndex + 1) % MQTT_BROKERS.length;
+          this.initMqttRealtime();
+        }
+      }, 4500);
+
       client.on('connect', () => {
+        if (this.brokerConnectTimeoutTimer) {
+          clearTimeout(this.brokerConnectTimeoutTimer);
+          this.brokerConnectTimeoutTimer = null;
+        }
         this.isConnectedToBroker = true;
+        this.emit({ type: 'broker_status', data: { connected: true, broker: brokerUrl } });
+
         client.subscribe(
           [
             MQTT_TOPIC_MESSAGES,
@@ -770,21 +752,20 @@ class DiscordChatService {
           }
         );
 
-        // Keep real users continuously discovered via 8s presence heartbeat
-        setInterval(() => {
-          if (this.mqttClient && this.mqttClient.connected) {
-            this.publishPresence();
-          }
-        }, 8000);
+        this.flushPendingPublishQueue();
       });
 
-      client.on('message', (topic, payload) => {
+      client.on('message', (topic, rawPayload) => {
         try {
-          const parsed = JSON.parse(payload.toString());
+          const text = decodeMqttPayload(rawPayload);
+          if (!text) return;
+          const parsed = JSON.parse(text);
           if (!parsed) return;
 
           if (topic === MQTT_TOPIC_MESSAGES) {
-            this.handleIncomingPayload(parsed.type, parsed.data, false);
+            if (parsed.type && parsed.data) {
+              this.handleIncomingPayload(parsed.type, parsed.data, false);
+            }
           } else if (topic.startsWith(MQTT_TOPIC_CHANNEL_PREFIX)) {
             // Retained messages bundle for this channel across devices
             if (Array.isArray(parsed)) {
@@ -799,56 +780,67 @@ class DiscordChatService {
           } else if (topic === MQTT_TOPIC_SYNC) {
             if (parsed.type === 'sync_request' && parsed.fromSessionId !== this.currentSessionId) {
               this.respondToSync(parsed.fromSessionId);
+              // Immediately publish presence so the new client sees who is online
+              this.publishPresence();
             } else if (parsed.type === 'sync_response' && parsed.targetSessionId === this.currentSessionId) {
               if (Array.isArray(parsed.messages)) {
                 this.mergeHistory(parsed.messages);
               }
             }
           }
-        } catch {}
+        } catch (err) {
+          console.warn('MQTT message parse error:', err);
+        }
       });
 
       client.on('error', (err) => {
-        console.warn('Fellowship MQTT error:', err?.message);
+        console.warn(`MQTT error on ${brokerUrl}:`, err?.message);
+        if (!client.connected) {
+          if (this.brokerConnectTimeoutTimer) {
+            clearTimeout(this.brokerConnectTimeoutTimer);
+            this.brokerConnectTimeoutTimer = null;
+          }
+          try { client.end(true); } catch {}
+          this.currentBrokerIndex = (this.currentBrokerIndex + 1) % MQTT_BROKERS.length;
+          setTimeout(() => this.initMqttRealtime(), 500);
+        }
       });
 
       client.on('reconnect', () => {
         this.isConnectedToBroker = true;
+        this.emit({ type: 'broker_status', data: { connected: true, broker: brokerUrl } });
       });
 
       client.on('close', () => {
         this.isConnectedToBroker = false;
+        this.emit({ type: 'broker_status', data: { connected: false, broker: brokerUrl } });
       });
     } catch (err) {
       console.warn('MQTT init error:', err);
+      this.currentBrokerIndex = (this.currentBrokerIndex + 1) % MQTT_BROKERS.length;
+      setTimeout(() => this.initMqttRealtime(), 1000);
     }
   }
 
   private requestSync() {
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_SYNC,
-          JSON.stringify({ type: 'sync_request', fromSessionId: this.currentSessionId }),
-          { qos: 1 }
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_SYNC,
+      JSON.stringify({ type: 'sync_request', fromSessionId: this.currentSessionId }),
+      { qos: 1 }
+    );
   }
 
   private respondToSync(targetSessionId: string) {
-    if (this.mqttClient && this.mqttClient.connected && this.messagesCache.length > 0) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_SYNC,
-          JSON.stringify({
-            type: 'sync_response',
-            targetSessionId,
-            messages: this.messagesCache.slice(-80),
-          }),
-          { qos: 1 }
-        );
-      } catch {}
+    if (this.messagesCache.length > 0) {
+      this.publishMqtt(
+        MQTT_TOPIC_SYNC,
+        JSON.stringify({
+          type: 'sync_response',
+          targetSessionId,
+          messages: this.messagesCache.filter((m) => !this.deletedMessageIds.has(m.id)).slice(-80),
+        }),
+        { qos: 1 }
+      );
     }
   }
 
@@ -1104,29 +1096,23 @@ class DiscordChatService {
   }
 
   public publishOffline() {
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
-          JSON.stringify({
-            data: { type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() },
-          }),
-          { retain: true, qos: 1 }
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
+      JSON.stringify({
+        data: { type: 'offline', userId: this.currentUser.id, sessionId: this.currentSessionId, timestamp: Date.now() },
+      }),
+      { retain: true, qos: 1 }
+    );
   }
 
-  private publishPresence() {
-    if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
-        JSON.stringify({
-          data: { user: this.currentUser, sessionId: this.currentSessionId, timestamp: Date.now() },
-        }),
-        { retain: true, qos: 1 }
-      );
-    }
+  public publishPresence() {
+    this.publishMqtt(
+      `${MQTT_TOPIC_PRESENCE_PREFIX}${this.currentSessionId}`,
+      JSON.stringify({
+        data: { user: this.currentUser, sessionId: this.currentSessionId, timestamp: Date.now() },
+      }),
+      { retain: true, qos: 1 }
+    );
   }
 
   private mergeHistory(incomingMsgs: ChatMessage[]) {
@@ -1258,16 +1244,14 @@ class DiscordChatService {
     this.saveCaches();
 
     // Broadcast server & channel creation to other clients
-    if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_STRUCTURE,
-        JSON.stringify({ type: 'server_created', data: newServer })
-      );
-      this.mqttClient.publish(
-        MQTT_TOPIC_STRUCTURE,
-        JSON.stringify({ type: 'channel_created', data: initialChannel })
-      );
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_STRUCTURE,
+      JSON.stringify({ type: 'server_created', data: newServer })
+    );
+    this.publishMqtt(
+      MQTT_TOPIC_STRUCTURE,
+      JSON.stringify({ type: 'channel_created', data: initialChannel })
+    );
 
     this.broadcastCloud('server_created', newServer);
     this.broadcastCloud('channel_created', initialChannel);
@@ -1301,12 +1285,10 @@ class DiscordChatService {
     }
     this.saveCaches();
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_STRUCTURE,
-        JSON.stringify({ type: 'channel_created', data: newChan })
-      );
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_STRUCTURE,
+      JSON.stringify({ type: 'channel_created', data: newChan })
+    );
 
     this.broadcastCloud('channel_created', newChan);
 
@@ -1328,16 +1310,14 @@ class DiscordChatService {
     }
     this.saveCaches();
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(
-        MQTT_TOPIC_MODERATION,
-        JSON.stringify({
-          type: 'role_assigned',
-          data: { memberId, role: roleName, roleColor },
-        }),
-        { qos: 1 }
-      );
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MODERATION,
+      JSON.stringify({
+        type: 'role_assigned',
+        data: { memberId, role: roleName, roleColor },
+      }),
+      { qos: 1 }
+    );
 
     this.broadcastCloud('role_assigned', { memberId, role: roleName, roleColor });
 
@@ -1380,24 +1360,20 @@ class DiscordChatService {
     this.handleIncomingPayload('message', newMsg, true);
 
     // 2. Publish to MQTT WebSocket Network & retain channel history for other devices
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'message', data: newMsg, sessionId: this.currentSessionId }),
-          { qos: 1 }
-        );
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'message', data: newMsg, sessionId: this.currentSessionId }),
+      { qos: 1 }
+    );
 
-        const channelMsgs = this.messagesCache
-          .filter((m) => m.channelId === payload.channelId)
-          .slice(-80);
-        this.mqttClient.publish(
-          `${MQTT_TOPIC_CHANNEL_PREFIX}${payload.channelId}`,
-          JSON.stringify(channelMsgs),
-          { retain: true, qos: 1 }
-        );
-      } catch {}
-    }
+    const channelMsgs = this.messagesCache
+      .filter((m) => m.channelId === payload.channelId && !this.deletedMessageIds.has(m.id))
+      .slice(-80);
+    this.publishMqtt(
+      `${MQTT_TOPIC_CHANNEL_PREFIX}${payload.channelId}`,
+      JSON.stringify(channelMsgs),
+      { retain: true, qos: 1 }
+    );
 
     // 3. Publish to Universal Cloud Relay (ntfy.sh) on port 443
     this.broadcastCloud('message', newMsg);
@@ -1435,18 +1411,16 @@ class DiscordChatService {
     const payload = { messageId, reactions: currentReactions };
     this.handleIncomingPayload('reaction', payload, true);
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'reaction', data: payload }),
-          { qos: 1 }
-        );
-        if (msg.channelId) {
-          const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
-          this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
-        }
-      } catch {}
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'reaction', data: payload }),
+      { qos: 1 }
+    );
+    if (msg.channelId) {
+      const channelMsgs = this.messagesCache
+        .filter((m) => m.channelId === msg.channelId && !this.deletedMessageIds.has(m.id))
+        .slice(-80);
+      this.publishMqtt(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
     }
 
     this.broadcastCloud('reaction', payload);
@@ -1468,18 +1442,16 @@ class DiscordChatService {
     const payload = { messageId, pinned: newPinned };
     this.handleIncomingPayload('pin_message', payload, true);
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'pin_message', data: payload }),
-          { qos: 1 }
-        );
-        if (msg.channelId) {
-          const channelMsgs = this.messagesCache.filter((m) => m.channelId === msg.channelId).slice(-80);
-          this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
-        }
-      } catch {}
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'pin_message', data: payload }),
+      { qos: 1 }
+    );
+    if (msg.channelId) {
+      const channelMsgs = this.messagesCache
+        .filter((m) => m.channelId === msg.channelId && !this.deletedMessageIds.has(m.id))
+        .slice(-80);
+      this.publishMqtt(`${MQTT_TOPIC_CHANNEL_PREFIX}${msg.channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
     }
 
     this.broadcastCloud('pin_message', payload);
@@ -1505,20 +1477,16 @@ class DiscordChatService {
     } catch {}
 
     // 2. Publish to MQTT WebSocket Network & update retained channel history
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'delete_message', data: payload }),
-          { qos: 1 }
-        );
-        if (channelId) {
-          const channelMsgs = this.messagesCache
-            .filter((m) => m.channelId === channelId && !this.deletedMessageIds.has(m.id))
-            .slice(-80);
-          this.mqttClient.publish(`${MQTT_TOPIC_CHANNEL_PREFIX}${channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
-        }
-      } catch {}
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'delete_message', data: payload }),
+      { qos: 1 }
+    );
+    if (channelId) {
+      const channelMsgs = this.messagesCache
+        .filter((m) => m.channelId === channelId && !this.deletedMessageIds.has(m.id))
+        .slice(-80);
+      this.publishMqtt(`${MQTT_TOPIC_CHANNEL_PREFIX}${channelId}`, JSON.stringify(channelMsgs), { retain: true, qos: 1 });
     }
 
     // 3. Broadcast to cloud relay
@@ -1542,20 +1510,16 @@ class DiscordChatService {
 
     this.handleIncomingPayload('ban_member', data, true);
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'ban_member', data }),
-          { qos: 1 }
-        );
-        this.mqttClient.publish(
-          MQTT_TOPIC_MODERATION,
-          JSON.stringify({ type: 'ban_member', data }),
-          { qos: 1 }
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'ban_member', data }),
+      { qos: 1 }
+    );
+    this.publishMqtt(
+      MQTT_TOPIC_MODERATION,
+      JSON.stringify({ type: 'ban_member', data }),
+      { qos: 1 }
+    );
 
     this.broadcastCloud('ban_member', data);
   }
@@ -1565,20 +1529,16 @@ class DiscordChatService {
     const data = { memberId };
     this.handleIncomingPayload('unban_member', data, true);
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'unban_member', data }),
-          { qos: 1 }
-        );
-        this.mqttClient.publish(
-          MQTT_TOPIC_MODERATION,
-          JSON.stringify({ type: 'unban_member', data }),
-          { qos: 1 }
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'unban_member', data }),
+      { qos: 1 }
+    );
+    this.publishMqtt(
+      MQTT_TOPIC_MODERATION,
+      JSON.stringify({ type: 'unban_member', data }),
+      { qos: 1 }
+    );
 
     this.broadcastCloud('unban_member', data);
   }
@@ -1588,20 +1548,16 @@ class DiscordChatService {
     const data = { memberId, reason };
     this.handleIncomingPayload('kick_member', data, true);
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'kick_member', data }),
-          { qos: 1 }
-        );
-        this.mqttClient.publish(
-          MQTT_TOPIC_MODERATION,
-          JSON.stringify({ type: 'kick_member', data }),
-          { qos: 1 }
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'kick_member', data }),
+      { qos: 1 }
+    );
+    this.publishMqtt(
+      MQTT_TOPIC_MODERATION,
+      JSON.stringify({ type: 'kick_member', data }),
+      { qos: 1 }
+    );
 
     this.broadcastCloud('kick_member', data);
   }
@@ -1612,20 +1568,16 @@ class DiscordChatService {
     const data = { memberId, mutedUntil };
     this.handleIncomingPayload('timeout_member', data, true);
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'timeout_member', data }),
-          { qos: 1 }
-        );
-        this.mqttClient.publish(
-          MQTT_TOPIC_MODERATION,
-          JSON.stringify({ type: 'timeout_member', data }),
-          { qos: 1 }
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'timeout_member', data }),
+      { qos: 1 }
+    );
+    this.publishMqtt(
+      MQTT_TOPIC_MODERATION,
+      JSON.stringify({ type: 'timeout_member', data }),
+      { qos: 1 }
+    );
 
     this.broadcastCloud('timeout_member', data);
   }
@@ -1643,20 +1595,16 @@ class DiscordChatService {
       }).catch(() => {});
     } catch {}
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'purge_user_messages', data }),
-          { qos: 1 }
-        );
-        this.mqttClient.publish(
-          MQTT_TOPIC_MODERATION,
-          JSON.stringify({ type: 'purge_user_messages', data }),
-          { qos: 1 }
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'purge_user_messages', data }),
+      { qos: 1 }
+    );
+    this.publishMqtt(
+      MQTT_TOPIC_MODERATION,
+      JSON.stringify({ type: 'purge_user_messages', data }),
+      { qos: 1 }
+    );
 
     this.broadcastCloud('purge_user_messages', data);
   }
@@ -1680,14 +1628,11 @@ class DiscordChatService {
       this.broadcastChannel?.postMessage({ type: 'purge_all', data: [] });
     } catch {}
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'purge_all', data: {} })
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'purge_all', data: {} }),
+      { qos: 1 }
+    );
 
     this.broadcastCloud('purge_all', {});
   }
@@ -1705,14 +1650,11 @@ class DiscordChatService {
       this.broadcastChannel?.postMessage({ type: 'typing', data: payload });
     } catch {}
 
-    if (this.mqttClient && this.mqttClient.connected) {
-      try {
-        this.mqttClient.publish(
-          MQTT_TOPIC_MESSAGES,
-          JSON.stringify({ type: 'typing', data: payload })
-        );
-      } catch {}
-    }
+    this.publishMqtt(
+      MQTT_TOPIC_MESSAGES,
+      JSON.stringify({ type: 'typing', data: payload }),
+      { qos: 0 }
+    );
 
     try {
       fetch('/api/chat/typing', {
