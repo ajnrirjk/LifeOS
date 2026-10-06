@@ -625,6 +625,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.removeItem('faithlingo_history');
     localStorage.removeItem('lifeos_bible_journal_entries');
     localStorage.removeItem('lifeos_fellowship_messages_cache');
+    localStorage.removeItem('lifeos_discord_messages_v6');
+    localStorage.removeItem('lifeos_discord_deleted_messages_v6');
+    localStorage.removeItem('lifeos_discord_initialized_v6');
     localStorage.removeItem('lifeos_game_vault_scores');
     setSettings(DEFAULT_SETTINGS);
     setMembers(INITIAL_MEMBERS);
